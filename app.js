@@ -2,20 +2,19 @@
 const STAFF_ACCESS_CODE = "cms-staff-2025";
 const STORAGE_KEY_LOGGED_IN = "schoolPolicyChatbotLoggedIn";
 
-// Your Cloudflare API URL
+// Cloudflare API URL
 const GPT_API_URL = "https://9e0df439.cms-6j8.pages.dev/api/chatbot";
 
-// Local keyword-based fallback confidence threshold
+// Local fallback threshold
 const LOCAL_CONFIDENCE_THRESHOLD = 8;
 
-// ====== POLICY KNOWLEDGE BASE (17 POLICIES) ======
-
+// ====== POLICY KNOWLEDGE BASE ======
 const POLICY_FAQS = [
   {
     id: "anaphylaxis",
     title: "Anaphylaxis & Severe Allergies",
     answer:
-      "Anaphylaxis is a severe allergic reaction. Staff must administer EpiPen immediately, call 911, keep a calm staff with the child, document dose/time, and ensure hospital transfer even if symptoms improve.",
+      "Anaphylaxis is a severe allergic reaction. Staff must administer EpiPen immediately, call 911, keep staff with the child, document time and dose, and ensure hospital transfer.",
     link: "https://docs.google.com/document/d/1YWBYRtwwrunMv041-MAh-XBzW9HIRc_h",
     triggers: [/allerg/i, /epipen|epi-pen/i, /anaphyl/i, /reaction/i]
   },
@@ -23,7 +22,7 @@ const POLICY_FAQS = [
     id: "vulnerable_sector",
     title: "Criminal Reference / Vulnerable Sector Check",
     answer:
-      "Staff/volunteers require a current Vulnerable Sector Check before unsupervised contact with children. Renew every 5 years; complete annual Offence Declarations.",
+      "A current VSC is required before unsupervised contact with children. Renew every 5 years and complete annual Offence Declarations.",
     link: "https://docs.google.com/document/d/1CSk2ip1_ZQVFgK0XbLNzanNHMD_XfTXD",
     triggers: [/vulnerable/i, /police/i, /record/i, /offence/i]
   },
@@ -31,7 +30,7 @@ const POLICY_FAQS = [
     id: "emergency_management",
     title: "Emergency Management (Lockdown, Evacuation, Disasters)",
     answer:
-      "CMS follows three phases: Immediate Response, During Emergency, and Recovery. Keep children safe, accounted for, bring attendance/meds/emergency bag, and follow emergency services’ directions.",
+      "Follow Immediate Response, During Emergency, and Recovery phases. Keep children safe, grab attendance, emergency meds, and follow emergency instructions.",
     link: "https://docs.google.com/document/d/176nOfzH9oSBVWbd1NmJwquiGhK1Tvh9X",
     triggers: [/lockdown/i, /evacu/i, /earthquake|tornado/i, /gas/i]
   },
@@ -39,7 +38,7 @@ const POLICY_FAQS = [
     id: "fire_safety",
     title: "Fire Safety & Evacuation",
     answer:
-      "Escort children to nearest safe exit, bring attendance & emergency box, close windows/doors, take attendance outside, and move to emergency shelter if directed.",
+      "Escort children to the nearest exit, bring attendance, close windows/doors, take attendance outside, and proceed to emergency shelter if needed.",
     link: "https://docs.google.com/document/d/1J0oYtK4F25qkOwhq0QmOkYIKy2EcCRGc",
     triggers: [/fire/i, /alarm/i, /evacu/i]
   },
@@ -47,7 +46,7 @@ const POLICY_FAQS = [
     id: "medication",
     title: "Medication Administration",
     answer:
-      "Only prescribed/authorized medication in original labelled container is administered with a signed Medication Dispensing Form. Document all doses and store securely.",
+      "Administer only labelled medication with a signed Medication Dispensing Form. Document all doses and store medication securely.",
     link: "https://docs.google.com/document/d/1wlfJ0bwOzgK2qZ-qvK0ghBeCQrFaNvMW",
     triggers: [/medicat/i, /prescript/i, /dose/i]
   },
@@ -55,7 +54,7 @@ const POLICY_FAQS = [
     id: "behaviour_monitoring",
     title: "Monitoring Behaviour Management (Staff)",
     answer:
-      "Staff review behaviour guidance on hire and annually. Supervisors observe daily and document concerns; prohibited practices are addressed immediately.",
+      "Staff review guidance on hire and annually; supervisors document daily observations and prohibited practices.",
     link: "https://docs.google.com/document/d/1OdcYClWJs3069UkL5JQ9Ne4gv2VYEybH",
     triggers: [/behavio/i, /discipline/i]
   },
@@ -63,15 +62,15 @@ const POLICY_FAQS = [
     id: "parent_issues",
     title: "Parent Issues & Concerns",
     answer:
-      "Concerns are documented and addressed promptly. Maintain confidentiality unless required by law. Staff must report suspected abuse directly to CAS.",
+      "Concerns are documented and addressed promptly; staff maintain confidentiality unless legally required; duty to report abuse applies.",
     link: "https://docs.google.com/document/d/1pHAxv4AAjTsho6S9uvxmcI5dIUxsfF_2",
-    triggers: [/parent/i, /concern/i, /complain/i, /issue/i]
+    triggers: [/parent/i, /concern/i, /complain/i]
   },
   {
     id: "playground",
     title: "Playground Safety",
     answer:
-      "Daily, monthly, and annual inspections ensure safety. Maintain ratios outdoors, bring emergency bags, do headcounts, and position staff to supervise fully.",
+      "Daily, monthly, and annual inspections ensure safety; maintain ratios, headcounts, and emergency readiness outdoors.",
     link: "https://docs.google.com/document/d/17T9aic0O_3DeBNx2jXlPCbqZqbkVhoLA",
     triggers: [/playground/i, /outdoor/i]
   },
@@ -79,7 +78,7 @@ const POLICY_FAQS = [
     id: "program_statement",
     title: "Program Statement Implementation & Prohibited Practices",
     answer:
-      "Corporal punishment, harsh language, or deprivation of needs is prohibited. Staff must use positive, age-appropriate guidance.",
+      "Corporal punishment, harsh language, or deprivation of needs is prohibited. Use positive guidance practices.",
     link: "https://docs.google.com/document/d/1uopwojEYO5vUUeXLSOYa9kseGQ9Sxpy7",
     triggers: [/prohibited/i, /program/i]
   },
@@ -87,7 +86,7 @@ const POLICY_FAQS = [
     id: "public_health",
     title: "Public Health, Illness & Infection Control",
     answer:
-      "Follow Toronto Public Health: assess symptoms, send home when appropriate, clean/disinfect, maintain hygiene, and follow outbreak protocols.",
+      "Follow Public Health guidance: assess symptoms, send children home when needed, disinfect, and maintain hygiene.",
     link: "https://docs.google.com/document/d/1T_JBLAb6DhIZpCy1jrTx10f18SFRzO8V",
     triggers: [/ill/i, /fever/i, /vomit/i, /infect/i]
   },
@@ -95,9 +94,9 @@ const POLICY_FAQS = [
     id: "safe_arrival",
     title: "Safe Arrival & Dismissal",
     answer:
-      "If a child is absent without notice, contact parents by 10:00 a.m., escalate to emergency contacts if unreachable, and ensure safe authorized pickup.",
+      "If a child is absent without notice, contact parents by 10:00 a.m. and escalate if unreachable. Release children only to authorized individuals.",
     link: "https://docs.google.com/document/d/1IpN3To4GJnHFc-EMaT4qkBBTfY6Cvz_h",
-    triggers: [/absent/i, /didn.?t\s*(come|arrive)/i, /not\s*here/i, /attendance/i, /call.*parent/i]
+    triggers: [/absent/i, /not.*come/i, /attendance/i, /call.*parent/i]
   },
   {
     id: "serious_occurrence",
@@ -119,7 +118,7 @@ const POLICY_FAQS = [
     id: "sleep_toddlers",
     title: "Sleep Supervision – Toddlers & Preschoolers",
     answer:
-      "Toddlers/preschoolers use cots; staff stay in room and complete checks every 30 minutes.",
+      "Toddlers/preschoolers use cots; staff stay in room and check every 30 minutes.",
     link: "https://docs.google.com/document/d/1xXe0P_JThb3mRVwP4rtpNT4Gw3vCerec",
     triggers: [/toddler/i, /cot/i]
   },
@@ -127,7 +126,7 @@ const POLICY_FAQS = [
     id: "staff_development",
     title: "Staff Development & Training",
     answer:
-      "All staff receive orientation and ongoing training; maintain First Aid & CPR Level C.",
+      "All staff receive orientation and ongoing PD; maintain First Aid & CPR Level C.",
     link: "https://docs.google.com/document/d/1VqwU1Gyd8qL0qiMzFMFQZpBUfIr1IVK_",
     triggers: [/training/i, /cpr/i]
   },
@@ -143,12 +142,11 @@ const POLICY_FAQS = [
     id: "waiting_list",
     title: "Waiting List",
     answer:
-      "No fee to join. Priority for siblings, CMS transfers, and staff children.",
+      "No fee to join. Priority for siblings, transfers, and staff children.",
     link: "https://docs.google.com/document/d/1anDQ7wth7Hm2L1H2eTp6bul1EiMo-dhh",
     triggers: [/wait/i, /priority/i]
   }
 ];
-
 // ==== UI ELEMENTS ====
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
@@ -208,29 +206,24 @@ chatForm.addEventListener("submit", async (e) => {
 async function getAIAnswer(msg) {
   msg = msg.toLowerCase();
 
-  // 1) Try local keyword matcher first
   let best = null;
   let bestScore = 0;
 
   for (const p of POLICY_FAQS) {
     let score = 0;
-
     p.triggers.forEach((regex) => {
       if (regex.test(msg)) score += 5;
     });
-
     if (score > bestScore) {
       bestScore = score;
       best = p;
     }
   }
 
-  // If VERY confident → answer locally
   if (best && bestScore >= LOCAL_CONFIDENCE_THRESHOLD) {
     return formatAnswer(best);
   }
 
-  // 2) Otherwise → Ask GPT (via Cloudflare)
   try {
     const response = await fetch(GPT_API_URL, {
       method: "POST",
@@ -244,21 +237,19 @@ async function getAIAnswer(msg) {
     const data = await response.json();
 
     if (data.error || !data.id) {
-      return "I’m not fully sure which policy this refers to. Could you rephrase?";
+      return "I’m not fully sure which policy this refers to.";
     }
 
     const policy = POLICY_FAQS.find((p) => p.id === data.id);
-    if (!policy) {
-      return "I understood your question, but could not match it to a known policy.";
-    }
+    if (!policy) return "Matched a policy that is not in the database.";
 
     return formatAnswer(policy);
   } catch {
-    return "The AI assistant is temporarily unavailable.";
+    return "The AI assistant is unavailable.";
   }
 }
 
-// ==== ANSWER FORMAT (hyperlinked) ====
+// ==== ANSWER FORMAT ====
 function formatAnswer(policy) {
   return (
     policy.answer +
