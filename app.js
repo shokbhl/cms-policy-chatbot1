@@ -1,6 +1,13 @@
 // ====== CONFIG ======
-const STAFF_ACCESS_CODE = "cms-staff-2025"; // Staff login code
+const STAFF_ACCESS_CODE = "cms-staff-2025";
 const STORAGE_KEY_LOGGED_IN = "schoolPolicyChatbotLoggedIn";
+
+// 🔁 Change this AFTER you deploy the Cloudflare function
+// It will look like: "https://your-project-name.pages.dev/api/chatbot"
+const GPT_API_URL = "https://YOUR-CLOUDFLARE-PROJECT.pages.dev/api/chatbot";
+
+// Only answer locally when we are VERY sure
+const LOCAL_CONFIDENCE_THRESHOLD = 10;
 
 // ====== POLICY KNOWLEDGE BASE (17 total) ======
 const POLICY_FAQS = [
@@ -10,9 +17,7 @@ const POLICY_FAQS = [
     title: "Anaphylaxis & Severe Allergies",
     keywords: ["anaphylaxis","allergy","allergies","epipen","epi-pen","epinephrine","nut","peanut","tree nut","reaction","food allergy"],
     phrases: ["severe allergy reaction","use epipen","allergy emergency","anaphylactic","administer epinephrine"],
-    triggers: [
-      /allerg/i, /anaphyl/i, /epi-?pen/i, /epinephrin/i, /(peanut|tree\s*nut)/i, /reaction/i
-    ],
+    triggers: [/allerg/i,/anaphyl/i,/epi-?pen/i,/epinephrin/i,/(peanut|tree\s*nut)/i,/reaction/i],
     answer:
       "Anaphylaxis is a severe allergic reaction. Staff must administer EpiPen immediately, call 911, keep a calm staff with the child, document the dose/time, and ensure hospital transfer even if symptoms improve.",
     link: "https://docs.google.com/document/d/1YWBYRtwwrunMv041-MAh-XBzW9HIRc_h"
@@ -56,7 +61,7 @@ const POLICY_FAQS = [
     title: "Medication Administration",
     keywords: ["medication","medicine","prescription","over the counter","doctor","dose","dispensing","label","form"],
     phrases: ["medication form","administer medicine","giving medicine at school","original labelled container"],
-    triggers: [/medicat|prescript|over[-\s]*the[-\s]*counter/i,/dose|dispens/i,/doctor/i,/label/i,/form/i],
+    triggers: [/medicat|prescript|over[-\s]*the[-\s]*counter/i,/dose|dispens/i,/doctor/i,/label/i,/medication\s*form/i],
     answer:
       "Only prescribed/authorized medication in original labelled container is administered with a signed Medication Dispensing Form. Verify label, document every dose, store in locked bags.",
     link: "https://docs.google.com/document/d/1wlfJ0bwOzgK2qZ-qvK0ghBeCQrFaNvMW"
@@ -91,7 +96,7 @@ const POLICY_FAQS = [
     phrases: ["playground inspection","outdoor supervision","CSA play space","repair log"],
     triggers: [/playground|outdoor/i,/inspect/i,/ratio/i,/supervis/i],
     answer:
-      "Daily, monthly, and annual inspections documented; unsafe areas closed until repaired. Maintain ratios, bring emergency bag, do headcounts at transitions, and position staff for full coverage.",
+      "Daily, monthly, and annual inspections are documented; unsafe areas are closed until repaired. Maintain ratios, bring emergency bag, do headcounts at transitions, and position staff for full coverage.",
     link: "https://docs.google.com/document/d/17T9aic0O_3DeBNx2jXlPCbqZqbkVhoLA"
   },
   {
@@ -102,7 +107,7 @@ const POLICY_FAQS = [
     phrases: ["prohibited practices list","positive guidance","graduated discipline"],
     triggers: [/program\s*statement/i,/prohibited\s*pract/i,/corporal|harsh|degrad/i],
     answer:
-      "Strictly prohibits corporal punishment, harsh/degrading measures, deprivation of basic needs, or confinement. Use positive, age-appropriate guidance. Violations lead to discipline up to dismissal.",
+      "CMS strictly prohibits corporal punishment, harsh/degrading measures, deprivation of basic needs, or confinement. Staff must use positive, age-appropriate guidance. Violations lead to discipline up to dismissal.",
     link: "https://docs.google.com/document/d/1uopwojEYO5vUUeXLSOYa9kseGQ9Sxpy7"
   },
   {
@@ -113,7 +118,7 @@ const POLICY_FAQS = [
     phrases: ["illness policy","send home sick","isolation & return","approved disinfectants","line list"],
     triggers: [/ill|sick/i,/fever|vomit|diarrh/i,/infection|outbreak/i,/hand\s*hygiene|disinfect|clean/i],
     answer:
-      "Follow Toronto Public Health guidance: assess symptoms, send home when indicated, clean/disinfect with approved products, strict hand hygiene, proper diapering/toileting, outbreak line lists.",
+      "CMS follows Toronto Public Health guidance: assess symptoms, send home when indicated, clean/disinfect with approved products, use strict hand hygiene, proper diapering/toileting, and maintain outbreak line lists when required.",
     link: "https://docs.google.com/document/d/1T_JBLAb6DhIZpCy1jrTx10f18SFRzO8V"
   },
   {
@@ -123,11 +128,11 @@ const POLICY_FAQS = [
     keywords: ["arrival","dismissal","pickup","pick up","drop off","absent","no show","late pickup","photo id","authorize","attendance"],
     phrases: ["child not picked up","late pickup procedure","safe dismissal","release to authorized","call parents by 10:00 a.m.","absent without notice"],
     triggers: [
-      /absen/i, /didn.?t\s*(come|arrive)/i, /not\s*(come|arrive)/i, /no\s*show/i, /not\s*here/i,
-      /attendance/i, /(call|contact|notify|inform)\s*(the\s*)?parent/i, /pick\s*up/i, /dismiss/i
+      /absen/i,/didn.?t\s*(come|arrive)/i,/not\s*(come|arrive)/i,/no\s*show/i,/not\s*here/i,
+      /attendance/i,/(call|contact|notify|inform)\s*(the\s*)?parent/i,/pick\s*up/i,/dismiss/i,/drop\s*off|arrival/i
     ],
     answer:
-      "Release only to authorized individuals. If a child is absent without prior notice, staff contact parents/guardians by 10:00 a.m. and escalate to emergency contacts if unreachable. For late pickup, escalate to emergency contacts; if no one is reachable by 7:00 p.m., contact the Children’s Aid Society.",
+      "Children are only released to parents/guardians or individuals authorized in writing. If a child is absent without prior notice, staff contact parents/guardians by 10:00 a.m. and escalate to emergency contacts if they cannot be reached. For late pickup, staff escalate to emergency contacts; if no one is reachable by 7:00 p.m., staff must contact the Children’s Aid Society and follow their directions.",
     link: "https://docs.google.com/document/d/1IpN3To4GJnHFc-EMaT4qkBBTfY6Cvz_h"
   },
   {
@@ -138,7 +143,7 @@ const POLICY_FAQS = [
     phrases: ["serious occurrence report","post notification 10 business days","submit within 24 hours"],
     triggers: [/serious\s*occ/i,/life[-\s]*threat/i,/missing|unsupervised\s*child/i,/ccls/i,/notification/i],
     answer:
-      "Covers death, life-threatening injury/illness, missing/unsupervised child, or disruptive incidents. Submit in CCLS within 24 hours; post notification for 10 business days; conduct inquiry.",
+      "Serious occurrences include death, life-threatening injury or illness, a missing or unsupervised child, or a major disruption affecting health and safety. Staff address immediate safety first, then submit a Serious Occurrence Report in CCLS within 24 hours and post a notification form for at least 10 business days.",
     link: "https://docs.google.com/document/d/1QYqQgAvqKZiOjr3-3znh39nJQvTMyE9U"
   },
   {
@@ -149,7 +154,7 @@ const POLICY_FAQS = [
     phrases: ["infant sleep checks every 15 minutes","back to sleep","crib inspection"],
     triggers: [/infant|baby/i,/crib/i,/(sleep|nap)/i,/15\s*min/i],
     answer:
-      "Infants sleep on their backs in labelled cribs; no pillows/duvets/bumpers. Direct visual checks every 15 minutes with adequate light; record checks and transfer from strollers/swings to a crib.",
+      "Infants sleep on their backs in labelled cribs with no pillows, duvets or bumper pads. Staff conduct direct visual checks every 15 minutes with enough light to see breathing and colour, and record these checks on the sleep tracking sheet. Infants sleeping in strollers or other equipment are moved to a crib as soon as possible.",
     link: "https://docs.google.com/document/d/1HoWGu9GNCalQ4QzIVwtIopinMJC79lNX"
   },
   {
@@ -160,7 +165,7 @@ const POLICY_FAQS = [
     phrases: ["sleep checks every 30 minutes","sleep tracking sheet"],
     triggers: [/toddler|preschool/i,/cot/i,/(sleep|nap)/i,/30\s*min/i],
     answer:
-      "Each child has a labelled cot. Direct visual checks at least every 30 minutes; record checks; communicate significant pattern changes to families.",
+      "Each toddler and preschool child has a labelled cot. Staff remain present in the room, conduct direct visual checks at least every 30 minutes, and record them on the sleep tracking sheet. Significant changes in sleep patterns or concerns are shared with families.",
     link: "https://docs.google.com/document/d/1xXe0P_JThb3mRVwP4rtpNT4Gw3vCerec"
   },
   {
@@ -171,7 +176,7 @@ const POLICY_FAQS = [
     phrases: ["professional learning","annual training","staff meetings","workshops","conferences"],
     triggers: [/training|pd|professional/i,/first\s*aid|cpr/i,/orientation/i],
     answer:
-      "Orientation covers policies, Public Health, Fire Safety and Ministry requirements. Ongoing PD via meetings, workshops, conferences; maintain Standard First Aid with CPR Level C.",
+      "New staff, students and volunteers receive orientation on CMS policies, Public Health, Fire Safety and Ministry requirements. Ongoing professional development is provided through meetings, workshops, conferences and self-directed learning. All staff maintain Standard First Aid with CPR Level C.",
     link: "https://docs.google.com/document/d/1VqwU1Gyd8qL0qiMzFMFQZpBUfIr1IVK_"
   },
   {
@@ -182,7 +187,7 @@ const POLICY_FAQS = [
     phrases: ["never left alone with children","mentoring teacher","wear identification","confidentiality"],
     triggers: [/student|volunteer/i,/placement/i,/left\s*alone/i,/mentor/i],
     answer:
-      "Students/volunteers support the program but never replace staff or count in ratios; are never left alone with children; wear ID; follow confidentiality; a mentoring teacher provides oversight.",
+      "Students and volunteers support the program but never replace staff or count in ratios. They are never left alone with children, must wear identification, maintain confidentiality and follow CMS policies. A mentoring teacher provides guidance and ensures expectations are clear.",
     link: "https://docs.google.com/document/d/1b2FL-LEuF1y_tx72W0RQTDklT1Kkeen3"
   },
   {
@@ -193,7 +198,7 @@ const POLICY_FAQS = [
     phrases: ["no fee to join waitlist","priority admission","first-come, first-served"],
     triggers: [/wait\s*list|waiting/i,/priority/i,/admiss|register/i,/position/i],
     answer:
-      "No fee to join. Priority to transfers, siblings, and children of employees. Offers made first-come, first-served by application date; positions shared while keeping others’ info confidential.",
+      "There is no fee to place a child on the waiting list. Priority is given to transfers from other CMS locations, siblings of current students, and children of CMS employees. Offers are made on a first-come, first-served basis according to the date of application, and families may ask about their position without seeing other families’ information.",
     link: "https://docs.google.com/document/d/1anDQ7wth7Hm2L1H2eTp6bul1EiMo-dhh"
   }
 ];
@@ -261,11 +266,14 @@ chatForm.addEventListener("submit", async (e) => {
   addUserMessage(message);
   userInput.value = "";
   const typingId = addBotTyping();
-  setTimeout(async () => {
-    removeBotTyping(typingId);
+  try {
     const replyHTML = await getBotReply(message);
+    removeBotTyping(typingId);
     addBotMessage(replyHTML, true);
-  }, 350);
+  } catch (err) {
+    removeBotTyping(typingId);
+    addBotMessage("⚠️ Something went wrong. Please try again in a moment.", false);
+  }
 });
 
 function addUserMessage(text) {
@@ -306,7 +314,7 @@ function clearChat() {
   chatWindow.innerHTML = "";
 }
 
-// ====== HELPER: tokenize, synonyms, scoring ======
+// ====== TEXT NORMALIZATION & SCORING ======
 const SYNONYMS = [
   ["pick up","pickup","collection","collect"],
   ["drop off","dropoff","arrival"],
@@ -327,7 +335,7 @@ function normalize(text) {
   SYNONYMS.forEach(group => {
     const main = group[0];
     group.slice(1).forEach(alt => {
-      const re = new RegExp(`\\b${alt.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\$&")}\\b`, "g");
+      const re = new RegExp(`\\b${alt.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`, "g");
       t = t.replace(re, main);
     });
   });
@@ -337,8 +345,8 @@ function normalize(text) {
 function wordHits(msg, terms = []) {
   let s = 0;
   for (const t of terms) {
-    const re = new RegExp(`\\b${t.toLowerCase().replace(/[.*+?^${}()|[\\]\\\\]/g,"\\$&")}\\b`, "i");
-    if (re.test(msg)) s += 3; // word-boundary match
+    const re = new RegExp(`\\b${t.toLowerCase().replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`, "i");
+    if (re.test(msg)) s += 3;
   }
   return s;
 }
@@ -346,8 +354,8 @@ function wordHits(msg, terms = []) {
 function phraseHits(msg, phrases = []) {
   let s = 0;
   for (const p of phrases) {
-    const re = new RegExp(p.toLowerCase().replace(/[.*+?^${}()|[\\]\\\\]/g,"\\$&"), "i");
-    if (re.test(msg)) s += 5; // phrase match stronger
+    const re = new RegExp(p.toLowerCase().replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&"), "i");
+    if (re.test(msg)) s += 5;
   }
   return s;
 }
@@ -355,12 +363,12 @@ function phraseHits(msg, phrases = []) {
 function triggerHits(msg, triggers = []) {
   let s = 0;
   for (const r of triggers) {
-    if (r.test(msg)) s += 6; // explicit trigger regex = strongest within rule-based
+    if (r.test(msg)) s += 6;
   }
   return s;
 }
 
-// ====== INTENT DETECTION ======
+// Optional: coarse intent detection (for future use / analytics)
 function detectIntent(msg) {
   const intentMap = {
     attendance: /(absen|didn.?t\s*(come|arrive)|not\s*(come|arrive)|no\s*show|not\s*here|attendance|(call|contact|notify|inform)\s*(the\s*)?parent|pick\s*up|dismiss|drop\s*off|arrival)/i,
@@ -389,23 +397,80 @@ function detectIntent(msg) {
   return intents;
 }
 
-// ====== SMART SEARCH (Intent ➜ Rule-based ➜ Fuse.js) ======
+function renderAnswer(policy) {
+  const ref = policy.link
+    ? `<br><br>Reference: <a href="${policy.link}" target="_blank" rel="noopener">${policy.title}</a>`
+    : `<br><br>Reference: ${policy.title}`;
+  return `${policy.answer}${ref}`;
+}
+
+// ====== GPT FALLBACK (via Cloudflare API) ======
+async function askGptPolicy(question) {
+  if (!GPT_API_URL || GPT_API_URL.includes("YOUR-CLOUDFLARE-PROJECT")) {
+    return "⚠️ The AI assistant is not fully configured yet (missing API URL). Please contact the administrator.";
+  }
+
+  const policiesPayload = POLICY_FAQS.map(p => ({
+    id: p.id,
+    title: p.title,
+    summary: p.answer
+  }));
+
+  try {
+    const res = await fetch(GPT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question,
+        policies: policiesPayload
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error(`API error: ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (data && data.id && data.answer) {
+      const policy = POLICY_FAQS.find(p => p.id === data.id);
+      if (policy) {
+        return (
+          data.answer +
+          `<br><br>Reference: <a href="${policy.link}" target="_blank" rel="noopener">${policy.title}</a>`
+        );
+      }
+      return data.answer;
+    }
+
+    if (data && data.answer) {
+      return data.answer;
+    }
+
+    return "⚠️ I couldn’t interpret the AI response. Please try asking in a different way or contact the administrator.";
+  } catch (err) {
+    console.error("GPT fallback error:", err);
+    return "⚠️ I had trouble contacting the AI assistant. Please try again later.";
+  }
+}
+
+// ====== HYBRID ANSWER LOGIC ======
 async function getBotReply(userMessage) {
-  if (typeof Fuse === "undefined") return "⚠️ Smart search not loaded.";
   const raw = userMessage.trim();
+  if (!raw) return "Please enter a question about a CMS policy.";
+
   const msg = normalize(raw);
 
-  // 1) Intent filter (narrows candidates)
+  // 1) Try local rule-based matching first
   const intents = detectIntent(msg);
   let candidates = POLICY_FAQS;
   if (intents.length > 0) {
-    const set = new Set(intents);
-    candidates = POLICY_FAQS.filter(p => set.has(p.intent));
-    // If nothing matched by intent (unlikely), keep all
-    if (candidates.length === 0) candidates = POLICY_FAQS;
+    const intentSet = new Set(intents);
+    const filtered = POLICY_FAQS.filter(p => intentSet.has(p.intent));
+    if (filtered.length > 0) {
+      candidates = filtered;
+    }
   }
 
-  // 2) Rule-based scoring on candidates
   let best = null;
   let topScore = -1;
 
@@ -415,57 +480,28 @@ async function getBotReply(userMessage) {
     score += phraseHits(msg, item.phrases || []);
     score += wordHits(msg, item.keywords || []);
 
-    // Title token boost
     const titleTokens = (item.title || "").toLowerCase().split(/[^\w&]+/).filter(Boolean);
     score += wordHits(msg, titleTokens);
 
-    // Attendance special boost for teacher call/absent/no show
-    if (item.intent === "attendance" &&
-        /(absen|didn.?t\s*(come|arrive)|not\s*(come|arrive)|no\s*show|not\s*here|attendance|(call|contact|notify|inform)\s*(the\s*)?parent)/i.test(msg)
+    // Extra boost for attendance wording on Safe Arrival
+    if (
+      item.intent === "attendance" &&
+      /(absen|didn.?t\s*(come|arrive)|not\s*(come|arrive)|no\s*show|not\s*here|attendance|(call|contact|notify|inform)\s*(the\s*)?parent)/i.test(msg)
     ) {
-      score += 10;
+      score += 8;
     }
 
-    if (score > topScore) { topScore = score; best = item; }
+    if (score > topScore) {
+      topScore = score;
+      best = item;
+    }
   });
 
-  if (best && topScore >= 6) {
+  // If we are VERY confident locally, answer from local summary
+  if (best && topScore >= LOCAL_CONFIDENCE_THRESHOLD) {
     return renderAnswer(best);
   }
 
-  // 3) Fuzzy fallback across candidates
-  const fuse = new Fuse(candidates, {
-    includeScore: true,
-    keys: [
-      { name: "title", weight: 0.4 },
-      { name: "keywords", weight: 0.6 },
-      { name: "phrases", weight: 0.6 },
-      { name: "answer", weight: 0.2 }
-    ],
-    threshold: 0.45,
-    distance: 120,
-    ignoreLocation: true,
-    findAllMatches: true,
-    minMatchCharLength: 2
-  });
-
-  const results = fuse.search(msg);
-  if (results.length > 0) {
-    return renderAnswer(results[0].item);
-  }
-
-  // 4) Last-resort loose keyword scan across all
-  const loose = POLICY_FAQS.find(p =>
-    (p.keywords || []).some(kw => msg.includes(kw.toLowerCase()))
-  );
-  if (loose) return renderAnswer(loose);
-
-  return "I’m not sure which policy matches that. Try rephrasing — e.g. 'late pickup', 'fire drill', 'sleep check', or 'allergy reaction'.";
-}
-
-function renderAnswer(policy) {
-  const ref = policy.link
-    ? `<br><br>Reference: <a href="${policy.link}" target="_blank" rel="noopener">${policy.title}</a>`
-    : `<br><br>Reference: ${policy.title}`;
-  return `${policy.answer}${ref}`;
+  // 2) Otherwise, use GPT via Cloudflare to choose the right policy & craft answer
+  return await askGptPolicy(raw);
 }
