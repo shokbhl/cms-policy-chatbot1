@@ -1,120 +1,57 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CMS Policy Chatbot</title>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CMS Policy Assistant</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
 
-    <!-- Tailwind for quick clean design -->
-    <script src="https://cdn.tailwindcss.com"></script>
+<body>
 
-    <!-- Fuse.js smart search -->
-    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
+  <!-- LOGIN SCREEN -->
+  <div id="login-screen" class="screen">
+    <div class="login-box">
+      <h2>CMS Staff Access</h2>
+      <p>Please enter the staff access code to continue.</p>
 
-    <style>
-      body {
-        font-family: "Inter", sans-serif;
-        background: #f3f4f6;
-        color: #111827;
-        height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      #chat-screen.hidden,
-      #login-screen.hidden {
-        display: none;
-      }
-      .message-row {
-        margin: 10px 0;
-        display: flex;
-      }
-      .message-row.user {
-        justify-content: flex-end;
-      }
-      .message-bubble {
-        max-width: 80%;
-        padding: 10px 14px;
-        border-radius: 18px;
-        line-height: 1.4;
-        white-space: pre-wrap;
-      }
-      .message-row.user .message-bubble {
-        background-color: #2563eb;
-        color: white;
-        border-bottom-right-radius: 4px;
-      }
-      .message-row.bot .message-bubble {
-        background-color: white;
-        border: 1px solid #e5e7eb;
-        border-bottom-left-radius: 4px;
-      }
-      .typing-dots {
-        font-size: 20px;
-        letter-spacing: 2px;
-      }
-    </style>
-  </head>
-
-  <body>
-    <div
-      class="w-full max-w-lg bg-white shadow-xl rounded-2xl p-6 flex flex-col"
-    >
-      <h1 class="text-2xl font-bold text-center mb-4 text-blue-700">
-        CMS Policy Chatbot
-      </h1>
-
-      <!-- Login Screen -->
-      <div id="login-screen">
-        <form id="login-form" class="flex flex-col gap-3">
-          <input
-            type="password"
-            id="access-code"
-            placeholder="Enter staff code"
-            required
-            class="border rounded-lg p-2 focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            class="bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
-          >
-            Login
-          </button>
-        </form>
-        <p id="login-error" class="text-red-600 text-sm mt-2"></p>
-      </div>
-
-      <!-- Chat Screen -->
-      <div id="chat-screen" class="hidden flex flex-col h-[70vh]">
-        <div
-          id="chat-window"
-          class="flex-1 overflow-y-auto border rounded-lg p-3 bg-gray-50 mb-3"
-        ></div>
-
-        <form id="chat-form" class="flex gap-2">
-          <input
-            type="text"
-            id="user-input"
-            placeholder="Ask about a policy..."
-            required
-            class="flex-1 border rounded-lg p-2 focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            class="bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700"
-          >
-            Send
-          </button>
-        </form>
-        <button
-          id="logout-btn"
-          class="mt-3 bg-gray-200 text-gray-700 py-1 rounded-lg hover:bg-gray-300"
-        >
-          Logout
-        </button>
-      </div>
+      <form id="login-form">
+        <input 
+          type="password" 
+          id="access-code" 
+          placeholder="Enter access code"
+          required
+        />
+        <button type="submit">Enter</button>
+        <div id="login-error" class="error"></div>
+      </form>
     </div>
+  </div>
 
-    <script src="app.js"></script>
-  </body>
+  <!-- CHAT SCREEN -->
+  <div id="chat-screen" class="screen hidden">
+    <header class="chat-header">
+      <div class="chat-title">
+        <strong>CMS Policy Assistant</strong><br>
+        <span>Ask about any CMS policy</span>
+      </div>
+      <button id="logout-btn" class="logout-btn">Logout</button>
+    </header>
+
+    <div id="chat-window" class="chat-window"></div>
+
+    <form id="chat-form" class="chat-form">
+      <input 
+        id="user-input"
+        type="text"
+        placeholder="Ask a question about CMS policies..."
+        autocomplete="off"
+        required
+      />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+</body>
 </html>
