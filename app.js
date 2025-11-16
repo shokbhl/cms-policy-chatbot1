@@ -1,6 +1,8 @@
 /* CONFIG */
 const STAFF_CODE = "cms-staff-2025";
-const API_URL = "https://cms-api-final-v3.pages.dev/api/chatbot";
+
+// ⭐ درست‌ترین API Worker
+const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api/chatbot";
 
 /* ELEMENTS */
 const loginScreen = document.getElementById("login-screen");
@@ -53,7 +55,7 @@ chatForm.addEventListener("submit", async (e) => {
     removeTyping(typingId);
 
     if (!res.ok) {
-      addBot("Error reaching CMS server.");
+      addBot("❗ Error reaching CMS policy server.");
       return;
     }
 
@@ -61,15 +63,20 @@ chatForm.addEventListener("submit", async (e) => {
 
     let answer = data.answer || "No clear policy found.";
 
-    if (data.policyTitle) answer += `\n\n📘 Policy: ${data.policyTitle}`;
-    if (data.policyLink)
-      answer += `\n🔗 <a href="${data.policyLink}" target="_blank">View policy</a>`;
+    // Add policy reference if available
+    if (data.policyTitle) {
+      answer += `\n\n📘 Policy: <b>${data.policyTitle}</b>`;
+    }
+
+    if (data.policyLink) {
+      answer += `\n🔗 <a href="${data.policyLink}" target="_blank" style="color:#0046ff">Open Policy</a>`;
+    }
 
     addBot(answer);
   } catch (err) {
     console.error(err);
     removeTyping(typingId);
-    addBot("Network error.");
+    addBot("❗ Network error. Please try again.");
   }
 });
 
@@ -77,7 +84,7 @@ chatForm.addEventListener("submit", async (e) => {
 function addUser(text) {
   chatWindow.innerHTML += `
     <div class="message-row user">
-      <div class="message-bubble">${text}</div>
+      <div class="message-bubble">${escapeHtml(text)}</div>
     </div>`;
   scrollBottom();
 }
@@ -85,7 +92,7 @@ function addUser(text) {
 function addBot(text) {
   chatWindow.innerHTML += `
     <div class="message-row bot">
-      <div class="message-bubble">${text.replace(/\n/g, "<br>")}</div>
+      <div class="message-bubble">${formatHTML(text)}</div>
     </div>`;
   scrollBottom();
 }
@@ -105,6 +112,17 @@ function removeTyping(id) {
   if (el) el.remove();
 }
 
+/* HELPERS */
 function scrollBottom() {
   chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+function escapeHtml(text) {
+  return text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function formatHTML(text) {
+  return text
+    .replace(/\n/g, "<br>")
+    .replace(/  /g, "&nbsp;&nbsp;");
 }
