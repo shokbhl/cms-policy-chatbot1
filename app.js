@@ -1,10 +1,9 @@
-/* CONFIG */
+// ===== CONFIG =====
 const STAFF_CODE = "cms-staff-2025";
-
-// ⭐ درست‌ترین API Worker
+// آدرس Worker خودت:
 const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api/chatbot";
 
-/* ELEMENTS */
+// ===== ELEMENTS =====
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 const loginForm = document.getElementById("login-form");
@@ -12,8 +11,9 @@ const loginError = document.getElementById("login-error");
 const chatForm = document.getElementById("chat-form");
 const chatWindow = document.getElementById("chat-window");
 const userInput = document.getElementById("user-input");
+const logoutBtn = document.getElementById("logout-btn");
 
-/* LOGIN */
+// ===== LOGIN =====
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const code = document.getElementById("access-code").value.trim();
@@ -22,19 +22,23 @@ loginForm.addEventListener("submit", (e) => {
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
     chatWindow.innerHTML = "";
-    addBot("Welcome! Ask anything about CMS policies.");
+    addBot(
+      "Welcome! Ask anything about CMS policies and I’ll match it to the correct policy where possible."
+    );
   } else {
-    loginError.textContent = "Incorrect code.";
+    loginError.textContent = "Incorrect staff access code.";
   }
 });
 
-/* LOGOUT */
-document.getElementById("logout-btn").addEventListener("click", () => {
+// ===== LOGOUT =====
+logoutBtn.addEventListener("click", () => {
   chatScreen.classList.add("hidden");
   loginScreen.classList.remove("hidden");
+  loginError.textContent = "";
+  document.getElementById("access-code").value = "";
 });
 
-/* CHAT */
+// ===== CHAT SUBMIT =====
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const msg = userInput.value.trim();
@@ -49,42 +53,43 @@ chatForm.addEventListener("submit", async (e) => {
     const res = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: msg }),
+      body: JSON.stringify({ question: msg })
     });
 
     removeTyping(typingId);
 
     if (!res.ok) {
-      addBot("❗ Error reaching CMS policy server.");
+      addBot("There was a problem reaching the CMS policy server. Please try again.");
       return;
     }
 
     const data = await res.json();
 
-    let answer = data.answer || "No clear policy found.";
+    let answer =
+      data.answer ||
+      "I couldn’t clearly match that question to a single CMS policy. Please check the policy binder or ask the Principal/Head of School.";
 
-    // Add policy reference if available
+    let extra = "";
     if (data.policyTitle) {
-      answer += `\n\n📘 Policy: <b>${data.policyTitle}</b>`;
+      extra += `<br><br>📘 <strong>Policy:</strong> ${data.policyTitle}`;
     }
-
     if (data.policyLink) {
-      answer += `\n🔗 <a href="${data.policyLink}" target="_blank" style="color:#0046ff">Open Policy</a>`;
+      extra += `<br>🔗 <a href="${data.policyLink}" target="_blank" rel="noopener noreferrer">View full policy</a>`;
     }
 
-    addBot(answer);
+    addBot(answer + extra);
   } catch (err) {
     console.error(err);
     removeTyping(typingId);
-    addBot("❗ Network error. Please try again.");
+    addBot("Network error. Please check your connection or try again.");
   }
 });
 
-/* MESSAGE HELPERS */
+// ===== MESSAGE HELPERS =====
 function addUser(text) {
   chatWindow.innerHTML += `
     <div class="message-row user">
-      <div class="message-bubble">${escapeHtml(text)}</div>
+      <div class="message-bubble user-bubble">${escapeHtml(text)}</div>
     </div>`;
   scrollBottom();
 }
@@ -92,7 +97,7 @@ function addUser(text) {
 function addBot(text) {
   chatWindow.innerHTML += `
     <div class="message-row bot">
-      <div class="message-bubble">${formatHTML(text)}</div>
+      <div class="message-bubble bot-bubble">${text}</div>
     </div>`;
   scrollBottom();
 }
@@ -101,7 +106,7 @@ function addTyping() {
   const id = "typing-" + Math.random().toString(36).slice(2);
   chatWindow.innerHTML += `
     <div class="message-row bot" id="${id}">
-      <div class="message-bubble typing">•••</div>
+      <div class="message-bubble bot-bubble typing">•••</div>
     </div>`;
   scrollBottom();
   return id;
@@ -112,17 +117,14 @@ function removeTyping(id) {
   if (el) el.remove();
 }
 
-/* HELPERS */
 function scrollBottom() {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-function escapeHtml(text) {
-  return text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function formatHTML(text) {
-  return text
-    .replace(/\n/g, "<br>")
-    .replace(/  /g, "&nbsp;&nbsp;");
+// Basic HTML escaping for user text
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
