@@ -3,74 +3,62 @@
 <head>
   <meta charset="UTF-8" />
   <title>CMS Policy Chatbot</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="cms-header">
     <div class="cms-header-inner">
       <img src="cms-logo.png" alt="Central Montessori School" class="cms-logo" />
       <div class="cms-title-block">
-        <h1 class="cms-app-title">CMS Policy Chatbot</h1>
-        <p class="cms-app-subtitle">
-          Quick answers to Central Montessori School policies – for staff only
-        </p>
+        <h1>CMS Policy Chatbot</h1>
+        <p class="cms-subtitle">Quick answers to Central Montessori School policies – for staff only</p>
       </div>
     </div>
   </header>
 
   <main class="cms-main">
-    <!-- LOGIN SCREEN -->
     <section id="login-screen" class="card">
-      <h2 class="card-title">Staff Access</h2>
-      <p class="card-text">
-        Please enter the staff access code to use the policy assistant.
-      </p>
-      <form id="login-form" class="login-form">
+      <h2>Staff Access</h2>
+      <p>Please enter the staff access code to use the policy assistant.</p>
+      <form id="login-form" class="form-row">
         <input
           type="password"
           id="access-code"
-          class="input"
-          placeholder="Enter staff access code"
-          autocomplete="off"
+          placeholder="Staff access code"
           required
         />
-        <button type="submit" class="btn btn-primary">Login</button>
+        <button type="submit">Login</button>
       </form>
       <p id="login-error" class="error-text"></p>
     </section>
 
-    <!-- CHAT SCREEN -->
     <section id="chat-screen" class="card hidden">
       <div class="chat-header-row">
-        <h2 class="card-title">Ask about a policy</h2>
-        <button id="logout-btn" class="btn btn-secondary small">Logout</button>
+        <h2>Ask about a policy</h2>
+        <button id="logout-btn" class="secondary-btn">Logout</button>
       </div>
-      <p class="card-text">
-        Ask a question in your own words. The assistant will match it to the
-        correct CMS policy and quote the relevant section.
+      <p class="helper-text">
+        Ask a question in your own words. The assistant will match it to the correct CMS policy
+        and quote the relevant section where possible.
       </p>
 
-      <div id="chat-window" class="chat-window">
-        <!-- Messages will be injected here by app.js -->
-      </div>
+      <div id="chat-window" class="chat-window"></div>
 
       <form id="chat-form" class="chat-form">
         <input
           type="text"
           id="user-input"
-          class="input"
-          placeholder="Example: What should I do if a child is absent without notice?"
-          autocomplete="off"
+          placeholder="Example: When do we call parents if a child doesn’t arrive?"
           required
         />
-        <button type="submit" class="btn btn-primary">Ask</button>
+        <button type="submit">Ask</button>
       </form>
     </section>
   </main>
 
   <footer class="cms-footer">
-    <small>© Central Montessori School – Internal staff tool</small>
+    © Central Montessori School – Internal staff tool
   </footer>
 
   <script src="app.js"></script>
