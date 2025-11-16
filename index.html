@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CMS Policy Chatbot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="cms-header">
+    <div class="cms-header-inner">
+      <img src="cms-logo.png" alt="Central Montessori School" class="cms-logo" />
+      <div class="cms-title-block">
+        <h1 class="cms-app-title">CMS Policy Chatbot</h1>
+        <p class="cms-app-subtitle">
+          Quick answers to Central Montessori School policies – for staff only
+        </p>
+      </div>
+    </div>
+  </header>
+
+  <main class="cms-main">
+    <!-- LOGIN SCREEN -->
+    <section id="login-screen" class="card">
+      <h2 class="card-title">Staff Access</h2>
+      <p class="card-text">
+        Please enter the staff access code to use the policy assistant.
+      </p>
+      <form id="login-form" class="login-form">
+        <input
+          type="password"
+          id="access-code"
+          class="input"
+          placeholder="Enter staff access code"
+          autocomplete="off"
+          required
+        />
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+      <p id="login-error" class="error-text"></p>
+    </section>
+
+    <!-- CHAT SCREEN -->
+    <section id="chat-screen" class="card hidden">
+      <div class="chat-header-row">
+        <h2 class="card-title">Ask about a policy</h2>
+        <button id="logout-btn" class="btn btn-secondary small">Logout</button>
+      </div>
+      <p class="card-text">
+        Ask a question in your own words. The assistant will match it to the
+        correct CMS policy and quote the relevant section.
+      </p>
+
+      <div id="chat-window" class="chat-window">
+        <!-- Messages will be injected here by app.js -->
+      </div>
+
+      <form id="chat-form" class="chat-form">
+        <input
+          type="text"
+          id="user-input"
+          class="input"
+          placeholder="Example: What should I do if a child is absent without notice?"
+          autocomplete="off"
+          required
+        />
+        <button type="submit" class="btn btn-primary">Ask</button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="cms-footer">
+    <small>© Central Montessori School – Internal staff tool</small>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

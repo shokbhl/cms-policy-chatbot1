@@ -1,0 +1,162 @@
+/* CORE COLORS */
+:root {
+  --cms-navy: #003679;
+  --cms-gold: #f2c100;
+  --bg-light: #f3f6ff;
+  --text-main: #1f2440;
+  --text-muted: #5f6783;
+}
+
+/* RESET */
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #eef2ff;
+  color: var(--text-main);
+}
+
+/* HEADER */
+.cms-header {
+  background: var(--cms-navy);
+  color: white;
+  padding: 16px 20px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+
+.cms-header-inner {
+  max-width: 900px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cms-logo {
+  height: 60px;
+  width: auto;
+  object-fit: contain;
+}
+
+.cms-title-block h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: 1px;
+}
+
+.cms-title-block p {
+  margin: 3px 0 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+/* MAIN */
+.cms-main {
+  max-width: 900px;
+  margin: 30px auto;
+  padding: 0 16px;
+}
+
+/* CARD */
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+  margin-bottom: 24px;
+}
+
+/* INPUTS */
+.input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #d3d8ef;
+  margin-bottom: 12px;
+}
+
+.input:focus {
+  border-color: var(--cms-navy);
+  outline: none;
+}
+
+/* BUTTONS */
+.btn {
+  padding: 10px 18px;
+  border-radius: 30px;
+  cursor: pointer;
+  border: none;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: var(--cms-navy);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #002a5c;
+}
+
+.btn-secondary {
+  background: white;
+  border: 1px solid var(--cms-navy);
+  color: var(--cms-navy);
+}
+
+.small {
+  padding: 6px 14px;
+}
+
+/* CHAT WINDOW */
+.chat-window {
+  background: var(--bg-light);
+  min-height: 220px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #d3d8ef;
+}
+
+.message-row {
+  display: flex;
+  margin: 8px 0;
+}
+
+.message-row.user {
+  justify-content: flex-end;
+}
+
+.message-row.bot {
+  justify-content: flex-start;
+}
+
+.message-bubble {
+  max-width: 75%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: white;
+  border: 1px solid #d5daee;
+}
+
+.message-row.user .message-bubble {
+  background: var(--cms-navy);
+  color: white;
+  border: none;
+}
+
+.typing {
+  opacity: 0.6;
+}
+
+/* FOOTER */
+.cms-footer {
+  text-align: center;
+  padding: 20px;
+  color: #6b7393;
+}
+
+/* UTIL */
+.hidden {
+  display: none;
+}
