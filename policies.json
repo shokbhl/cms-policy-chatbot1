@@ -1,0 +1,52 @@
+[
+  {
+    "id": "students_volunteers",
+    "title": "Supervision of Students & Volunteers Policy",
+    "content": "Students and volunteers must be 18+ and are never left alone with children or counted in ratios. They must obtain a Vulnerable Sector Check, review all CMS policies including Prohibited Practices, Anaphylaxis, and any Individual Support Plans. They must wear identification, use professional language (Mr., Mrs., Miss), and never communicate privately with parents or photograph children without written CMS authorization. They may assist teachers under direct supervision but cannot replace staff. Mentoring teachers must keep students/volunteers in sight at all times. Students/volunteers must sign acknowledgement confirming full understanding and compliance.",
+    "keywords": [
+      "student",
+      "volunteer",
+      "supervision",
+      "ratio",
+      "Vulnerable Sector Check",
+      "policy review",
+      "prohibited practices",
+      "anaphylaxis",
+      "confidentiality",
+      "mentoring teacher",
+      "identification"
+    ]
+  },
+  {
+    "id": "waiting_list",
+    "title": "Waiting List Policy & Procedures",
+    "content": "CMS does not charge any fee to place a child on the waiting list. Priority goes to transfers within CMS, siblings of current students, and children of CMS employees. Families must submit a completed admission form to be added. Waiting list information is private—parents may ask about their child's position but other names are concealed. Admission is first-come-first-served based on the date of placement. Once a spot is confirmed, a non-refundable $500 registration fee is required. Review records kept for minimum 3 years.",
+    "keywords": [
+      "waiting list",
+      "admission",
+      "priority",
+      "siblings",
+      "CMS employees",
+      "registration fee",
+      "privacy",
+      "placement",
+      "first come first serve"
+    ]
+  },
+  {
+    "id": "staff_development",
+    "title": "Staff Development & Training Policy",
+    "content": "All new staff, students, and volunteers receive mandatory orientation covering CMS policies, Public Health, Fire Safety, and Ministry requirements. Supervisors/principals meet with staff monthly to identify training needs. CMS offers mandatory and optional workshops. Only one staff per classroom may attend training during program hours unless approved otherwise. All staff must complete and maintain Standard First Aid with CPR Level C; CMS covers part of the annual refresher. Professional development may include workshops, webinars, meetings, observations, articles, and updated Ministry requirements.",
+    "keywords": [
+      "training",
+      "orientation",
+      "professional development",
+      "workshops",
+      "First Aid",
+      "CPR Level C",
+      "monthly meetings",
+      "policies",
+      "staff development"
+    ]
+  }
+]
