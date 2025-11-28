@@ -6,43 +6,86 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
   <header class="cms-header">
     <div class="cms-header-inner">
-      <img src="cms-logo.png" class="cms-logo" />
-      <div>
+      <!-- همبرگر منو -->
+      <button id="menu-toggle" class="menu-btn" aria-label="Open menu">
+        <span></span><span></span><span></span>
+      </button>
+
+      <img src="cms-logo.png" alt="Central Montessori School" class="cms-logo" />
+      <div class="cms-title-block">
         <h1>CMS Policy Chatbot</h1>
-        <p class="cms-subtitle">Quick answers to CMS school policies – for staff only</p>
+        <p class="cms-subtitle">
+          Quick answers to Central Montessori School policies – for staff only
+        </p>
       </div>
     </div>
   </header>
 
-  <main class="cms-main">
+  <!-- ساید منو -->
+  <aside id="side-menu" class="side-menu">
+    <div class="side-menu-header">
+      <h3>Policies &amp; Protocols</h3>
+      <button id="menu-close" class="icon-btn" aria-label="Close menu">✕</button>
+    </div>
 
-    <!-- LOGIN SCREEN -->
-    <section id="login-screen" class="card">
+    <div class="side-menu-section">
+      <h4>Policies</h4>
+      <ul id="policy-list" class="menu-list">
+        <!-- نمونه‌ها؛ بقیه رو بعداً اضافه کن -->
+        <li data-link="https://example.com/safe-arrival">
+          Safe Arrival and Dismissal Policy and Procedures
+        </li>
+        <li data-link="https://example.com/employee-protocol">
+          Employee Protocol / Conduct
+        </li>
+      </ul>
+    </div>
+
+    <div class="side-menu-section">
+      <h4>Protocols</h4>
+      <ul id="protocol-list" class="menu-list">
+        <!-- اینجا هم بعداً آیتم اضافه کن -->
+        <li data-link="https://example.com/lockdown-protocol">
+          Lockdown / Emergency Protocol
+        </li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- لایه تیره پشت منو -->
+  <div id="backdrop" class="backdrop"></div>
+
+  <main class="cms-main">
+    <!-- صفحه لاگین -->
+    <section id="login-screen" class="card card-narrow fade-in">
       <h2>Staff Access</h2>
       <p>Please enter the staff access code to use the policy assistant.</p>
-
       <form id="login-form" class="form-row">
-        <input type="password" id="access-code" placeholder="Staff access code" required />
-        <button type="submit">Login</button>
+        <input
+          type="password"
+          id="access-code"
+          placeholder="Staff access code"
+          required
+        />
+        <button type="submit" class="primary-btn">Login</button>
       </form>
-
       <p id="login-error" class="error-text"></p>
     </section>
 
-    <!-- CHAT SCREEN -->
-    <section id="chat-screen" class="card hidden">
+    <!-- صفحه چت -->
+    <section id="chat-screen" class="card card-wide hidden fade-in">
       <div class="chat-header-row">
-        <h2>Ask about a policy</h2>
+        <div>
+          <h2>Ask about a policy</h2>
+          <p class="helper-text">
+            Ask a question in your own words. The assistant will match it to the correct CMS policy.
+          </p>
+        </div>
         <button id="logout-btn" class="secondary-btn">Logout</button>
       </div>
-
-      <p class="helper-text">
-        Ask anything about CMS school policies. I’ll match your question to the correct policy.
-      </p>
 
       <div id="chat-window" class="chat-window"></div>
 
@@ -50,16 +93,16 @@
         <input
           type="text"
           id="user-input"
-          placeholder="Example: What is the safe arrival policy?"
+          placeholder="Example: When do we call parents if a child doesn’t arrive?"
           required
         />
-        <button type="submit">Ask</button>
+        <button type="submit" class="primary-btn">Ask</button>
       </form>
     </section>
   </main>
 
   <footer class="cms-footer">
-    © Central Montessori School – Internal Staff Tool
+    © Central Montessori School – Internal staff tool
   </footer>
 
   <script src="app.js"></script>
