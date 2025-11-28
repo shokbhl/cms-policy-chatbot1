@@ -6,104 +6,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body>
-  <header class="cms-header">
-    <div class="cms-header-inner">
-      <!-- همبرگر منو -->
-      <button id="menu-toggle" class="menu-btn" aria-label="Open menu">
-        <span></span><span></span><span></span>
-      </button>
 
-      <img src="cms-logo.png" alt="Central Montessori School" class="cms-logo" />
-      <div class="cms-title-block">
-        <h1>CMS Policy Chatbot</h1>
-        <p class="cms-subtitle">
-          Quick answers to Central Montessori School policies – for staff only
-        </p>
-      </div>
+<body>
+
+  <!-- ========== TOP NAVBAR WITH MENU ========== -->
+  <header class="top-nav">
+    <button id="menu-btn" class="menu-btn">☰</button>
+
+    <div class="title-block">
+      <img src="cms-logo.png" class="logo" />
+      <h1>CMS Policy Chatbot</h1>
     </div>
+
+    <button id="logout-btn" class="logout-btn hidden">Logout</button>
   </header>
 
-  <!-- ساید منو -->
-  <aside id="side-menu" class="side-menu">
-    <div class="side-menu-header">
-      <h3>Policies &amp; Protocols</h3>
-      <button id="menu-close" class="icon-btn" aria-label="Close menu">✕</button>
-    </div>
+  <!-- ========== SIDE MENU ========== -->
+  <nav id="side-menu" class="side-menu hidden">
+    <h3>📚 Policies</h3>
+    <ul id="policy-list"></ul>
 
-    <div class="side-menu-section">
-      <h4>Policies</h4>
-      <ul id="policy-list" class="menu-list">
-        <!-- نمونه‌ها؛ بقیه رو بعداً اضافه کن -->
-        <li data-link="https://example.com/safe-arrival">
-          Safe Arrival and Dismissal Policy and Procedures
-        </li>
-        <li data-link="https://example.com/employee-protocol">
-          Employee Protocol / Conduct
-        </li>
-      </ul>
-    </div>
+    <h3>📘 Protocols</h3>
+    <ul id="protocol-list"></ul>
+  </nav>
 
-    <div class="side-menu-section">
-      <h4>Protocols</h4>
-      <ul id="protocol-list" class="menu-list">
-        <!-- اینجا هم بعداً آیتم اضافه کن -->
-        <li data-link="https://example.com/lockdown-protocol">
-          Lockdown / Emergency Protocol
-        </li>
-      </ul>
-    </div>
-  </aside>
+  <!-- OVERLAY WHEN MENU OPEN -->
+  <div id="overlay" class="overlay hidden"></div>
 
-  <!-- لایه تیره پشت منو -->
-  <div id="backdrop" class="backdrop"></div>
 
-  <main class="cms-main">
-    <!-- صفحه لاگین -->
-    <section id="login-screen" class="card card-narrow fade-in">
-      <h2>Staff Access</h2>
-      <p>Please enter the staff access code to use the policy assistant.</p>
-      <form id="login-form" class="form-row">
-        <input
-          type="password"
-          id="access-code"
-          placeholder="Staff access code"
-          required
-        />
-        <button type="submit" class="primary-btn">Login</button>
-      </form>
-      <p id="login-error" class="error-text"></p>
-    </section>
+  <!-- ========== LOGIN SCREEN ========== -->
+  <main id="login-screen" class="center-card fade-in">
+    <h2>Staff Access</h2>
+    <p>Please enter the staff access code.</p>
 
-    <!-- صفحه چت -->
-    <section id="chat-screen" class="card card-wide hidden fade-in">
-      <div class="chat-header-row">
-        <div>
-          <h2>Ask about a policy</h2>
-          <p class="helper-text">
-            Ask a question in your own words. The assistant will match it to the correct CMS policy.
-          </p>
-        </div>
-        <button id="logout-btn" class="secondary-btn">Logout</button>
-      </div>
+    <form id="login-form">
+      <input type="password" id="access-code" placeholder="Access code" required />
+      <button class="primary-btn" type="submit">Login</button>
+    </form>
 
-      <div id="chat-window" class="chat-window"></div>
-
-      <form id="chat-form" class="chat-form">
-        <input
-          type="text"
-          id="user-input"
-          placeholder="Example: When do we call parents if a child doesn’t arrive?"
-          required
-        />
-        <button type="submit" class="primary-btn">Ask</button>
-      </form>
-    </section>
+    <p id="login-error" class="error-text"></p>
   </main>
 
-  <footer class="cms-footer">
-    © Central Montessori School – Internal staff tool
-  </footer>
+
+  <!-- ========== CHAT SCREEN ========== -->
+  <main id="chat-screen" class="hidden">
+
+    <div class="chat-window" id="chat-window"></div>
+
+    <form id="chat-form" class="chat-form">
+      <input
+        id="user-input"
+        type="text"
+        placeholder="Ask a policy question…"
+        required
+      />
+      <button class="primary-btn" type="submit">Ask</button>
+    </form>
+  </main>
 
   <script src="app.js"></script>
 </body>
