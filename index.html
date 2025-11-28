@@ -6,62 +6,54 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
 
-  <!-- ⭐ HEADER -->
-  <header class="cms-header">
-    <div class="cms-header-inner">
-      <!-- Hamburger menu -->
-      <div id="menu-btn" class="menu-btn hidden">
-        ☰
-      </div>
-
-      <!-- Logo + Title -->
-      <img src="cms-logo.png" class="cms-logo" />
-      <h1 class="cms-title">CMS Policy Chatbot</h1>
-    </div>
-  </header>
-
-  <!-- ⭐ SIDEBAR MENU (hidden before login) -->
+  <!-- ============ SIDEBAR (Hidden Before Login) ============ -->
   <aside id="sidebar" class="sidebar hidden">
-    <h3>📘 Policies</h3>
-    <ul id="policy-list"></ul>
-
-    <h3>📗 Protocols</h3>
-    <ul id="protocol-list"></ul>
+    <h3>Menu</h3>
+    <ul>
+      <li><span>📘 Policies</span></li>
+      <li><span>📗 Protocols</span></li>
+    </ul>
   </aside>
 
-  <!-- ⭐ MAIN CONTENT -->
-  <main class="cms-main">
+  <!-- Overlay -->
+  <div id="overlay" class="overlay hidden"></div>
 
-    <!-- LOGIN SCREEN -->
-    <section id="login-screen" class="card login-card">
+  <!-- ============ TOP BAR ============ -->
+  <header class="topbar">
+    <button id="menu-btn" class="menu-btn hidden">☰</button>
+    <img src="cms-logo.png" class="header-logo" />
+    <h1 class="header-title">CMS Policy Chatbot</h1>
+  </header>
+
+  <!-- ============ LOGIN SCREEN ============ -->
+  <main id="login-screen" class="center-card">
+    <div class="login-box">
       <h2>Staff Access</h2>
       <p>Please enter the staff access code.</p>
-
-      <form id="login-form" class="form-row">
+      <form id="login-form">
         <input type="password" id="access-code" placeholder="Staff access code" required />
-        <button type="submit">Login</button>
+        <button type="submit" class="btn">Login</button>
       </form>
+      <p id="login-error" class="error"></p>
+    </div>
+  </main>
 
-      <p id="login-error" class="error-text"></p>
-    </section>
+  <!-- ============ CHAT SCREEN ============ -->
+  <main id="chat-screen" class="hidden chat-area">
 
-    <!-- CHAT SCREEN -->
-    <section id="chat-screen" class="card hidden">
-      <div class="chat-header">
-        <h2>Ask about a policy</h2>
-        <button id="logout-btn" class="secondary-btn">Logout</button>
-      </div>
+    <div class="chat-header">
+      <h2>Ask about a policy</h2>
+      <button id="logout-btn" class="btn-secondary">Logout</button>
+    </div>
 
-      <div id="chat-window" class="chat-window"></div>
+    <div id="chat-window" class="chat-window"></div>
 
-      <form id="chat-form" class="chat-form">
-        <input type="text" id="user-input" placeholder="Ask a policy question…" required />
-        <button type="submit">Ask</button>
-      </form>
-    </section>
+    <form id="chat-form" class="chat-form">
+      <input id="user-input" type="text" placeholder="Ask a policy question…" required />
+      <button type="submit" class="btn">Ask</button>
+    </form>
 
   </main>
 
