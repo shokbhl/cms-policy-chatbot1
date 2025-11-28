@@ -1,5 +1,5 @@
 // ========== CONFIG ==========
-const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api/chatbot";
+const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
 
 // ========== LOGIN ==========
 const loginScreen = document.getElementById("login-screen");
