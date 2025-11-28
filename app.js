@@ -11,7 +11,7 @@ const loginError = document.getElementById("login-error");
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
 
-  if (accessCodeInput.value.trim() === "cms2024") {
+  if (accessCodeInput.value.trim() === "cms-staff-2025") {
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
   } else {
