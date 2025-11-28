@@ -9,60 +9,66 @@
 
 <body>
 
-  <!-- ========== TOP NAVBAR WITH MENU ========== -->
-  <header class="top-nav">
-    <button id="menu-btn" class="menu-btn">☰</button>
-
-    <div class="title-block">
-      <img src="cms-logo.png" class="logo" />
-      <h1>CMS Policy Chatbot</h1>
-    </div>
-
-    <button id="logout-btn" class="logout-btn hidden">Logout</button>
-  </header>
-
-  <!-- ========== SIDE MENU ========== -->
-  <nav id="side-menu" class="side-menu hidden">
-    <h3>📚 Policies</h3>
+  <!-- ========== SIDEBAR ========== -->
+  <div id="sidebar" class="sidebar hidden">
+    <h3>CMS Policies</h3>
     <ul id="policy-list"></ul>
 
-    <h3>📘 Protocols</h3>
+    <h3>Protocols</h3>
     <ul id="protocol-list"></ul>
-  </nav>
+  </div>
 
-  <!-- OVERLAY WHEN MENU OPEN -->
-  <div id="overlay" class="overlay hidden"></div>
+  <!-- ========== HEADER ========== -->
+  <header class="cms-header">
+    <div class="cms-header-inner">
 
+      <!-- Hamburger -->
+      <button id="menu-btn" class="menu-btn hidden">☰</button>
 
-  <!-- ========== LOGIN SCREEN ========== -->
-  <main id="login-screen" class="center-card fade-in">
-    <h2>Staff Access</h2>
-    <p>Please enter the staff access code.</p>
+      <img src="cms-logo.png" class="cms-logo" />
+      <div class="cms-title-block">
+        <h1>CMS Policy Chatbot</h1>
+        <p class="cms-subtitle">Quick answers to CMS policies – for staff only</p>
+      </div>
+    </div>
+  </header>
 
-    <form id="login-form">
-      <input type="password" id="access-code" placeholder="Access code" required />
-      <button class="primary-btn" type="submit">Login</button>
-    </form>
+  <!-- ========== MAIN ========== -->
+  <main class="cms-main">
 
-    <p id="login-error" class="error-text"></p>
+    <!-- LOGIN SCREEN -->
+    <section id="login-screen" class="card">
+      <h2>Staff Access</h2>
+      <p>Please enter the staff access code.</p>
+
+      <form id="login-form" class="form-row">
+        <input type="password" id="access-code" placeholder="Staff access code" required />
+        <button type="submit" class="fade-btn">Login</button>
+      </form>
+
+      <p id="login-error" class="error-text"></p>
+    </section>
+
+    <!-- CHAT SCREEN -->
+    <section id="chat-screen" class="card hidden">
+      <div class="chat-header-row">
+        <h2>Ask about a policy</h2>
+        <button id="logout-btn" class="secondary-btn fade-btn">Logout</button>
+      </div>
+
+      <div id="chat-window" class="chat-window"></div>
+
+      <form id="chat-form" class="chat-form">
+        <input type="text" id="user-input" placeholder="Example: When do we call parents if a child doesn’t arrive?" required />
+        <button type="submit" class="fade-btn">Ask</button>
+      </form>
+    </section>
+
   </main>
 
-
-  <!-- ========== CHAT SCREEN ========== -->
-  <main id="chat-screen" class="hidden">
-
-    <div class="chat-window" id="chat-window"></div>
-
-    <form id="chat-form" class="chat-form">
-      <input
-        id="user-input"
-        type="text"
-        placeholder="Ask a policy question…"
-        required
-      />
-      <button class="primary-btn" type="submit">Ask</button>
-    </form>
-  </main>
+  <footer class="cms-footer">
+    © Central Montessori School – Internal staff tool
+  </footer>
 
   <script src="app.js"></script>
 </body>

@@ -1,128 +1,117 @@
-// CONFIG
+// ========== CONFIG ==========
 const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
 
-// ELEMENTS
+// ========== ELEMENTS ==========
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 const loginForm = document.getElementById("login-form");
-const chatForm = document.getElementById("chat-form");
-const menuBtn = document.getElementById("menu-btn");
-const sideMenu = document.getElementById("side-menu");
-const overlay = document.getElementById("overlay");
-const logoutBtn = document.getElementById("logout-btn");
-const policyList = document.getElementById("policy-list");
-const protocolList = document.getElementById("protocol-list");
-const chatWindow = document.getElementById("chat-window");
-const userInput = document.getElementById("user-input");
+const accessCodeInput = document.getElementById("access-code");
+const loginError = document.getElementById("login-error");
 
+const sidebar = document.getElementById("sidebar");
+const menuBtn = document.getElementById("menu-btn");
+
+const logoutBtn = document.getElementById("logout-btn");
+
+const chatWindow = document.getElementById("chat-window");
+const chatForm = document.getElementById("chat-form");
+const userInput = document.getElementById("user-input");
 
 // ========== LOGIN ==========
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const code = document.getElementById("access-code").value.trim();
 
-  if (code === "cms-staff-2025") {
+  if (accessCodeInput.value.trim() === "cms-staff-2025") {
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
-    logoutBtn.classList.remove("hidden");
-    loadMenuItems();  // load policies+protocols into sidebar
+    menuBtn.classList.remove("hidden"); // show sidebar hamburger
   } else {
-    document.getElementById("login-error").textContent = "Incorrect access code.";
+    loginError.textContent = "Incorrect access code.";
   }
 });
 
-
-// ========== MENU OPEN/CLOSE ==========
-menuBtn.onclick = () => {
-  sideMenu.classList.remove("hidden");
-  overlay.classList.remove("hidden");
-};
-
-overlay.onclick = () => {
-  sideMenu.classList.add("hidden");
-  overlay.classList.add("hidden");
-};
-
-
 // ========== LOGOUT ==========
-logoutBtn.onclick = () => {
+logoutBtn.addEventListener("click", () => {
+  chatWindow.innerHTML = ""; // clear chat
+  accessCodeInput.value = "";
+  loginError.textContent = "";
+
   chatScreen.classList.add("hidden");
   loginScreen.classList.remove("hidden");
-};
+  sidebar.classList.add("hidden");
+  menuBtn.classList.add("hidden");
+});
 
+// ========== SIDEBAR ==========
+menuBtn.addEventListener("click", () => {
+  sidebar.classList.toggle("hidden");
+});
 
-// ========== ADD MESSAGE ==========
+// ========== MESSAGE BUBBLE ==========
 function addMessage(role, text) {
-  const div = document.createElement("div");
-  div.className = `msg ${role}`;
-  div.innerHTML = text;
-  chatWindow.appendChild(div);
+  const msg = document.createElement("div");
+  msg.className = `msg ${role}`;
+  msg.innerHTML = text;
+  chatWindow.appendChild(msg);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-function addTyping() {
-  const dot = document.createElement("div");
-  dot.className = "msg assistant typing";
-  chatWindow.appendChild(dot);
+// ========== TYPING ANIMATION ==========
+function showTyping() {
+  const typing = document.createElement("div");
+  typing.className = "msg assistant";
+  typing.id = "typing";
+  typing.innerHTML = `
+    <div class="typing">
+      <div></div><div></div><div></div>
+    </div>
+  `;
+  chatWindow.appendChild(typing);
   chatWindow.scrollTop = chatWindow.scrollHeight;
-  return dot;
 }
 
-
-// ========== LOAD MENU ITEMS ==========
-async function loadMenuItems() {
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: "__list_all__" })
-  });
-
-  const data = await res.json();
-
-  policyList.innerHTML = "";
-  protocolList.innerHTML = "";
-
-  data.policies.forEach(p => {
-    const li = document.createElement("li");
-    li.textContent = p.title;
-    li.onclick = () => askPolicy(p.title);
-    policyList.appendChild(li);
-  });
-
-  data.protocols.forEach(p => {
-    const li = document.createElement("li");
-    li.textContent = p.title;
-    li.onclick = () => askPolicy(p.title);
-    protocolList.appendChild(li);
-  });
+function hideTyping() {
+  const t = document.getElementById("typing");
+  if (t) t.remove();
 }
-
 
 // ========== ASK POLICY ==========
 async function askPolicy(question) {
   addMessage("user", question);
+  showTyping();
 
-  const typingBubble = addTyping();
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: question })
+    });
 
-  const response = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: question })
-  });
+    hideTyping();
 
-  typingBubble.remove();
+    if (!response.ok) {
+      addMessage("assistant", "Network error — please try again.");
+      return;
+    }
 
-  const data = await response.json();
-  let html = `<b>${data.policy?.title || "Policy"}</b><br><br>${data.answer}`;
-  if (data.policy?.link) {
-    html += `<br><br><a href="${data.policy.link}" target="_blank">Open full policy</a>`;
+    const data = await response.json();
+
+    const answer =
+      `<b>${data.policy?.title || ""}</b><br><br>` +
+      data.answer +
+      (data.policy?.link
+        ? `<br><br>Open the full document: <a href="${data.policy.link}" target="_blank">click here.</a>`
+        : "");
+
+    addMessage("assistant", answer);
+
+  } catch (err) {
+    hideTyping();
+    addMessage("assistant", "Error connecting to server.");
   }
-
-  addMessage("assistant", html);
 }
 
-
-// ========== SUBMIT CHAT ==========
+// ========== FORM SUBMIT ==========
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
   askPolicy(userInput.value.trim());
