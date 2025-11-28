@@ -242,4 +242,70 @@ button:hover {
   .message-bubble {
     max-width: 100%;
   }
+
+  /* ==== NAV BAR ==== */
+.cms-nav {
+  background: #002f6c;
+  padding: 8px 16px;
+  display: flex;
+  gap: 12px;
+}
+
+.nav-btn {
+  background: white;
+  color: #003b8e;
+  border: 1px solid #003b8e;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.nav-btn:hover {
+  background: #e8f0ff;
+}
+
+/* ==== SIDE MENU ==== */
+.side-menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 260px;
+  height: 100%;
+  background: white;
+  border-left: 2px solid #003b8e;
+  padding: 16px;
+  box-shadow: -4px 0 12px rgba(0,0,0,0.1);
+  z-index: 99;
+}
+
+.side-menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.side-menu ul {
+  margin-top: 16px;
+  list-style: none;
+  padding: 0;
+}
+
+.side-menu ul li {
+  padding: 10px 0;
+  border-bottom: 1px solid #ddd;
+  cursor: pointer;
+}
+
+.close-btn {
+  background: none;
+  color: #003b8e;
+  font-size: 1.4rem;
+  border: none;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none;
+}
 }

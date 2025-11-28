@@ -8,41 +8,49 @@
 </head>
 
 <body>
+
   <!-- ===== HEADER ===== -->
   <header class="cms-header">
     <div class="cms-header-inner">
       <img src="cms-logo.png" alt="Central Montessori School" class="cms-logo" />
-
       <div class="cms-title-block">
         <h1>CMS Policy Chatbot</h1>
-        <p class="cms-subtitle">Quick answers to CMS policies – for staff only</p>
+        <p class="cms-subtitle">Quick answers to Central Montessori School policies – for staff only</p>
       </div>
     </div>
+
+    <!-- ==== TOP NAV MENU ==== -->
+    <nav class="cms-nav">
+      <button class="nav-btn" onclick="openMenu('policies')">Policies</button>
+      <button class="nav-btn" onclick="openMenu('protocols')">Protocols</button>
+    </nav>
   </header>
 
-  <!-- ===== NAVIGATION MENU ===== -->
-  <nav class="cms-nav">
-    <button class="nav-btn" onclick="showSection('chat-screen')">Chatbot</button>
-    <button class="nav-btn" onclick="showSection('policy-list')">Policies</button>
-    <button class="nav-btn" onclick="showSection('protocol-list')">Protocols</button>
-  </nav>
+  <!-- ===== SIDE MENU ===== -->
+  <aside id="side-menu" class="side-menu hidden">
+    <div class="side-menu-header">
+      <h3 id="menu-title"></h3>
+      <button class="close-btn" onclick="closeMenu()">✕</button>
+    </div>
+    <ul id="menu-list"></ul>
+  </aside>
 
+  <!-- ===== MAIN AREA ===== -->
   <main class="cms-main">
-
-    <!-- ===== LOGIN SCREEN ===== -->
+    <!-- LOGIN SCREEN -->
     <section id="login-screen" class="card">
       <h2>Staff Access</h2>
-      <p>Please enter the staff access code to access the CMS policy assistant.</p>
+      <p>Please enter the staff access code to use the policy assistant.</p>
 
       <form id="login-form" class="form-row">
-        <input type="password" id="access-code" placeholder="Staff code" required />
+        <input type="password" id="access-code" placeholder="Staff access code" required />
         <button type="submit">Login</button>
       </form>
 
       <p id="login-error" class="error-text"></p>
     </section>
 
-    <!-- ===== CHAT SCREEN ===== -->
+    <!-- CHAT SCREEN -->
     <section id="chat-screen" class="card hidden">
       <div class="chat-header-row">
         <h2>Ask about a policy</h2>
@@ -50,50 +58,65 @@
       </div>
 
       <p class="helper-text">
-        Type your question. The assistant will match it to the correct CMS policy.
+        Ask a question in your own words. The assistant will match it to the correct CMS policy.
       </p>
 
       <div id="chat-window" class="chat-window"></div>
 
       <form id="chat-form" class="chat-form">
-        <input
-          type="text"
-          id="user-input"
-          placeholder="Example: When do we call parents if a child doesn’t arrive?"
-          required
-        />
+        <input type="text" id="user-input" placeholder="Type your question..." required />
         <button type="submit">Ask</button>
       </form>
     </section>
-
-    <!-- ===== POLICY LIST ===== -->
-    <section id="policy-list" class="card hidden">
-      <h2>All CMS Policies</h2>
-      <ul id="policy-container"></ul>
-    </section>
-
-    <!-- ===== PROTOCOL LIST ===== -->
-    <section id="protocol-list" class="card hidden">
-      <h2>All CMS Protocols</h2>
-      <ul id="protocol-container"></ul>
-    </section>
-
   </main>
 
   <footer class="cms-footer">
-    © Central Montessori School – Internal Staff Tool
+    © Central Montessori School – Internal staff tool
   </footer>
 
-  <script src="app.js"></script>
-
   <script>
-    function showSection(id) {
-      document.getElementById("chat-screen").classList.add("hidden");
-      document.getElementById("policy-list").classList.add("hidden");
-      document.getElementById("protocol-list").classList.add("hidden");
+    // ====== MENU DATA (FE only) ======
+    const policies = [
+      "Safe Arrival and Dismissal",
+      "Sleep Supervision",
+      "Playground Safety",
+      "Sanitary Practices",
+      "Medication Administration",
+      "Serious Occurrence",
+      "Anaphylaxis",
+      "Supervision of Volunteers",
+    ];
 
-      document.getElementById(id).classList.remove("hidden");
+    const protocols = [
+      "Fire Drill",
+      "Lockdown Procedure",
+      "Evacuation Procedure",
+      "Outdoor Supervision Procedure",
+      "Storm / Weather Closure",
+    ];
+
+    function openMenu(type) {
+      const menu = document.getElementById("side-menu");
+      const title = document.getElementById("menu-title");
+      const list = document.getElementById("menu-list");
+
+      menu.classList.remove("hidden");
+      list.innerHTML = "";
+
+      if (type === "policies") {
+        title.textContent = "CMS Policies";
+        policies.forEach(p => list.innerHTML += `<li>${p}</li>`);
+      } else {
+        title.textContent = "CMS Protocols";
+        protocols.forEach(p => list.innerHTML += `<li>${p}</li>`);
+      }
+    }
+
+    function closeMenu() {
+      document.getElementById("side-menu").classList.add("hidden");
     }
   </script>
+
+  <script src="app.js"></script>
 </body>
 </html>

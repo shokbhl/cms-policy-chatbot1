@@ -2,82 +2,99 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Handle CORS preflight
+    // CORS for frontend
+    const headers = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+
     if (request.method === "OPTIONS") {
-      return new Response("", {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
+      return new Response(null, { headers });
+    }
+
+    // ---- ROUTE: GET ALL POLICIES ----
+    if (url.pathname === "/api/all-policies") {
+      const json = await env.POLICIES_KV.get("policies_json");
+      return new Response(json, {
+        headers: { ...headers, "Content-Type": "application/json" },
       });
     }
 
-    // Only handle chatbot API route
-    if (url.pathname !== "/api/chatbot") {
-      return new Response("Not found", { status: 404 });
+    // ---- ROUTE: GET ALL PROTOCOLS ----
+    if (url.pathname === "/api/all-protocols") {
+      const json = await env.POLICIES_KV.get("protocols_json");
+      return new Response(json, {
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
     }
 
-    try {
-      const body = await request.json();
-      const userQuestion = body.question;
-
-      // Read KV values
-      const rawPolicies = await env.cms_policies.get("policies", "json");
-      const rawProtocols = await env.cms_protocols.get("protocols", "json");
-
-      const allDocs = [...rawPolicies, ...rawProtocols];
-
-      // Embed + match with OpenAI
-      const systemPrompt = `
-Match the user's question to the most relevant CMS policy or protocol.
-
-Always include this:
-- "answer": a short explanation from the policy
-- "link": ALWAYS include the hyperlink from the JSON for that policy
-`;
-
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: JSON.stringify({
-                question: userQuestion,
-                documents: allDocs,
-              }),
-            },
-          ],
-        }),
-      });
-
-      const ai = await response.json();
-
-      return new Response(JSON.stringify(ai), {
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
-      });
-
-    } catch (err) {
-      return new Response(
-        JSON.stringify({ error: "Worker crashed", details: err.message }),
-        {
-          status: 500,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Content-Type": "application/json",
-          },
+    // ---- ROUTE: MAIN CHATBOT ----
+    if (url.pathname === "/api/chatbot") {
+      try {
+        const { question } = await request.json();
+        if (!question) {
+          return new Response(JSON.stringify({ error: "Missing question" }), {
+            status: 400,
+            headers,
+          });
         }
-      );
+
+        // Load policies
+        const raw = await env.POLICIES_KV.get("policies_json");
+        const policies = JSON.parse(raw || "[]");
+
+        // Use OpenAI
+        const completion = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You match staff questions to CMS policies. Always return policyTitle, answer, and policyId.",
+              },
+              {
+                role: "user",
+                content: `Policies list: ${JSON.stringify(
+                  policies
+                )}\n\nStaff question: ${question}`,
+              },
+            ],
+          }),
+        });
+
+        const result = await completion.json();
+
+        let answer = result?.choices?.[0]?.message?.content || "No answer.";
+        let policyIdMatch = answer.match(/policyId:\s*([a-zA-Z0-9_-]+)/);
+
+        let matchedPolicy = null;
+        if (policyIdMatch) {
+          matchedPolicy = policies.find((p) => p.id === policyIdMatch[1]);
+        }
+
+        return new Response(
+          JSON.stringify({
+            answer,
+            policyTitle: matchedPolicy?.title || null,
+            policyLink: matchedPolicy?.link || null,
+          }),
+          { headers }
+        );
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.toString() }), {
+          status: 500,
+          headers,
+        });
+      }
     }
+
+    return new Response("CMS Worker Running", { headers });
   },
 };
