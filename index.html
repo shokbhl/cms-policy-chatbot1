@@ -18,29 +18,29 @@
   </header>
 
   <main class="cms-main">
+
+    <!-- LOGIN SCREEN -->
     <section id="login-screen" class="card">
       <h2>Staff Access</h2>
       <p>Please enter the staff access code to use the policy assistant.</p>
+
       <form id="login-form" class="form-row">
-        <input
-          type="password"
-          id="access-code"
-          placeholder="Staff access code"
-          required
-        />
+        <input type="password" id="access-code" placeholder="Staff access code" required />
         <button type="submit">Login</button>
       </form>
+
       <p id="login-error" class="error-text"></p>
     </section>
 
+    <!-- CHAT SCREEN -->
     <section id="chat-screen" class="card hidden">
       <div class="chat-header-row">
         <h2>Ask about a policy</h2>
         <button id="logout-btn" class="secondary-btn">Logout</button>
       </div>
+
       <p class="helper-text">
-        Ask a question in your own words. The assistant will match it to the correct CMS policy
-        and quote the relevant section where possible.
+        Ask a question in your own words. The assistant will match it to the correct CMS policy.
       </p>
 
       <div id="chat-window" class="chat-window"></div>
@@ -50,8 +50,7 @@
           type="text"
           id="user-input"
           placeholder="Example: When do we call parents if a child doesn’t arrive?"
-          required
-        />
+          required />
         <button type="submit">Ask</button>
       </form>
     </section>
