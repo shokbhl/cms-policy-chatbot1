@@ -24,7 +24,6 @@ const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
 
-// Add message bubble
 function addMessage(role, text) {
   const msg = document.createElement("div");
   msg.className = `msg ${role}`;
@@ -33,7 +32,6 @@ function addMessage(role, text) {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-// Send request to Worker API
 async function askPolicy(question) {
   try {
     addMessage("user", question);
@@ -41,9 +39,7 @@ async function askPolicy(question) {
 
     const response = await fetch(API_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: question })
     });
 
@@ -54,7 +50,6 @@ async function askPolicy(question) {
 
     const data = await response.json();
 
-    // Build the answer
     const answer =
       `<b>${data.policy?.title || "Policy found:"}</b><br><br>` +
       data.answer +
@@ -65,11 +60,10 @@ async function askPolicy(question) {
     addMessage("assistant", answer);
 
   } catch (err) {
-    addMessage("assistant", "Error connecting to server.");
+    addMessage("assistant", "Server error — please try again.");
   }
 }
 
-// Form submit
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
   askPolicy(userInput.value.trim());
