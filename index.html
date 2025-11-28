@@ -6,41 +6,51 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
+  <!-- ===== HEADER ===== -->
   <header class="cms-header">
     <div class="cms-header-inner">
       <img src="cms-logo.png" alt="Central Montessori School" class="cms-logo" />
+
       <div class="cms-title-block">
         <h1>CMS Policy Chatbot</h1>
-        <p class="cms-subtitle">Quick answers to Central Montessori School policies – for staff only</p>
+        <p class="cms-subtitle">Quick answers to CMS policies – for staff only</p>
       </div>
     </div>
   </header>
 
+  <!-- ===== NAVIGATION MENU ===== -->
+  <nav class="cms-nav">
+    <button class="nav-btn" onclick="showSection('chat-screen')">Chatbot</button>
+    <button class="nav-btn" onclick="showSection('policy-list')">Policies</button>
+    <button class="nav-btn" onclick="showSection('protocol-list')">Protocols</button>
+  </nav>
+
   <main class="cms-main">
+
+    <!-- ===== LOGIN SCREEN ===== -->
     <section id="login-screen" class="card">
       <h2>Staff Access</h2>
-      <p>Please enter the staff access code to use the policy assistant.</p>
+      <p>Please enter the staff access code to access the CMS policy assistant.</p>
+
       <form id="login-form" class="form-row">
-        <input
-          type="password"
-          id="access-code"
-          placeholder="Staff access code"
-          required
-        />
+        <input type="password" id="access-code" placeholder="Staff code" required />
         <button type="submit">Login</button>
       </form>
+
       <p id="login-error" class="error-text"></p>
     </section>
 
+    <!-- ===== CHAT SCREEN ===== -->
     <section id="chat-screen" class="card hidden">
       <div class="chat-header-row">
         <h2>Ask about a policy</h2>
         <button id="logout-btn" class="secondary-btn">Logout</button>
       </div>
+
       <p class="helper-text">
-        Ask a question in your own words. The assistant will match it to the correct CMS policy
-        and quote the relevant section where possible.
+        Type your question. The assistant will match it to the correct CMS policy.
       </p>
 
       <div id="chat-window" class="chat-window"></div>
@@ -55,12 +65,35 @@
         <button type="submit">Ask</button>
       </form>
     </section>
+
+    <!-- ===== POLICY LIST ===== -->
+    <section id="policy-list" class="card hidden">
+      <h2>All CMS Policies</h2>
+      <ul id="policy-container"></ul>
+    </section>
+
+    <!-- ===== PROTOCOL LIST ===== -->
+    <section id="protocol-list" class="card hidden">
+      <h2>All CMS Protocols</h2>
+      <ul id="protocol-container"></ul>
+    </section>
+
   </main>
 
   <footer class="cms-footer">
-    © Central Montessori School – Internal staff tool
+    © Central Montessori School – Internal Staff Tool
   </footer>
 
   <script src="app.js"></script>
+
+  <script>
+    function showSection(id) {
+      document.getElementById("chat-screen").classList.add("hidden");
+      document.getElementById("policy-list").classList.add("hidden");
+      document.getElementById("protocol-list").classList.add("hidden");
+
+      document.getElementById(id).classList.remove("hidden");
+    }
+  </script>
 </body>
 </html>
