@@ -6,13 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <header class="cms-header">
     <div class="cms-header-inner">
-      <img src="cms-logo.png" alt="Central Montessori School" class="cms-logo" />
-      <div class="cms-title-block">
+      <img src="cms-logo.png" class="cms-logo" />
+      <div>
         <h1>CMS Policy Chatbot</h1>
-        <p class="cms-subtitle">Quick answers to Central Montessori School policies – for staff only</p>
+        <p class="cms-subtitle">Quick answers to CMS school policies – for staff only</p>
       </div>
     </div>
   </header>
@@ -40,7 +41,7 @@
       </div>
 
       <p class="helper-text">
-        Ask a question in your own words. The assistant will match it to the correct CMS policy.
+        Ask anything about CMS school policies. I’ll match your question to the correct policy.
       </p>
 
       <div id="chat-window" class="chat-window"></div>
@@ -49,15 +50,16 @@
         <input
           type="text"
           id="user-input"
-          placeholder="Example: When do we call parents if a child doesn’t arrive?"
-          required />
+          placeholder="Example: What is the safe arrival policy?"
+          required
+        />
         <button type="submit">Ask</button>
       </form>
     </section>
   </main>
 
   <footer class="cms-footer">
-    © Central Montessori School – Internal staff tool
+    © Central Montessori School – Internal Staff Tool
   </footer>
 
   <script src="app.js"></script>
