@@ -24,10 +24,10 @@ const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
 
-// Add message bubble
+// Render message bubble
 function addMessage(role, text) {
   const msg = document.createElement("div");
-  msg.className = `msg ${role}`;
+  msg.classList.add("msg", role);
   msg.innerHTML = text;
   chatWindow.appendChild(msg);
   chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -69,6 +69,8 @@ async function askPolicy(question) {
 // Form submit
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  askPolicy(userInput.value.trim());
+  const question = userInput.value.trim();
+  if (!question) return;
+  askPolicy(question);
   userInput.value = "";
 });
