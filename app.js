@@ -1,5 +1,5 @@
 // ========== CONFIG ==========
-const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
+const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api/chatbot";
 
 // ========== LOGIN ==========
 const loginScreen = document.getElementById("login-screen");
@@ -54,6 +54,7 @@ async function askPolicy(question) {
 
     const data = await response.json();
 
+    // Build the answer
     const answer =
       `<b>${data.policy?.title || "Policy found:"}</b><br><br>` +
       data.answer +
