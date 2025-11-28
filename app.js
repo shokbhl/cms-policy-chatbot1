@@ -1,100 +1,138 @@
+// ========== CONFIG ==========
 const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
 
+// UI elements
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
-const accessCode = document.getElementById("access-code");
+const chatWindow = document.getElementById("chat-window");
+const topbar = document.getElementById("topbar");
+
+const sidebar = document.getElementById("sidebar");
+const openMenu = document.getElementById("openMenu");
+const closeMenu = document.getElementById("closeMenu");
+
+const logoutBtn = document.getElementById("logoutBtn");
 const loginForm = document.getElementById("login-form");
+const accessCode = document.getElementById("access-code");
 const loginError = document.getElementById("login-error");
 
-const menuBtn = document.getElementById("menu-btn");
-const sidebar = document.getElementById("sidebar");
-const overlay = document.getElementById("overlay");
-
-const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
-const logoutBtn = document.getElementById("logout-btn");
+const policyList = document.getElementById("policyList");
 
-// ===== LOGIN =====
+
+// -------- LOGIN --------
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
 
-  if (accessCode.value.trim() === "cms-staff-2025") {
+  if (accessCode.value === "cms-staff-2025") {
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
-    menuBtn.classList.remove("hidden");
-    chatWindow.innerHTML = "";
+    topbar.classList.remove("hidden");
+
+    sidebar.classList.add("hidden");
+
+    chatWindow.innerHTML = ""; // clear chat
+
+    loadMenuList();
   } else {
     loginError.textContent = "Incorrect access code.";
   }
 });
 
-// ===== LOGOUT =====
+
+// -------- LOGOUT --------
 logoutBtn.addEventListener("click", () => {
-  chatScreen.classList.add("hidden");
-  loginScreen.classList.remove("hidden");
-  menuBtn.classList.add("hidden");
-  accessCode.value = "";
   chatWindow.innerHTML = "";
+  userInput.value = "";
+
+  chatScreen.classList.add("hidden");
+  topbar.classList.add("hidden");
+  sidebar.classList.add("hidden");
+
+  loginScreen.classList.remove("hidden");
 });
 
-// ===== Sidebar =====
-menuBtn.addEventListener("click", () => {
-  sidebar.classList.add("open");
-  overlay.classList.remove("hidden");
-});
 
-overlay.addEventListener("click", () => {
-  sidebar.classList.remove("open");
-  overlay.classList.add("hidden");
-});
+// -------- MENU OPEN/CLOSE --------
+openMenu.addEventListener("click", () => sidebar.classList.add("show"));
+closeMenu.addEventListener("click", () => sidebar.classList.remove("show"));
 
-// ===== Add Message Bubble =====
+
+// -------- ADD MESSAGE --------
 function addMessage(role, text) {
   const msg = document.createElement("div");
-  msg.className = role === "user" ? "msg user-msg" : "msg bot-msg";
+  msg.className = `msg ${role}`;
   msg.innerHTML = text;
   chatWindow.appendChild(msg);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-// ===== Typing Animation =====
+
+// -------- TYPING DOTS --------
 function showTyping() {
-  const t = document.createElement("div");
-  t.className = "msg bot-msg typing";
-  chatWindow.appendChild(t);
+  const dot = document.createElement("div");
+  dot.className = "msg assistant";
+  dot.innerHTML = `<div class="typing"></div>`;
+  chatWindow.appendChild(dot);
   chatWindow.scrollTop = chatWindow.scrollHeight;
-  return t;
+  return dot;
 }
 
-// ===== Ask Policy =====
-chatForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
 
-  const question = userInput.value.trim();
-  addMessage("user", question);
-  userInput.value = "";
-
-  const typingBubble = showTyping();
+// -------- SEND QUESTION --------
+async function askPolicy(q) {
+  addMessage("user", q);
+  const typingNode = showTyping();
 
   try {
     const res = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: question })
+      body: JSON.stringify({ query: q })
     });
 
-    typingBubble.remove();
+    typingNode.remove();
+
+    if (!res.ok) {
+      addMessage("assistant", "Network error");
+      return;
+    }
 
     const data = await res.json();
-    const answer =
-      `<b>${data.policy?.title || "Policy"}:</b><br><br>${data.answer}<br><br>` +
-      (data.policy?.link ? `<a href="${data.policy.link}" target="_blank">Open full policy</a>` : "");
+    const answer = `
+      <b>${data.policy?.title || "Policy"}</b><br><br>
+      ${data.answer}
+      ${data.policy?.link ? `<br><br><a href="${data.policy.link}" target="_blank">Open full policy</a>` : ""}
+    `;
 
-    addMessage("bot", answer);
+    addMessage("assistant", answer);
 
   } catch {
-    typingBubble.remove();
-    addMessage("bot", "Error contacting server.");
+    typingNode.remove();
+    addMessage("assistant", "Server error");
   }
+}
+
+
+// -------- CHAT FORM --------
+chatForm.addEventListener("submit", e => {
+  e.preventDefault();
+  const q = userInput.value.trim();
+  if (!q) return;
+  askPolicy(q);
+  userInput.value = "";
 });
+
+
+// -------- LOAD MENU LIST --------
+function loadMenuList() {
+  // This can be dynamic later
+  policyList.innerHTML = `
+    <li>Safe Arrival</li>
+    <li>Sleep Policy</li>
+    <li>Health & Safety</li>
+    <li>Playground Policy</li>
+    <li>Missing Children Protocol</li>
+  `;
+}
