@@ -1,26 +1,17 @@
-// -------------------------------
-// CONFIG — Set your Worker URL
-// -------------------------------
-const WORKER_URL = "https://cms-policy-worker.shokbhl.workers.dev";
+// ========== CONFIG ==========
+const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
 
-
-// -------------------------------
-// LOGIN SYSTEM
-// -------------------------------
+// ========== LOGIN ==========
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 const loginForm = document.getElementById("login-form");
 const accessCodeInput = document.getElementById("access-code");
 const loginError = document.getElementById("login-error");
-const logoutBtn = document.getElementById("logout-btn");
-
-// Your static staff code
-const STAFF_CODE = "cms2025";
 
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
 
-  if (accessCodeInput.value === STAFF_CODE) {
+  if (accessCodeInput.value.trim() === "cms2024") {
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
   } else {
@@ -28,53 +19,27 @@ loginForm.addEventListener("submit", (e) => {
   }
 });
 
-logoutBtn.addEventListener("click", () => {
-  chatScreen.classList.add("hidden");
-  loginScreen.classList.remove("hidden");
-  accessCodeInput.value = "";
-});
-
-
-// -------------------------------
-// CHAT SYSTEM
-// -------------------------------
+// ========== CHAT SYSTEM ==========
 const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
 
-function addMessage(sender, text, link = null) {
-  const row = document.createElement("div");
-  row.className = "chat-row " + sender;
-
-  const bubble = document.createElement("div");
-  bubble.className = "chat-bubble";
-  bubble.innerHTML = text;
-
-  if (link) {
-    bubble.innerHTML += `<br><br><a class="policy-link" href="${link}" target="_blank">📄 Open Full Policy</a>`;
-  }
-
-  row.appendChild(bubble);
-  chatWindow.appendChild(row);
+// Add message bubble
+function addMessage(role, text) {
+  const msg = document.createElement("div");
+  msg.className = `msg ${role}`;
+  msg.innerHTML = text;
+  chatWindow.appendChild(msg);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-
-// -------------------------------
-// SEND QUESTION TO WORKER
-// -------------------------------
-chatForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const question = userInput.value.trim();
-  if (!question) return;
-
-  addMessage("user", question);
-  userInput.value = "";
-
-  addMessage("bot", "⏳ Thinking...");
-
+// Send request to Worker API
+async function askPolicy(question) {
   try {
-    const response = await fetch(WORKER_URL, {
+    addMessage("user", question);
+    addMessage("assistant", "Thinking…");
+
+    const response = await fetch(API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -83,27 +48,29 @@ chatForm.addEventListener("submit", async (e) => {
     });
 
     if (!response.ok) {
-      throw new Error("API error " + response.status);
+      addMessage("assistant", "Network error — please try again.");
+      return;
     }
 
     const data = await response.json();
 
-    // Remove “Thinking…”
-    chatWindow.lastChild.remove();
+    const answer =
+      `<b>${data.policy?.title || "Policy found:"}</b><br><br>` +
+      data.answer +
+      (data.policy?.link
+        ? `<br><br><a href="${data.policy.link}" target="_blank">Open full policy</a>`
+        : "");
 
-    addMessage(
-      "bot",
-      data.answer || "I found something:",
-      data.policy?.link || null
-    );
+    addMessage("assistant", answer);
 
   } catch (err) {
-    console.log(err);
-
-    chatWindow.lastChild.remove();
-    addMessage(
-      "bot",
-      "❌ Error contacting server. Please try again."
-    );
+    addMessage("assistant", "Error connecting to server.");
   }
+}
+
+// Form submit
+chatForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  askPolicy(userInput.value.trim());
+  userInput.value = "";
 });
