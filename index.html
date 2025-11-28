@@ -5,63 +5,66 @@
   <title>CMS Policy Chatbot</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
-  <script src="https://kit.fontawesome.com/a2d9d5a64f.js" crossorigin="anonymous"></script>
 </head>
 
 <body>
 
-<!-- SIDEBAR (Initially hidden) -->
-<nav id="sidebar" class="sidebar hidden">
-  <h3>📘 Policies</h3>
-  <ul id="policy-list"></ul>
+  <!-- ⭐ HEADER -->
+  <header class="cms-header">
+    <div class="cms-header-inner">
+      <!-- Hamburger menu -->
+      <div id="menu-btn" class="menu-btn hidden">
+        ☰
+      </div>
 
-  <h3>📗 Protocols</h3>
-  <ul id="protocol-list"></ul>
-</nav>
+      <!-- Logo + Title -->
+      <img src="cms-logo.png" class="cms-logo" />
+      <h1 class="cms-title">CMS Policy Chatbot</h1>
+    </div>
+  </header>
 
-<!-- PAGE OVERLAY -->
-<div id="overlay" class="overlay hidden"></div>
+  <!-- ⭐ SIDEBAR MENU (hidden before login) -->
+  <aside id="sidebar" class="sidebar hidden">
+    <h3>📘 Policies</h3>
+    <ul id="policy-list"></ul>
 
-<!-- TOP BAR -->
-<header class="topbar">
-  <button id="menu-btn" class="menu-btn hidden"><i class="fas fa-bars"></i></button>
+    <h3>📗 Protocols</h3>
+    <ul id="protocol-list"></ul>
+  </aside>
 
-  <div class="logo-wrap">
-    <img src="cms-logo.png" class="cms-logo" />
-    <h1>CMS Policy Chatbot</h1>
-  </div>
+  <!-- ⭐ MAIN CONTENT -->
+  <main class="cms-main">
 
-  <button id="logout-btn" class="logout-btn hidden">Logout</button>
-</header>
+    <!-- LOGIN SCREEN -->
+    <section id="login-screen" class="card login-card">
+      <h2>Staff Access</h2>
+      <p>Please enter the staff access code.</p>
 
-<!-- MAIN -->
-<main>
-  <!-- LOGIN SCREEN -->
-  <section id="login-screen" class="card login-card">
-    <h2>Staff Access</h2>
-    <p>Please enter the staff access code.</p>
+      <form id="login-form" class="form-row">
+        <input type="password" id="access-code" placeholder="Staff access code" required />
+        <button type="submit">Login</button>
+      </form>
 
-    <form id="login-form">
-      <input type="password" id="access-code" placeholder="Staff access code" required />
-      <button type="submit">Login</button>
-    </form>
+      <p id="login-error" class="error-text"></p>
+    </section>
 
-    <p id="login-error" class="error-text"></p>
-  </section>
+    <!-- CHAT SCREEN -->
+    <section id="chat-screen" class="card hidden">
+      <div class="chat-header">
+        <h2>Ask about a policy</h2>
+        <button id="logout-btn" class="secondary-btn">Logout</button>
+      </div>
 
-  <!-- CHAT SCREEN -->
-  <section id="chat-screen" class="card hidden">
-    <div id="chat-window" class="chat-window"></div>
+      <div id="chat-window" class="chat-window"></div>
 
-    <form id="chat-form" class="chat-form">
-      <input type="text" id="user-input" placeholder="Ask a policy question…" required />
-      <button type="submit">Ask</button>
-    </form>
-  </section>
-</main>
+      <form id="chat-form" class="chat-form">
+        <input type="text" id="user-input" placeholder="Ask a policy question…" required />
+        <button type="submit">Ask</button>
+      </form>
+    </section>
 
-<footer class="footer">© Central Montessori School – Internal staff tool</footer>
+  </main>
 
-<script src="app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
