@@ -1,7 +1,7 @@
-// CONFIG
+// ========== CONFIG ==========
 const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
 
-// LOGIN SYSTEM
+// ========== LOGIN ==========
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 const loginForm = document.getElementById("login-form");
@@ -11,6 +11,7 @@ const logoutBtn = document.getElementById("logout-btn");
 
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
+
   if (accessCodeInput.value.trim() === "cms-staff-2025") {
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
@@ -25,39 +26,38 @@ logoutBtn.addEventListener("click", () => {
   accessCodeInput.value = "";
 });
 
-// CHAT SYSTEM
+// ========== CHAT ==========
 const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
 
-// Add chat bubble
-function addMessage(role, text) {
-  const msg = document.createElement("div");
-  msg.className = `msg ${role}`;
-  msg.innerHTML = text;
-  chatWindow.appendChild(msg);
+// Add message bubble
+function addMessage(role, html) {
+  const div = document.createElement("div");
+  div.className = `msg ${role}`;
+  div.innerHTML = html;
+  chatWindow.appendChild(div);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-// Typing animation bubble
-function showTyping() {
-  const bubble = document.createElement("div");
-  bubble.className = "typing msg assistant";
-  bubble.id = "typingBubble";
-  bubble.innerHTML = "<span></span><span></span><span></span>";
-  chatWindow.appendChild(bubble);
+// Typing indicator
+function addTyping() {
+  const wrap = document.createElement("div");
+  wrap.className = "msg assistant typing";
+  wrap.innerHTML = `
+    <div class="typing-indicator">
+      <div></div><div></div><div></div>
+    </div>
+  `;
+  chatWindow.appendChild(wrap);
   chatWindow.scrollTop = chatWindow.scrollHeight;
-}
-function hideTyping() {
-  const bubble = document.getElementById("typingBubble");
-  if (bubble) bubble.remove();
+  return wrap;
 }
 
-// SEND QUESTION
 async function askPolicy(question) {
   addMessage("user", question);
 
-  showTyping();
+  const typingBubble = addTyping();
 
   try {
     const response = await fetch(API_URL, {
@@ -66,34 +66,33 @@ async function askPolicy(question) {
       body: JSON.stringify({ query: question })
     });
 
-    hideTyping();
+    typingBubble.remove();
 
     if (!response.ok) {
-      addMessage("assistant", "Network error — please try again.");
+      addMessage("assistant", "Network error. Please try again.");
       return;
     }
 
     const data = await response.json();
 
-    const answer =
+    const answerHTML =
       `<b>${data.policy?.title || "Policy"}</b><br><br>` +
       data.answer +
       (data.policy?.link
         ? `<br><br><a href="${data.policy.link}" target="_blank">Open full policy</a>`
         : "");
 
-    addMessage("assistant", answer);
+    addMessage("assistant", answerHTML);
 
-  } catch (err) {
-    hideTyping();
-    addMessage("assistant", "Server error.");
+  } catch {
+    typingBubble.remove();
+    addMessage("assistant", "Error contacting the server.");
   }
 }
 
-// FORM SUBMIT
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  if (!userInput.value.trim()) return;
-  askPolicy(userInput.value.trim());
+  const q = userInput.value.trim();
+  if (q) askPolicy(q);
   userInput.value = "";
 });
