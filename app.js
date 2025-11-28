@@ -1,7 +1,5 @@
-// ========== CONFIG ==========
 const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
 
-// ========== LOGIN ==========
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 const loginForm = document.getElementById("login-form");
@@ -10,7 +8,6 @@ const loginError = document.getElementById("login-error");
 
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
-
   if (accessCodeInput.value.trim() === "cms-staff-2025") {
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
@@ -19,21 +16,18 @@ loginForm.addEventListener("submit", (e) => {
   }
 });
 
-// ========== CHAT SYSTEM ==========
 const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
 
-// Render message bubble
 function addMessage(role, text) {
   const msg = document.createElement("div");
-  msg.classList.add("msg", role);
+  msg.className = `msg ${role}`;
   msg.innerHTML = text;
   chatWindow.appendChild(msg);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-// Send request to Worker API
 async function askPolicy(question) {
   addMessage("user", question);
   addMessage("assistant", "Thinking…");
@@ -66,11 +60,8 @@ async function askPolicy(question) {
   }
 }
 
-// Form submit
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const question = userInput.value.trim();
-  if (!question) return;
-  askPolicy(question);
+  askPolicy(userInput.value.trim());
   userInput.value = "";
 });
