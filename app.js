@@ -1,73 +1,112 @@
-// --- YOUR WORKER URL HERE ---
-const WORKER_URL = "cms-policy-worker.shokbhl.workers.dev"; 
-// 👆 اینو با URL واقعی Cloudflare Worker خودت عوض کن
+// ============================
+// CONFIG
+// ============================
+const WORKER_URL = "https://cms-policy-worker.shokbhl.workers.dev";
 
-// ---------------------------
-// LOGIN SCREEN
-// ---------------------------
-document.getElementById("login-form").addEventListener("submit", function (e) {
+// ============================
+// LOGIN HANDLING
+// ============================
+const loginScreen = document.getElementById("login-screen");
+const chatScreen = document.getElementById("chat-screen");
+const loginForm = document.getElementById("login-form");
+const loginError = document.getElementById("login-error");
+const accessCodeInput = document.getElementById("access-code");
+const logoutBtn = document.getElementById("logout-btn");
+
+// Staff code (simple check)
+const STAFF_CODE = "cms2025";
+
+loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const code = document.getElementById("access-code").value.trim();
+  const code = accessCodeInput.value.trim();
 
-  if (code === "cms2025") {
-    // درستش کن هر چی میخوای
-    document.getElementById("login-screen").classList.add("hidden");
-    document.getElementById("chat-screen").classList.remove("hidden");
+  if (code === STAFF_CODE) {
+    loginScreen.classList.add("hidden");
+    chatScreen.classList.remove("hidden");
+    loginError.textContent = "";
   } else {
-    document.getElementById("login-error").textContent = "Invalid access code.";
+    loginError.textContent = "Incorrect access code.";
   }
 });
 
-// ---------------------------
-// LOG OUT
-// ---------------------------
-document.getElementById("logout-btn").addEventListener("click", () => {
-  document.getElementById("chat-screen").classList.add("hidden");
-  document.getElementById("login-screen").classList.remove("hidden");
+// Logout
+logoutBtn.addEventListener("click", () => {
+  chatScreen.classList.add("hidden");
+  loginScreen.classList.remove("hidden");
+  accessCodeInput.value = "";
 });
 
-// ---------------------------
-// SEND MESSAGE
-// ---------------------------
-document.getElementById("chat-form").addEventListener("submit", async function (e) {
+
+// ============================
+// CHAT FUNCTIONALITY
+// ============================
+const chatForm = document.getElementById("chat-form");
+const userInput = document.getElementById("user-input");
+const chatWindow = document.getElementById("chat-window");
+
+// Function: Add message bubble
+function addMessage(sender, text, isLink = false) {
+  const msg = document.createElement("div");
+  msg.classList.add("msg", sender);
+
+  if (isLink) {
+    msg.innerHTML = `<a href="${text}" target="_blank">${text}</a>`;
+  } else {
+    msg.textContent = text;
+  }
+
+  chatWindow.appendChild(msg);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+
+// ============================
+// SEND QUESTION → WORKER
+// ============================
+chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  const input = document.getElementById("user-input").value.trim();
-  document.getElementById("user-input").value = "";
+  const question = userInput.value.trim();
+  if (!question) return;
 
-  addMessage("user", input);
+  // Show user message
+  addMessage("user", question);
+
+  // Clear input
+  userInput.value = "";
 
   try {
-    const res = await fetch(WORKER_URL, {
+    // Worker call
+    const response = await fetch(WORKER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: input })
+      body: JSON.stringify({ query: question })
     });
 
-    if (!res.ok) {
-      addMessage("bot", "Server error — please try again.");
+    if (!response.ok) {
+      addMessage("bot", "Error: Server not responding.");
       return;
     }
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      addMessage("bot", "Error: Could not read server JSON.");
+      return;
+    }
 
-    let answer = data.answer || data.content || JSON.stringify(data, null, 2);
+    // Parse bot answer
+    if (data.answer) {
+      addMessage("bot", data.answer);
+    }
 
-    addMessage("bot", answer);
+    // Show policy link
+    if (data.policy && data.policy.link) {
+      addMessage("bot", data.policy.link, true);
+    }
 
   } catch (err) {
-    addMessage("bot", "Network error — please try again.");
+    addMessage("bot", "Network error. Please try again.");
   }
 });
-
-// ---------------------------
-// ADD MESSAGE TO CHAT WINDOW
-// ---------------------------
-function addMessage(sender, text) {
-  const chat = document.getElementById("chat-window");
-  const bubble = document.createElement("div");
-  bubble.className = sender === "user" ? "chat-bubble user" : "chat-bubble bot";
-  bubble.textContent = text;
-  chat.appendChild(bubble);
-  chat.scrollTop = chat.scrollHeight;
-}
