@@ -1,35 +1,33 @@
-// ============================
-// CONFIG
-// ============================
+// -------------------------------
+// CONFIG — Set your Worker URL
+// -------------------------------
 const WORKER_URL = "https://cms-policy-worker.shokbhl.workers.dev";
 
-// ============================
-// LOGIN HANDLING
-// ============================
+
+// -------------------------------
+// LOGIN SYSTEM
+// -------------------------------
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 const loginForm = document.getElementById("login-form");
-const loginError = document.getElementById("login-error");
 const accessCodeInput = document.getElementById("access-code");
+const loginError = document.getElementById("login-error");
 const logoutBtn = document.getElementById("logout-btn");
 
-// Staff code (simple check)
+// Your static staff code
 const STAFF_CODE = "cms2025";
 
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const code = accessCodeInput.value.trim();
 
-  if (code === STAFF_CODE) {
+  if (accessCodeInput.value === STAFF_CODE) {
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
-    loginError.textContent = "";
   } else {
     loginError.textContent = "Incorrect access code.";
   }
 });
 
-// Logout
 logoutBtn.addEventListener("click", () => {
   chatScreen.classList.add("hidden");
   loginScreen.classList.remove("hidden");
@@ -37,76 +35,75 @@ logoutBtn.addEventListener("click", () => {
 });
 
 
-// ============================
-// CHAT FUNCTIONALITY
-// ============================
+// -------------------------------
+// CHAT SYSTEM
+// -------------------------------
+const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
-const chatWindow = document.getElementById("chat-window");
 
-// Function: Add message bubble
-function addMessage(sender, text, isLink = false) {
-  const msg = document.createElement("div");
-  msg.classList.add("msg", sender);
+function addMessage(sender, text, link = null) {
+  const row = document.createElement("div");
+  row.className = "chat-row " + sender;
 
-  if (isLink) {
-    msg.innerHTML = `<a href="${text}" target="_blank">${text}</a>`;
-  } else {
-    msg.textContent = text;
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble";
+  bubble.innerHTML = text;
+
+  if (link) {
+    bubble.innerHTML += `<br><br><a class="policy-link" href="${link}" target="_blank">📄 Open Full Policy</a>`;
   }
 
-  chatWindow.appendChild(msg);
+  row.appendChild(bubble);
+  chatWindow.appendChild(row);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
 
-// ============================
-// SEND QUESTION → WORKER
-// ============================
+// -------------------------------
+// SEND QUESTION TO WORKER
+// -------------------------------
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-
   const question = userInput.value.trim();
   if (!question) return;
 
-  // Show user message
   addMessage("user", question);
-
-  // Clear input
   userInput.value = "";
 
+  addMessage("bot", "⏳ Thinking...");
+
   try {
-    // Worker call
     const response = await fetch(WORKER_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({ query: question })
     });
 
     if (!response.ok) {
-      addMessage("bot", "Error: Server not responding.");
-      return;
+      throw new Error("API error " + response.status);
     }
 
-    let data;
-    try {
-      data = await response.json();
-    } catch (e) {
-      addMessage("bot", "Error: Could not read server JSON.");
-      return;
-    }
+    const data = await response.json();
 
-    // Parse bot answer
-    if (data.answer) {
-      addMessage("bot", data.answer);
-    }
+    // Remove “Thinking…”
+    chatWindow.lastChild.remove();
 
-    // Show policy link
-    if (data.policy && data.policy.link) {
-      addMessage("bot", data.policy.link, true);
-    }
+    addMessage(
+      "bot",
+      data.answer || "I found something:",
+      data.policy?.link || null
+    );
 
   } catch (err) {
-    addMessage("bot", "Network error. Please try again.");
+    console.log(err);
+
+    chatWindow.lastChild.remove();
+    addMessage(
+      "bot",
+      "❌ Error contacting server. Please try again."
+    );
   }
 });
