@@ -6,62 +6,68 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
-  <!-- Top bar with logo + hamburger (منو بعد از لاگین فعال میشه) -->
+  <!-- HEADER -->
   <header class="cms-header">
     <div class="cms-header-inner">
       <div class="left-header">
-        <img src="cms-logo.png" alt="Central Montessori School" class="cms-logo" />
+        <img src="cms-logo.png" class="cms-logo" />
         <div class="cms-title-block">
           <h1>CMS Policy Chatbot</h1>
           <p class="cms-subtitle">
-            Quick answers to Central Montessori School policies – for staff only
+            Quick answers to CMS policies – Staff only
           </p>
         </div>
       </div>
 
-      <!-- Hamburger + Logout (پیش‌فرض مخفی، بعد از لاگین نمایش داده می‌شوند) -->
-      <div class="right-header hidden" id="top-actions">
-        <button id="menu-toggle" class="icon-btn" aria-label="Open menu">
-          <span class="hamburger"></span>
-        </button>
+      <!-- Hidden BEFORE login -->
+      <div id="top-actions" class="hidden">
+        <button id="menu-toggle" class="icon-btn"><span class="hamburger"></span></button>
         <button id="logout-btn" class="secondary-btn">Logout</button>
       </div>
     </div>
   </header>
 
-  <!-- Side drawer menu (Policies & Protocols) -->
+  <!-- SIDE MENU -->
   <aside id="side-menu" class="side-menu hidden">
     <div class="side-menu-header">
-      <h2>CMS Policies</h2>
-      <button id="close-menu" class="icon-btn" aria-label="Close menu">×</button>
+      <h2>CMS Menu</h2>
+      <button id="close-menu" class="icon-btn">×</button>
     </div>
 
     <div class="side-menu-content">
+
       <div class="menu-section">
         <h3>Policies</h3>
-        <ul id="policy-list" class="menu-list">
-          <!-- با JS پر می‌شود -->
-        </ul>
+        <ul id="policy-list" class="menu-list"></ul>
       </div>
 
       <div class="menu-section">
         <h3>Protocols</h3>
-        <ul id="protocol-list" class="menu-list">
-          <!-- با JS پر می‌شود -->
+        <ul id="protocol-list" class="menu-list"></ul>
+      </div>
+
+      <div class="menu-section">
+        <h3>Parent Handbook</h3>
+        <ul id="handbook-list" class="menu-list">
+          <li style="color:#777; font-size:0.85rem;">(Coming soon)</li>
         </ul>
       </div>
+
     </div>
   </aside>
 
-  <!-- Overlay پشت منو -->
   <div id="overlay" class="overlay hidden"></div>
 
+  <!-- MAIN CONTENT -->
   <main class="cms-main">
-    <!-- LOGIN CARD -->
+
+    <!-- LOGIN -->
     <section id="login-screen" class="card">
       <h2>Staff Access</h2>
-      <p>Please enter the staff access code to use the policy assistant.</p>
+      <p>Please enter the staff access code.</p>
+
       <form id="login-form" class="form-row">
         <input
           type="password"
@@ -72,15 +78,13 @@
         />
         <button type="submit" class="primary-btn fade-in">Login</button>
       </form>
+
       <p id="login-error" class="error-text"></p>
     </section>
 
-    <!-- CHAT CARD -->
+    <!-- CHAT -->
     <section id="chat-screen" class="card hidden">
-      <p class="helper-text">
-        Ask a question in your own words. The assistant will match it to the correct CMS policy
-        and quote the relevant section where possible.
-      </p>
+      <p class="helper-text">Ask any CMS policy question. I will find the exact section for you.</p>
 
       <div id="chat-window" class="chat-window"></div>
 
@@ -95,6 +99,7 @@
         <button type="submit" class="primary-btn fade-in">Ask</button>
       </form>
     </section>
+
   </main>
 
   <footer class="cms-footer">
