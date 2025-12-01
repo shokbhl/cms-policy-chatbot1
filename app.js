@@ -22,10 +22,18 @@ const MENU_ITEMS = {
     { id: "criminal_reference_vsc_policy", label: "Criminal Reference / VSC" }
   ],
   protocols: [
-    { id: "serious_occurrence", label: "Serious Occurrence" },
-    { id: "sleep_toddlers", label: "Sleep Supervision – Toddler & Preschool" },
-    { id: "sleep_infants", label: "Sleep Supervision – Infants" },
-    { id: "students_volunteers", label: "Supervision of Students & Volunteers" }
+    { id: "program_statement1", label: "CMS Program Statement and Implementation" },
+    { id: "non_discrimination", label: "Non-Discrimination / Anti-Racism Policy" },
+    { id: "safety_security", label: "Safety & Security" },
+    { id: "start_school_year", label: "Start of the New School Year" },
+    { id: "employee_conduct", label: "Employee Protocol / Conduct" },
+    { id: "classroom_management", label: "Classroom Management & Routines" },
+    { id: "caring_students", label: "Caring for Our Students" },
+    { id: "afterschool_routines", label: "Afterschool Routines & Extracurricular Activities" },
+    { id: "special_events", label: "Special Events" },
+    { id: "reports_forms", label: "Reports & Forms" },
+    { id: "other", label: "other" },
+    { id: "closing", label: "closing" }
   ],
   handbook: [
     // فعلاً خالی – فقط پیام Coming soon نمایش می‌دهیم
