@@ -1,8 +1,38 @@
-// CONFIG
+// ===== CONFIG =====
 const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
 const STAFF_CODE = "cms-staff-2025";
 
-// DOM ELEMENTS
+// منوها
+const MENU_ITEMS = {
+  policies: [
+    { id: "safe_arrival", label: "Safe Arrival & Dismissal" },
+    { id: "playground_safety", label: "Playground Safety" },
+    { id: "anaphylaxis_policy", label: "Anaphylaxis Policy" },
+    { id: "medication_administration", label: "Medication Administration" },
+    { id: "emergency_management", label: "Emergency Management" },
+    { id: "sleep_toddlers", label: "Sleep – Toddler & Preschool" },
+    { id: "sleep_infants", label: "Sleep – Infants" },
+    { id: "students_volunteers", label: "Supervision of Students & Volunteers" },
+    { id: "waiting_list", label: "Waiting List" },
+    { id: "program_statement", label: "Program Statement Implementation" },
+    { id: "staff_development", label: "Staff Development & Training" },
+    { id: "parent_issues_concerns", label: "Parent Issues & Concerns" },
+    { id: "behaviour_management_monitoring", label: "Behaviour Management Monitoring" },
+    { id: "fire_safety", label: "Fire Safety Evacuation" },
+    { id: "criminal_reference_vsc_policy", label: "Criminal Reference / VSC" }
+  ],
+  protocols: [
+    { id: "serious_occurrence", label: "Serious Occurrence" },
+    { id: "sleep_toddlers", label: "Sleep Supervision – Toddler & Preschool" },
+    { id: "sleep_infants", label: "Sleep Supervision – Infants" },
+    { id: "students_volunteers", label: "Supervision of Students & Volunteers" }
+  ],
+  handbook: [
+    // فعلاً خالی – فقط پیام Coming soon نمایش می‌دهیم
+  ]
+};
+
+// ===== DOM =====
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 const loginForm = document.getElementById("login-form");
@@ -13,18 +43,26 @@ const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
 
-const topActions = document.getElementById("top-actions");
+const headerActions = document.getElementById("header-actions");
 const logoutBtn = document.getElementById("logout-btn");
 
+const topMenuBar = document.getElementById("top-menu-bar");
+const menuPills = document.querySelectorAll(".menu-pill");
+
+const menuPanel = document.getElementById("menu-panel");
+const menuPanelTitle = document.getElementById("menu-panel-title");
+const menuPanelBody = document.getElementById("menu-panel-body");
+const menuPanelClose = document.getElementById("menu-panel-close");
+const menuOverlay = document.getElementById("menu-overlay");
+
+// برای تایپینگ
 let typingBubble = null;
 
-// --------------------------------
-// MESSAGE HELPERS
-// --------------------------------
-function addMessage(role, text) {
+// ===== HELPERS =====
+function addMessage(role, htmlText) {
   const msg = document.createElement("div");
   msg.className = `msg ${role}`;
-  msg.innerHTML = text;
+  msg.innerHTML = htmlText;
   chatWindow.appendChild(msg);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
@@ -33,6 +71,7 @@ function clearChat() {
   chatWindow.innerHTML = "";
 }
 
+// typing indicator
 function showTyping() {
   hideTyping();
 
@@ -56,55 +95,140 @@ function showTyping() {
 }
 
 function hideTyping() {
-  if (typingBubble) typingBubble.remove();
+  if (typingBubble && typingBubble.parentNode) {
+    typingBubble.parentNode.removeChild(typingBubble);
+  }
   typingBubble = null;
 }
 
-// --------------------------------
-// LOGIN
-// --------------------------------
+// ===== LOGIN / LOGOUT =====
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const code = accessCodeInput.value.trim();
 
   if (code === STAFF_CODE) {
+    loginError.textContent = "";
+    accessCodeInput.value = "";
+
+    // نمایش چت
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
-    topActions.classList.remove("hidden");
+
+    // نمایش logout + منو بالا
+    headerActions.classList.remove("hidden");
+    topMenuBar.classList.remove("hidden");
 
     clearChat();
-    addMessage("assistant", "Hi 👋 Ask me any CMS policy question.");
-
+    addMessage(
+      "assistant",
+      "Hi 👋 You can ask about any CMS policy or use the menu above to jump to a specific policy."
+    );
   } else {
     loginError.textContent = "Incorrect access code.";
   }
 });
 
-// --------------------------------
-// LOGOUT
-// --------------------------------
 logoutBtn.addEventListener("click", () => {
+  // بستن پنل منو
+  closeMenuPanel();
+
+  // برگشت به لاگین
   chatScreen.classList.add("hidden");
   loginScreen.classList.remove("hidden");
-  topActions.classList.add("hidden");
+
+  headerActions.classList.add("hidden");
+  topMenuBar.classList.add("hidden");
+
   clearChat();
   accessCodeInput.value = "";
 });
 
-// --------------------------------
-// ASK POLICY
-// --------------------------------
-async function askPolicy(question) {
-  if (!question.trim()) return;
+// ===== MENU PANEL LOGIC =====
+function openMenuPanel(type) {
+  // فعال کردن استیت ظاهری دکمه‌ها
+  menuPills.forEach((btn) =>
+    btn.classList.toggle("active", btn.dataset.menu === type)
+  );
 
-  addMessage("user", question);
+  menuPanelTitle.textContent =
+    type === "policies"
+      ? "Policies"
+      : type === "protocols"
+      ? "Protocols"
+      : "Parent Handbook";
+
+  menuPanelBody.innerHTML = "";
+
+  const items = MENU_ITEMS[type];
+
+  if (!items || items.length === 0) {
+    const p = document.createElement("p");
+    p.textContent = "Content coming soon.";
+    p.style.fontSize = "0.9rem";
+    p.style.color = "#6b7280";
+    menuPanelBody.appendChild(p);
+  } else {
+    const label = document.createElement("div");
+    label.className = "menu-group-label";
+    label.textContent = "Tap an item to view details";
+    menuPanelBody.appendChild(label);
+
+    items.forEach((item) => {
+      const btn = document.createElement("button");
+      btn.className = "menu-item-btn";
+      btn.textContent = item.label;
+      btn.addEventListener("click", () => {
+        closeMenuPanel();
+        const qPrefix =
+          type === "protocols"
+            ? "Please show me the protocol: "
+            : "Please show me the policy: ";
+        askPolicy(qPrefix + item.label, true);
+      });
+      menuPanelBody.appendChild(btn);
+    });
+  }
+
+  menuPanel.classList.remove("hidden");
+  menuOverlay.classList.add("active");
+}
+
+function closeMenuPanel() {
+  menuPanel.classList.add("hidden");
+  menuOverlay.classList.remove("active");
+  menuPills.forEach((btn) => btn.classList.remove("active"));
+}
+
+menuPills.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const type = btn.dataset.menu;
+    // اگر تکراری کلیک شد، ببندیم
+    if (btn.classList.contains("active")) {
+      closeMenuPanel();
+    } else {
+      openMenuPanel(type);
+    }
+  });
+});
+
+menuPanelClose.addEventListener("click", closeMenuPanel);
+menuOverlay.addEventListener("click", closeMenuPanel);
+
+// ===== CHAT / API =====
+async function askPolicy(question, fromMenu = false) {
+  const trimmed = question.trim();
+  if (!trimmed) return;
+
+  // پیام کاربر – همیشه زیر پیام قبلی
+  addMessage("user", trimmed);
+
   showTyping();
 
   try {
     const res = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: question })
+      body: JSON.stringify({ query: trimmed })
     });
 
     hideTyping();
@@ -116,27 +240,27 @@ async function askPolicy(question) {
 
     const data = await res.json();
 
+    const title = data.policy?.title || "Policy found:";
+    const answer = data.answer || "";
+
+    const linkPart = data.policy?.link
+      ? `<br><br><a href="${data.policy.link}" target="_blank">Open full policy</a>`
+      : "";
+
     addMessage(
       "assistant",
-      `<b>${data.policy?.title || "Policy found:"}</b><br><br>${data.answer || ""}${
-        data.policy?.link
-          ? `<br><br><a href="${data.policy.link}" target="_blank">Open full policy</a>`
-          : ""
-      }`
+      `<b>${title}</b><br><br>${answer}${linkPart}`
     );
-
   } catch (err) {
     hideTyping();
-    addMessage("assistant", "Server error — please try again.");
+    addMessage("assistant", "Error connecting to server.");
   }
 }
 
-// --------------------------------
-// CHAT FORM
-// --------------------------------
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const q = userInput.value.trim();
+  if (!q) return;
   userInput.value = "";
-  askPolicy(q);
+  askPolicy(q, false);
 });

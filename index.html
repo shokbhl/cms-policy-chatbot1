@@ -8,66 +8,94 @@
 </head>
 
 <body>
-
   <!-- HEADER -->
   <header class="cms-header">
     <div class="cms-header-inner">
       <div class="left-header">
-        <img src="cms-logo.png" class="cms-logo" />
+        <img src="cms-logo.png" class="cms-logo" alt="Central Montessori School logo" />
         <div class="cms-title-block">
           <h1>CMS Policy Chatbot</h1>
-          <p class="cms-subtitle">Internal staff assistant</p>
+          <p class="cms-subtitle">
+            Internal staff assistant
+          </p>
         </div>
       </div>
 
-      <!-- Tabs (only after login) -->
-      <nav id="main-tabs" class="tabs hidden">
-        <button class="tab-btn" data-tab="policies">Policies</button>
-        <button class="tab-btn" data-tab="protocols">Protocols</button>
-        <button class="tab-btn" data-tab="handbook">Handbook</button>
+      <!-- Right side: فقط بعد از لاگین دیده می‌شود -->
+      <div id="header-actions" class="header-actions hidden">
         <button id="logout-btn" class="secondary-btn">Logout</button>
-      </nav>
+      </div>
     </div>
   </header>
 
-  <!-- TAB PANELS -->
-  <section id="tab-panels" class="hidden">
-    <div id="policies" class="tab-panel"></div>
-    <div id="protocols" class="tab-panel"></div>
-    <div id="handbook" class="tab-panel">
-      <p style="color:#777;">Parent Handbook sections will be added soon.</p>
+  <!-- نوار منو – فقط بعد از لاگین -->
+  <nav id="top-menu-bar" class="top-menu-bar hidden">
+    <div class="top-menu-inner">
+      <button class="menu-pill" data-menu="policies">Policies</button>
+      <button class="menu-pill" data-menu="protocols">Protocols</button>
+      <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
     </div>
-  </section>
+  </nav>
+
+  <!-- پنل لیست آیتم‌های هر منو -->
+  <div id="menu-panel" class="menu-panel hidden">
+    <div class="menu-panel-inner">
+      <div class="menu-panel-header">
+        <h2 id="menu-panel-title">Menu</h2>
+        <button id="menu-panel-close" class="icon-btn small-icon">×</button>
+      </div>
+      <div id="menu-panel-body" class="menu-panel-body">
+        <!-- با JS پر می‌شود -->
+      </div>
+    </div>
+  </div>
+  <div id="menu-overlay" class="overlay hidden"></div>
 
   <!-- MAIN -->
   <main class="cms-main">
 
-    <!-- LOGIN -->
+    <!-- LOGIN CARD -->
     <section id="login-screen" class="card">
       <h2>Staff Access</h2>
       <p>Please enter the staff access code.</p>
 
       <form id="login-form" class="form-row">
-        <input type="password" id="access-code" placeholder="Access code" required />
-        <button type="submit" class="primary-btn">Login</button>
+        <input
+          type="password"
+          id="access-code"
+          placeholder="Staff access code"
+          autocomplete="off"
+          required
+        />
+        <button type="submit" class="primary-btn fade-in">Login</button>
       </form>
+
       <p id="login-error" class="error-text"></p>
     </section>
 
-    <!-- CHAT -->
+    <!-- CHAT CARD -->
     <section id="chat-screen" class="card hidden">
       <p class="helper-text">Ask any CMS policy question.</p>
 
       <div id="chat-window" class="chat-window"></div>
 
       <form id="chat-form" class="chat-form">
-        <input type="text" id="user-input" placeholder="Type your question…" required />
-        <button type="submit" class="primary-btn">Ask</button>
+        <input
+          type="text"
+          id="user-input"
+          placeholder="Example: When do we call parents if a child doesn’t arrive?"
+          autocomplete="off"
+          required
+        />
+        <button type="submit" class="primary-btn fade-in">Ask</button>
       </form>
     </section>
+
   </main>
 
-  <footer class="cms-footer">© CMS – Staff internal tool</footer>
+  <footer class="cms-footer">
+    © CMS – Staff internal tool
+  </footer>
 
   <script src="app.js"></script>
 </body>
