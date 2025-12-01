@@ -1,90 +1,224 @@
-const STAFF_CODE = "cms-staff-2025";
+// =============================
+// CONFIG
+// =============================
 const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
+const STAFF_CODE = "cms-staff-2025";
 
+// MENU DATA
+const MENU_ITEMS = {
+  policies: [
+    "Safe Arrival & Dismissal",
+    "Playground Safety",
+    "Anaphylaxis Policy",
+    "Medication Administration",
+    "Emergency Management"
+  ],
+  protocols: [
+    "Serious Occurrence",
+    "Sleep Supervision (Toddler & Preschool)",
+    "Sleep Supervision (Infants)"
+  ]
+};
+
+// =============================
+// DOM
+// =============================
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
-const menuBtn = document.getElementById("menu-btn");
-const logoutBtn = document.getElementById("logout-btn");
-const drawer = document.getElementById("drawer");
-const overlay = document.getElementById("overlay");
-
 const loginForm = document.getElementById("login-form");
-const accessCode = document.getElementById("access-code");
+const accessCodeInput = document.getElementById("access-code");
 const loginError = document.getElementById("login-error");
 
+const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
-const chatBox = document.getElementById("chat-box");
 const userInput = document.getElementById("user-input");
 
-/* MENU POPULATION */
-const menuPolicies = document.getElementById("menu-policies");
-const menuProtocols = document.getElementById("menu-protocols");
-const menuParents = document.getElementById("menu-parents");
+const topNav = document.getElementById("top-nav");
+const logoutBtn = document.getElementById("logout-btn");
 
-function addMessage(text, sender) {
-  const div = document.createElement("div");
-  div.className = `msg ${sender}`;
-  div.textContent = text;
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
+const policyDropdown = document.getElementById("policy-dropdown");
+const protocolDropdown = document.getElementById("protocol-dropdown");
+const handbookDropdown = document.getElementById("handbook-dropdown");
+
+let typingBubble = null;
+
+// =============================
+// HELPERS
+// =============================
+
+// Add message bubble
+function addMessage(role, text) {
+  const msg = document.createElement("div");
+  msg.className = `msg ${role}`;
+  msg.innerHTML = text;
+  chatWindow.appendChild(msg);
+
+  chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
+// Typing bubble
+function showTyping() {
+  hideTyping();
+  const wrap = document.createElement("div");
+  wrap.className = "typing-bubble";
+
+  wrap.innerHTML = `
+    <div class="typing-dots">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  `;
+
+  chatWindow.appendChild(wrap);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+
+  typingBubble = wrap;
+}
+
+function hideTyping() {
+  if (typingBubble) typingBubble.remove();
+  typingBubble = null;
+}
+
+function clearChat() {
+  chatWindow.innerHTML = "";
+}
+
+// =============================
+// LOGIN
+// =============================
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  if (accessCode.value === STAFF_CODE) {
+  const code = accessCodeInput.value.trim();
+
+  if (code === STAFF_CODE) {
+    loginError.textContent = "";
+    accessCodeInput.value = "";
+
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
-    menuBtn.classList.remove("hidden");
-    logoutBtn.classList.remove("hidden");
+    topNav.classList.remove("hidden");
 
-    chatBox.innerHTML = "";
-    addMessage("Hi! You can ask about any CMS policy.", "bot");
+    clearChat();
+
+    addMessage("assistant", "Hi 👋 Ask me about any CMS policy, or use the menu above.");
+
   } else {
-    loginError.textContent = "Incorrect access code";
+    loginError.textContent = "Incorrect access code.";
   }
 });
 
+// =============================
+// LOGOUT
+// =============================
 logoutBtn.addEventListener("click", () => {
   chatScreen.classList.add("hidden");
   loginScreen.classList.remove("hidden");
-  menuBtn.classList.add("hidden");
-  logoutBtn.classList.add("hidden");
-  chatBox.innerHTML = "";
-  accessCode.value = "";
+  topNav.classList.add("hidden");
+
+  clearChat();
+  accessCodeInput.value = "";
 });
 
-menuBtn.addEventListener("click", () => {
-  drawer.classList.add("open");
-  overlay.classList.remove("hidden");
-});
-
-overlay.addEventListener("click", () => {
-  drawer.classList.remove("open");
-  overlay.classList.add("hidden");
-});
-
-document.getElementById("drawer-close").addEventListener("click", () => {
-  drawer.classList.remove("open");
-  overlay.classList.add("hidden");
-});
-
-/* ASK POLICY */
-async function askPolicy(question) {
-  addMessage(question, "user");
-
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: question })
+// =============================
+// POPULATE TOP-DROP MENUS
+// =============================
+function fillMenus() {
+  MENU_ITEMS.policies.forEach((label) => {
+    const btn = document.createElement("button");
+    btn.className = "dropdown-item";
+    btn.textContent = label;
+    btn.onclick = () => askPolicy(`Show me the policy: ${label}`);
+    policyDropdown.appendChild(btn);
   });
 
-  const data = await res.json();
-  addMessage(data.answer || "No matching policy found.", "bot");
+  MENU_ITEMS.protocols.forEach((label) => {
+    const btn = document.createElement("button");
+    btn.className = "dropdown-item";
+    btn.textContent = label;
+    btn.onclick = () => askPolicy(`Show me the protocol: ${label}`);
+    protocolDropdown.appendChild(btn);
+  });
+}
+fillMenus();
+
+// =============================
+// DROPDOWN MENU LOGIC
+// =============================
+function toggleDropdown(el) {
+  el.classList.toggle("open");
 }
 
+document.getElementById("policy-tab").onclick = () => {
+  toggleDropdown(policyDropdown);
+  protocolDropdown.classList.remove("open");
+  handbookDropdown.classList.remove("open");
+};
+
+document.getElementById("protocol-tab").onclick = () => {
+  toggleDropdown(protocolDropdown);
+  policyDropdown.classList.remove("open");
+  handbookDropdown.classList.remove("open");
+};
+
+document.getElementById("handbook-tab").onclick = () => {
+  toggleDropdown(handbookDropdown);
+  policyDropdown.classList.remove("open");
+  protocolDropdown.classList.remove("open");
+};
+
+// Click outside closes dropdowns
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".nav-item")) {
+    policyDropdown.classList.remove("open");
+    protocolDropdown.classList.remove("open");
+    handbookDropdown.classList.remove("open");
+  }
+});
+
+// =============================
+// CHAT AI LOGIC
+// =============================
+async function askPolicy(question) {
+  addMessage("user", question);
+
+  showTyping();
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: question })
+    });
+
+    hideTyping();
+
+    if (!res.ok) {
+      addMessage("assistant", "Network error — please try again.");
+      return;
+    }
+
+    const data = await res.json();
+
+    addMessage(
+      "assistant",
+      `<b>${data.policy?.title || "Policy found:"}</b><br><br>
+       ${data.answer || ""}
+       ${data.policy?.link ? `<br><br><a href="${data.policy.link}" target="_blank">Open full policy</a>` : ""}`
+    );
+
+  } catch (err) {
+    hideTyping();
+    addMessage("assistant", "Error connecting to server.");
+  }
+}
+
+// Submit chat
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const q = userInput.value.trim();
+  if (!q) return;
   userInput.value = "";
   askPolicy(q);
 });

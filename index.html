@@ -2,94 +2,113 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>CMS Policy Assistant</title>
+  <title>CMS Policy Chatbot</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
-
-  <!-- Feather Icons -->
-  <script src="https://unpkg.com/feather-icons"></script>
 </head>
 
 <body>
   <!-- HEADER -->
-  <header class="app-header">
-    <button id="menu-btn" class="icon-btn hidden">
-      <i data-feather="menu"></i>
-    </button>
+  <header class="cms-header">
+    <div class="cms-header-inner">
 
-    <div class="header-title">
-      <img src="cms-logo.png" class="logo" />
-      <div>
-        <h1>CMS Policy Chatbot</h1>
-        <p>Internal staff tool</p>
+      <!-- LEFT SIDE (LOGO + TITLE) -->
+      <div class="left-header">
+        <img src="cms-logo.png" class="cms-logo" />
+        <div class="cms-title-block">
+          <h1>CMS Policy Chatbot</h1>
+          <p class="cms-subtitle">Quick answers to CMS policies – Staff only</p>
+        </div>
       </div>
-    </div>
 
-    <button id="logout-btn" class="logout-btn hidden">
-      <i data-feather="log-out"></i>
-    </button>
+      <!-- RIGHT SIDE: TABS + LOGOUT (hidden before login) -->
+      <div id="top-actions" class="right-header hidden">
+
+        <!-- TOP NAVIGATION TABS -->
+        <nav class="top-tabs">
+          <button class="tab-btn" data-tab="policies">Policies</button>
+          <button class="tab-btn" data-tab="protocols">Protocols</button>
+          <button class="tab-btn" data-tab="handbook">Handbook</button>
+        </nav>
+
+        <!-- LOGOUT BUTTON -->
+        <button id="logout-btn" class="secondary-btn">Logout</button>
+      </div>
+
+    </div>
   </header>
 
-  <!-- SIDE MENU -->
-  <aside id="drawer" class="drawer">
-    <div class="drawer-header">
-      <h2>Menu</h2>
-      <button id="drawer-close" class="icon-btn">
-        <i data-feather="x"></i>
-      </button>
+  <!-- DROPDOWN PANEL FOR TAB CONTENT -->
+  <section id="dropdown-panel" class="dropdown hidden">
+    <div class="dropdown-inner">
+
+      <!-- POLICIES LIST -->
+      <div id="panel-policies" class="dropdown-section hidden">
+        <h3>Policies</h3>
+        <ul id="policy-list" class="menu-list"></ul>
+      </div>
+
+      <!-- PROTOCOLS LIST -->
+      <div id="panel-protocols" class="dropdown-section hidden">
+        <h3>Protocols</h3>
+        <ul id="protocol-list" class="menu-list"></ul>
+      </div>
+
+      <!-- HANDBOOK -->
+      <div id="panel-handbook" class="dropdown-section hidden">
+        <h3>Parent Handbook</h3>
+        <p style="color:#666; font-size:0.9rem">Coming soon…</p>
+      </div>
+
     </div>
+  </section>
 
-    <div class="drawer-section">
-      <h3>Policies</h3>
-      <ul id="menu-policies"></ul>
-    </div>
-
-    <div class="drawer-section">
-      <h3>Protocols</h3>
-      <ul id="menu-protocols"></ul>
-    </div>
-
-    <div class="drawer-section">
-      <h3>Parent Handbook</h3>
-      <ul id="menu-parents"></ul>
-    </div>
-  </aside>
-
-  <div id="overlay" class="overlay hidden"></div>
-
-  <!-- MAIN -->
-  <main class="main">
+  <!-- MAIN CONTENT -->
+  <main class="cms-main">
 
     <!-- LOGIN -->
-    <section id="login-screen" class="card login-card">
+    <section id="login-screen" class="card">
       <h2>Staff Access</h2>
-      <p>Please enter your staff code to continue.</p>
+      <p>Please enter the staff access code.</p>
 
-      <form id="login-form">
-        <input type="password" id="access-code" placeholder="Access code" required />
-        <button class="primary-btn" type="submit">Login</button>
+      <form id="login-form" class="form-row">
+        <input
+          type="password"
+          id="access-code"
+          placeholder="Staff access code"
+          autocomplete="off"
+          required
+        />
+        <button type="submit" class="primary-btn fade-in">Login</button>
       </form>
 
-      <p id="login-error" class="error"></p>
+      <p id="login-error" class="error-text"></p>
     </section>
 
     <!-- CHAT -->
-    <section id="chat-screen" class="card chat-card hidden">
-      <div id="chat-box" class="chat-box"></div>
+    <section id="chat-screen" class="card hidden">
+      <p class="helper-text">Ask any CMS policy question. I will find the correct section for you.</p>
 
-      <form id="chat-form" class="chat-input-row">
-        <input type="text" id="user-input" placeholder="Ask a question…" required />
-        <button class="send-btn" type="submit">
-          <i data-feather="arrow-up"></i>
-        </button>
+      <div id="chat-window" class="chat-window"></div>
+
+      <form id="chat-form" class="chat-form">
+        <input
+          type="text"
+          id="user-input"
+          placeholder="Example: When do we call parents if a child doesn’t arrive?"
+          autocomplete="off"
+          required
+        />
+        <button type="submit" class="primary-btn fade-in">Ask</button>
       </form>
     </section>
 
   </main>
 
+  <footer class="cms-footer">
+    © Central Montessori School – Internal staff tool
+  </footer>
+
   <script src="app.js"></script>
-  <script>
-    feather.replace();
-  </script>
 </body>
 </html>
