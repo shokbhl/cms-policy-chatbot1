@@ -8,62 +8,38 @@
 </head>
 
 <body>
+
   <!-- HEADER -->
   <header class="cms-header">
     <div class="cms-header-inner">
-
-      <!-- LEFT SIDE (LOGO + TITLE) -->
       <div class="left-header">
         <img src="cms-logo.png" class="cms-logo" />
         <div class="cms-title-block">
           <h1>CMS Policy Chatbot</h1>
-          <p class="cms-subtitle">Quick answers to CMS policies – Staff only</p>
+          <p class="cms-subtitle">Internal staff assistant</p>
         </div>
       </div>
 
-      <!-- RIGHT SIDE: TABS + LOGOUT (hidden before login) -->
-      <div id="top-actions" class="right-header hidden">
-
-        <!-- TOP NAVIGATION TABS -->
-        <nav class="top-tabs">
-          <button class="tab-btn" data-tab="policies">Policies</button>
-          <button class="tab-btn" data-tab="protocols">Protocols</button>
-          <button class="tab-btn" data-tab="handbook">Handbook</button>
-        </nav>
-
-        <!-- LOGOUT BUTTON -->
+      <!-- Tabs (only after login) -->
+      <nav id="main-tabs" class="tabs hidden">
+        <button class="tab-btn" data-tab="policies">Policies</button>
+        <button class="tab-btn" data-tab="protocols">Protocols</button>
+        <button class="tab-btn" data-tab="handbook">Handbook</button>
         <button id="logout-btn" class="secondary-btn">Logout</button>
-      </div>
-
+      </nav>
     </div>
   </header>
 
-  <!-- DROPDOWN PANEL FOR TAB CONTENT -->
-  <section id="dropdown-panel" class="dropdown hidden">
-    <div class="dropdown-inner">
-
-      <!-- POLICIES LIST -->
-      <div id="panel-policies" class="dropdown-section hidden">
-        <h3>Policies</h3>
-        <ul id="policy-list" class="menu-list"></ul>
-      </div>
-
-      <!-- PROTOCOLS LIST -->
-      <div id="panel-protocols" class="dropdown-section hidden">
-        <h3>Protocols</h3>
-        <ul id="protocol-list" class="menu-list"></ul>
-      </div>
-
-      <!-- HANDBOOK -->
-      <div id="panel-handbook" class="dropdown-section hidden">
-        <h3>Parent Handbook</h3>
-        <p style="color:#666; font-size:0.9rem">Coming soon…</p>
-      </div>
-
+  <!-- TAB PANELS -->
+  <section id="tab-panels" class="hidden">
+    <div id="policies" class="tab-panel"></div>
+    <div id="protocols" class="tab-panel"></div>
+    <div id="handbook" class="tab-panel">
+      <p style="color:#777;">Parent Handbook sections will be added soon.</p>
     </div>
   </section>
 
-  <!-- MAIN CONTENT -->
+  <!-- MAIN -->
   <main class="cms-main">
 
     <!-- LOGIN -->
@@ -72,42 +48,26 @@
       <p>Please enter the staff access code.</p>
 
       <form id="login-form" class="form-row">
-        <input
-          type="password"
-          id="access-code"
-          placeholder="Staff access code"
-          autocomplete="off"
-          required
-        />
-        <button type="submit" class="primary-btn fade-in">Login</button>
+        <input type="password" id="access-code" placeholder="Access code" required />
+        <button type="submit" class="primary-btn">Login</button>
       </form>
-
       <p id="login-error" class="error-text"></p>
     </section>
 
     <!-- CHAT -->
     <section id="chat-screen" class="card hidden">
-      <p class="helper-text">Ask any CMS policy question. I will find the correct section for you.</p>
+      <p class="helper-text">Ask any CMS policy question.</p>
 
       <div id="chat-window" class="chat-window"></div>
 
       <form id="chat-form" class="chat-form">
-        <input
-          type="text"
-          id="user-input"
-          placeholder="Example: When do we call parents if a child doesn’t arrive?"
-          autocomplete="off"
-          required
-        />
-        <button type="submit" class="primary-btn fade-in">Ask</button>
+        <input type="text" id="user-input" placeholder="Type your question…" required />
+        <button type="submit" class="primary-btn">Ask</button>
       </form>
     </section>
-
   </main>
 
-  <footer class="cms-footer">
-    © Central Montessori School – Internal staff tool
-  </footer>
+  <footer class="cms-footer">© CMS – Staff internal tool</footer>
 
   <script src="app.js"></script>
 </body>

@@ -1,62 +1,81 @@
-// =============================
+// =========================
 // CONFIG
-// =============================
+// =========================
 const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
 const STAFF_CODE = "cms-staff-2025";
 
-// MENU DATA
+// =========================
+// MENU LISTS
+// =========================
 const MENU_ITEMS = {
   policies: [
     "Safe Arrival & Dismissal",
     "Playground Safety",
     "Anaphylaxis Policy",
     "Medication Administration",
-    "Emergency Management"
+    "Emergency Management",
+    "Sleep Supervision (Toddlers & Preschool)",
+    "Sleep Supervision (Infants)",
+    "Supervision of Students & Volunteers",
+    "Behaviour Management Monitoring",
+    "Fire Safety",
   ],
   protocols: [
-    "Serious Occurrence",
-    "Sleep Supervision (Toddler & Preschool)",
-    "Sleep Supervision (Infants)"
-  ]
+    "Serious Occurrence Protocol",
+    "Sleep Protocol (Toddlers & Preschool)",
+    "Sleep Protocol (Infants)",
+  ],
 };
 
-// =============================
-// DOM
-// =============================
+// =========================
+// DOM ELEMENTS
+// =========================
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 const loginForm = document.getElementById("login-form");
 const accessCodeInput = document.getElementById("access-code");
 const loginError = document.getElementById("login-error");
 
+const tabBar = document.getElementById("tab-bar");
+const tabPolicies = document.getElementById("tab-policies");
+const tabProtocols = document.getElementById("tab-protocols");
+const tabHandbook = document.getElementById("tab-handbook");
+
+const listPolicies = document.getElementById("list-policies");
+const listProtocols = document.getElementById("list-protocols");
+const listHandbook = document.getElementById("list-handbook");
+
 const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
 
-const topNav = document.getElementById("top-nav");
 const logoutBtn = document.getElementById("logout-btn");
-
-const policyDropdown = document.getElementById("policy-dropdown");
-const protocolDropdown = document.getElementById("protocol-dropdown");
-const handbookDropdown = document.getElementById("handbook-dropdown");
 
 let typingBubble = null;
 
-// =============================
+// =========================
 // HELPERS
-// =============================
+// =========================
 
-// Add message bubble
-function addMessage(role, text) {
+// Show messages EXACTLY like WhatsApp (always vertically stacked)
+function addMessage(role, html) {
   const msg = document.createElement("div");
   msg.className = `msg ${role}`;
-  msg.innerHTML = text;
+  msg.innerHTML = html;
   chatWindow.appendChild(msg);
+
+  // force ALWAYS one-per-line
+  msg.style.display = "block";
+  msg.style.clear = "both";
 
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-// Typing bubble
+function clearChat() {
+  chatWindow.innerHTML = "";
+}
+
+// Typing animation
 function showTyping() {
   hideTyping();
   const wrap = document.createElement("div");
@@ -72,7 +91,6 @@ function showTyping() {
 
   chatWindow.appendChild(wrap);
   chatWindow.scrollTop = chatWindow.scrollHeight;
-
   typingBubble = wrap;
 }
 
@@ -81,144 +99,152 @@ function hideTyping() {
   typingBubble = null;
 }
 
-function clearChat() {
-  chatWindow.innerHTML = "";
-}
-
-// =============================
-// LOGIN
-// =============================
+// =========================
+// LOGIN SYSTEM
+// =========================
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const code = accessCodeInput.value.trim();
 
   if (code === STAFF_CODE) {
     loginError.textContent = "";
-    accessCodeInput.value = "";
 
+    // Switch screens
     loginScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
-    topNav.classList.remove("hidden");
 
+    // Show tab bar
+    tabBar.classList.remove("hidden");
+
+    // Clear old chat
     clearChat();
 
-    addMessage("assistant", "Hi 👋 Ask me about any CMS policy, or use the menu above.");
-
+    addMessage("assistant", "Welcome 👋 How can I help you today?");
   } else {
-    loginError.textContent = "Incorrect access code.";
+    loginError.textContent = "Incorrect code.";
   }
 });
 
-// =============================
+// =========================
 // LOGOUT
-// =============================
+// =========================
 logoutBtn.addEventListener("click", () => {
+
+  // Hide chat, show login
   chatScreen.classList.add("hidden");
   loginScreen.classList.remove("hidden");
-  topNav.classList.add("hidden");
 
+  // Hide tabs
+  tabBar.classList.add("hidden");
+
+  // Reset chat
   clearChat();
+
+  // Reset code box
   accessCodeInput.value = "";
 });
 
-// =============================
-// POPULATE TOP-DROP MENUS
-// =============================
-function fillMenus() {
-  MENU_ITEMS.policies.forEach((label) => {
+// =========================
+// POPULATE MENU
+// =========================
+function fillMenu(listEl, items) {
+  listEl.innerHTML = "";
+  items.forEach((label) => {
     const btn = document.createElement("button");
-    btn.className = "dropdown-item";
+    btn.className = "menu-btn";
     btn.textContent = label;
-    btn.onclick = () => askPolicy(`Show me the policy: ${label}`);
-    policyDropdown.appendChild(btn);
-  });
 
-  MENU_ITEMS.protocols.forEach((label) => {
-    const btn = document.createElement("button");
-    btn.className = "dropdown-item";
-    btn.textContent = label;
-    btn.onclick = () => askPolicy(`Show me the protocol: ${label}`);
-    protocolDropdown.appendChild(btn);
+    btn.addEventListener("click", () => {
+      askPolicy(`Show me: ${label}`);
+    });
+
+    listEl.appendChild(btn);
   });
 }
-fillMenus();
 
-// =============================
-// DROPDOWN MENU LOGIC
-// =============================
-function toggleDropdown(el) {
-  el.classList.toggle("open");
-}
+fillMenu(listPolicies, MENU_ITEMS.policies);
+fillMenu(listProtocols, MENU_ITEMS.protocols);
 
-document.getElementById("policy-tab").onclick = () => {
-  toggleDropdown(policyDropdown);
-  protocolDropdown.classList.remove("open");
-  handbookDropdown.classList.remove("open");
-};
+// handbook (coming soon)
+listHandbook.innerHTML = `<li class="coming">Coming soon…</li>`;
 
-document.getElementById("protocol-tab").onclick = () => {
-  toggleDropdown(protocolDropdown);
-  policyDropdown.classList.remove("open");
-  handbookDropdown.classList.remove("open");
-};
+// =========================
+// TAB SWITCHING
+// =========================
+function activateTab(tabName) {
+  tabPolicies.classList.remove("active");
+  tabProtocols.classList.remove("active");
+  tabHandbook.classList.remove("active");
 
-document.getElementById("handbook-tab").onclick = () => {
-  toggleDropdown(handbookDropdown);
-  policyDropdown.classList.remove("open");
-  protocolDropdown.classList.remove("open");
-};
+  listPolicies.classList.add("hidden");
+  listProtocols.classList.add("hidden");
+  listHandbook.classList.add("hidden");
 
-// Click outside closes dropdowns
-document.addEventListener("click", (e) => {
-  if (!e.target.closest(".nav-item")) {
-    policyDropdown.classList.remove("open");
-    protocolDropdown.classList.remove("open");
-    handbookDropdown.classList.remove("open");
+  if (tabName === "policies") {
+    tabPolicies.classList.add("active");
+    listPolicies.classList.remove("hidden");
   }
-});
+  if (tabName === "protocols") {
+    tabProtocols.classList.add("active");
+    listProtocols.classList.remove("hidden");
+  }
+  if (tabName === "handbook") {
+    tabHandbook.classList.add("active");
+    listHandbook.classList.remove("hidden");
+  }
+}
 
-// =============================
-// CHAT AI LOGIC
-// =============================
+tabPolicies.addEventListener("click", () => activateTab("policies"));
+tabProtocols.addEventListener("click", () => activateTab("protocols"));
+tabHandbook.addEventListener("click", () => activateTab("handbook"));
+
+// default
+activateTab("policies");
+
+// =========================
+// CHAT API
+// =========================
 async function askPolicy(question) {
-  addMessage("user", question);
+  const q = question.trim();
+  if (!q) return;
 
+  addMessage("user", q);
   showTyping();
 
   try {
-    const res = await fetch(API_URL, {
+    const response = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: question })
+      body: JSON.stringify({ query: q }),
     });
 
     hideTyping();
 
-    if (!res.ok) {
+    if (!response.ok) {
       addMessage("assistant", "Network error — please try again.");
       return;
     }
 
-    const data = await res.json();
+    const data = await response.json();
 
     addMessage(
       "assistant",
-      `<b>${data.policy?.title || "Policy found:"}</b><br><br>
-       ${data.answer || ""}
-       ${data.policy?.link ? `<br><br><a href="${data.policy.link}" target="_blank">Open full policy</a>` : ""}`
+      `<b>${data.policy?.title || "Policy"}</b><br><br>${data.answer || ""}${
+        data.policy?.link
+          ? `<br><br><a href="${data.policy.link}" target="_blank">Open full policy</a>`
+          : ""
+      }`
     );
-
   } catch (err) {
     hideTyping();
-    addMessage("assistant", "Error connecting to server.");
+    addMessage("assistant", "Server unreachable.");
   }
 }
 
-// Submit chat
+// Send form
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const q = userInput.value.trim();
-  if (!q) return;
+  const q = userInput.value;
   userInput.value = "";
   askPolicy(q);
 });

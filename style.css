@@ -1,9 +1,5 @@
-/* =========================================
-   ROOT VARIABLES
-========================================= */
 :root {
   --cms-navy: #003b8e;
-  --cms-yellow: #f5c400;
   --cms-bg: #f5f7fb;
   --cms-border: #d7deea;
   --cms-text: #1f2933;
@@ -14,9 +10,7 @@
   --bot-bubble: #ffffff;
 }
 
-/* =========================================
-   GLOBAL RESET
-========================================= */
+/* Reset */
 *,
 *::before,
 *::after {
@@ -25,34 +19,24 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  background: radial-gradient(
-    circle at top left,
-    #ffffff 0%,
-    #f5f7fb 40%,
-    #e6ecff 100%
-  );
-  color: var(--cms-text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #f5f7fb;
 }
 
-/* =========================================
-   HEADER
-========================================= */
-
+/* HEADER */
 .cms-header {
-  background: #ffffffee;
-  backdrop-filter: blur(12px);
+  background: white;
   border-bottom: 2px solid var(--cms-navy);
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 20;
+  padding: 10px 0;
 }
 
 .cms-header-inner {
   max-width: 960px;
   margin: 0 auto;
-  padding: 14px 16px;
+  padding: 0 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -61,51 +45,40 @@ body {
 .left-header {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .cms-logo {
-  max-height: 54px;
-  width: auto;
+  height: 52px;
 }
 
 .cms-title-block h1 {
   margin: 0;
-  font-size: 1.45rem;
+  font-size: 1.4rem;
   color: var(--cms-navy);
 }
 
 .cms-subtitle {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   color: var(--cms-muted);
 }
 
-/* =========================================
-   TOP MENU TABS (Policies | Protocols | Handbook)
-========================================= */
-
-#tab-bar {
-  display: none; /* shows ONLY after login */
-  margin: 0 auto;
-  max-width: 960px;
-  padding: 10px 16px 0;
+/* TOP MENU TABS */
+.top-tabs {
   display: flex;
-  gap: 10px;
+  gap: 6px;
 }
 
 .tab-btn {
-  flex: 1;
-  padding: 10px 14px;
+  padding: 8px 14px;
   background: #eef2ff;
-  border-radius: 14px;
-  border: 1px solid var(--cms-border);
-  text-align: center;
-  font-size: 0.95rem;
   color: var(--cms-navy);
+  border-radius: 12px;
+  font-size: 0.95rem;
+  border: 1px solid #d0d7f5;
   cursor: pointer;
-  font-weight: 500;
-  transition: 0.2s ease;
+  transition: 0.15s ease;
 }
 
 .tab-btn:hover {
@@ -115,46 +88,24 @@ body {
 .tab-btn.active {
   background: var(--cms-navy);
   color: white;
-  border-color: var(--cms-navy);
 }
 
-/* DROPDOWN PANEL FOR TABS */
-.tab-panel {
-  display: none;
-  background: #ffffff;
-  border: 1px solid var(--cms-border);
-  border-radius: var(--cms-radius);
-  margin: 12px auto;
-  max-width: 960px;
-  padding: 12px 16px;
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
-}
-
-.tab-panel.active {
-  display: block;
-}
-
-/* List inside panel */
-.panel-item-btn {
-  width: 100%;
-  padding: 10px 12px;
-  background: #f3f4ff;
-  border: none;
+/* LOGOUT BUTTON */
+#logout-btn {
+  padding: 8px 14px;
+  font-size: 0.9rem;
+  background: white;
+  border: 1px solid var(--cms-navy);
+  color: var(--cms-navy);
   border-radius: 12px;
-  text-align: left;
-  margin-bottom: 6px;
   cursor: pointer;
-  transition: 0.18s ease;
 }
 
-.panel-item-btn:hover {
-  background: #e0e7ff;
+#logout-btn:hover {
+  background: #eef2ff;
 }
 
-/* =========================================
-   MAIN AREA
-========================================= */
-
+/* MAIN LAYOUT */
 .cms-main {
   max-width: 960px;
   margin: 20px auto;
@@ -162,132 +113,78 @@ body {
 }
 
 .card {
-  background: #ffffff;
+  background: white;
   border-radius: var(--cms-radius);
   border: 1px solid var(--cms-border);
-  padding: 22px 18px;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
-  animation: fade-up 0.3s ease-out;
+  padding: 20px;
+  box-shadow: 0 8px 18px rgba(15,23,42,0.06);
 }
 
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* =========================================
-   INPUTS + BUTTONS
-========================================= */
-
-input[type="password"],
-input[type="text"] {
-  flex: 1;
+/* LOGIN */
+#login-form input {
+  width: 70%;
+  padding: 10px 14px;
   border-radius: 14px;
-  padding: 12px 14px;
   border: 1px solid var(--cms-border);
-  font-size: 1rem;
-  background: #f9fafb;
-  transition: 0.2s ease;
 }
 
-input:focus {
-  border-color: var(--cms-navy);
-  background: white;
-  box-shadow: 0 0 0 2px rgba(0, 59, 142, 0.3);
-}
-
-/* Make chat input larger */
-#user-input {
-  flex: 1;
-  width: 100%;
-}
-
-/* Buttons */
 .primary-btn {
-  background: linear-gradient(135deg, var(--cms-navy), #002a68);
-  padding: 11px 18px;
-  border-radius: 14px;
-  color: white;
-  border: none;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: 0.2s ease;
-}
-
-.primary-btn:hover {
-  transform: translateY(-2px);
-}
-
-.secondary-btn {
-  border: 1px solid var(--cms-navy);
-  color: var(--cms-navy);
-  background: white;
   padding: 10px 18px;
-  border-radius: 14px;
+  background: var(--cms-navy);
+  color: white;
+  border-radius: 12px;
   cursor: pointer;
+  border: none;
+  font-weight: 500;
 }
 
-.secondary-btn:hover {
-  background: #eef4ff;
-}
-
-/* =========================================
-   CHAT WINDOW
-========================================= */
-
+/* CHAT WINDOW */
 .chat-window {
+  margin-top: 12px;
+  border-radius: var(--cms-radius);
+  border: 1px solid var(--cms-border);
+  background: #f8f9ff;
+  padding: 12px;
   height: 360px;
   overflow-y: auto;
-  border-radius: var(--cms-radius);
-  border: 1px solid var(--cms-border);
-  padding: 12px;
-  background: linear-gradient(180deg, #f9fafb 0%, #eef3ff 100%);
   display: flex;
-  flex-direction: column;
+  flex-direction: column; /* 🔥 مهم: پیام‌ها همیشه زیر هم */
 }
 
-/* Messages ALWAYS UNDER each other */
+/* MESSAGE BUBBLES */
 .msg {
-  width: fit-content;
   max-width: 78%;
   padding: 10px 14px;
   border-radius: 16px;
-  margin-top: 8px;
-  font-size: 0.95rem;
+  margin-bottom: 6px;
+  font-size: 0.92rem;
   line-height: 1.4;
-  word-wrap: break-word;
+  word-break: break-word;
 }
 
-/* USER RIGHT */
+/* USER MESSAGE */
 .msg.user {
-  align-self: flex-end;
   background: var(--user-bubble);
   color: white;
+  align-self: flex-end;  /* 🔥 همیشه سمت راست و زیر پیام قبل */
   border-bottom-right-radius: 4px;
 }
 
-/* ASSISTANT LEFT */
+/* ASSISTANT MESSAGE */
 .msg.assistant {
-  align-self: flex-start;
   background: white;
   border: 1px solid var(--cms-border);
+  align-self: flex-start;
   border-bottom-left-radius: 4px;
 }
 
 /* Typing */
 .typing-bubble {
-  align-self: flex-start;
   background: white;
   border: 1px solid var(--cms-border);
   padding: 8px 12px;
   border-radius: 16px;
-  margin-top: 8px;
+  align-self: flex-start;
 }
 
 .typing-dots {
@@ -298,48 +195,39 @@ input:focus {
 .typing-dot {
   width: 7px;
   height: 7px;
-  border-radius: 999px;
-  background: #999;
-  animation: blink 1.4s infinite;
+  background: #9aa3b1;
+  border-radius: 50%;
+  animation: blink 1.4s infinite ease-in-out;
 }
 
 @keyframes blink {
-  0%,80%,100% { opacity: .3; transform: translateY(0); }
-  40% { opacity: 1; transform: translateY(-2px); }
+  0%,
+  80%,
+  100% { opacity: 0.3; }
+  40% { opacity: 1; }
 }
 
-/* =========================================
-   FOOTER
-========================================= */
+/* CHAT FORM */
+.chat-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chat-form input {
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--cms-border);
+}
 
 .cms-footer {
   text-align: center;
-  padding: 16px;
-  font-size: 0.8rem;
   color: var(--cms-muted);
+  font-size: 0.85rem;
+  padding: 16px 0;
 }
 
-/* =========================================
-   UTILITIES
-========================================= */
-
-.hidden { display: none !important; }
-
-/* =========================================
-   RESPONSIVE
-========================================= */
-@media (max-width: 640px) {
-  .cms-header-inner {
-    flex-direction: column;
-    align-items: start;
-    gap: 8px;
-  }
-
-  .msg {
-    max-width: 90%;
-  }
-
-  .chat-window {
-    height: 300px;
-  }
+.hidden {
+  display: none !important;
 }
