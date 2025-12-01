@@ -33,7 +33,7 @@ const MENU_ITEMS = {
     { id: "special_events", label: "Special Events" },
     { id: "reports_forms", label: "Reports & Forms" },
     { id: "other", label: "other" },
-    { id: "closing", label: "closing" }
+    { id: "closing", label: "In closing" }
   ],
   handbook: [
     // فعلاً خالی – فقط پیام Coming soon نمایش می‌دهیم
