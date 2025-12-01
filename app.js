@@ -11,7 +11,18 @@ const MENU_ITEMS = {
     { id: "medication_administration", label: "Medication Administration" },
     { id: "emergency_management", label: "Emergency Management" },
     { id: "sleep_toddlers", label:"Sleep Supervision Policy and Procedures (Toddler & Preschool)"},
-    {id:""}
+    {id:"serious_occurrence", label:"serious_occurrence Policy"},
+    {id:"sleep_infants", label:"Sleep Supervision Policy and Procedures (Infants)"},
+    {id:"students_volunteers", label:"Supervision of Students & Volunteers Policy"},
+    {id:"waiting_list", label:"Waiting List Policy & Procedures"},
+    {id:"program_statement", label:"Program Statement Implementation Policy"},
+    {id:"staff_development", label:"Staff Development & Training Policy"},
+    {id:"parent_issues_concerns", label:"Parent Issues and Concerns Policy and Procedures"},
+    {id:"behaviour_management_monitoring", label:"Behaviour Management Monitoring Policy"},
+    {id:"fire_safety", label:"Fire Safety Evacuation Procedures"},
+    {id:"criminal_reference_vsc_policy", label:"Criminal Reference / Vulnerable Sector Check Policy"},
+    {id:"", label:""}
+
   ],
   protocols: [
     { id: "serious_occurrence", label: "Serious Occurrence" },
