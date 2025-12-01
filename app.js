@@ -9,7 +9,9 @@ const MENU_ITEMS = {
     { id: "playground_safety", label: "Playground Safety" },
     { id: "anaphylaxis_policy", label: "Anaphylaxis Policy" },
     { id: "medication_administration", label: "Medication Administration" },
-    { id: "emergency_management", label: "Emergency Management" }
+    { id: "emergency_management", label: "Emergency Management" },
+    { id: "sleep_toddlers", label:"Sleep Supervision Policy and Procedures (Toddler & Preschool)"},
+    {id:""}
   ],
   protocols: [
     { id: "serious_occurrence", label: "Serious Occurrence" },
