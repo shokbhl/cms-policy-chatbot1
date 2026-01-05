@@ -1,8 +1,8 @@
-// app.js
+// app.js (FULL) — replace your whole file with this
 
 // ===== CONFIG =====
 const API_BASE = "https://cms-policy-chatbot-v2.shokbhl.workers.dev";
-const LOGIN_URL = `${API_BASE}/login`;
+const LOGIN_URL = `${API_BASE}/auth/login`;
 const API_URL = `${API_BASE}/api`;
 
 // ===== MENUS =====
@@ -36,12 +36,12 @@ const MENU_ITEMS = {
     { id: "special_events", label: "Special Events" },
     { id: "reports_forms", label: "Reports & Forms" },
     { id: "other", label: "Other" },
-    { id: "closing", label: "In closing" }
+    { id: "closing", label: "In Closing" }
   ],
   handbook: [] // campus based
 };
 
-// ===== DOM (MATCHES YOUR HTML) =====
+// ===== DOM (must match your HTML IDs) =====
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 
@@ -51,15 +51,15 @@ const passwordInput = document.getElementById("password");
 const campusSelect = document.getElementById("campus");
 const loginError = document.getElementById("login-error");
 
-const topActions = document.getElementById("top-actions"); // <-- YOUR HTML
-const campusPill = document.getElementById("campus-pill"); // <-- YOUR HTML
+const topActions = document.getElementById("top-actions");
 const logoutBtn = document.getElementById("logout-btn");
+const campusPill = document.getElementById("campus-pill");
 
+const menuPills = document.querySelectorAll(".menu-pill");
 const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
 
-const menuPills = document.querySelectorAll(".menu-pill");
 const menuPanel = document.getElementById("menu-panel");
 const menuPanelTitle = document.getElementById("menu-panel-title");
 const menuPanelBody = document.getElementById("menu-panel-body");
@@ -113,6 +113,7 @@ function showTyping() {
   wrapper.appendChild(dots);
   chatWindow.appendChild(wrapper);
   chatWindow.scrollTop = chatWindow.scrollHeight;
+
   typingBubble = wrapper;
 }
 
@@ -126,14 +127,16 @@ function hideTyping() {
 function showChatUI(campus) {
   loginScreen.classList.add("hidden");
   chatScreen.classList.remove("hidden");
-  topActions.classList.remove("hidden");
 
+  // top right actions
+  topActions.classList.remove("hidden");
   campusPill.textContent = `Campus: ${campus || "—"}`;
 
+  closeMenuPanel();
   clearChat();
   addMessage(
     "assistant",
-    "Hi 👋 Ask about any CMS policy/protocol, or open your campus Parent Handbook from the menu above."
+    "Hi 👋 You can ask about any CMS policy/protocol, or open your campus Parent Handbook from the menu above."
   );
 }
 
@@ -141,10 +144,15 @@ function showLoginUI() {
   closeMenuPanel();
   chatScreen.classList.add("hidden");
   loginScreen.classList.remove("hidden");
+
   topActions.classList.add("hidden");
+  campusPill.textContent = "Campus: —";
+
   clearChat();
   loginError.classList.add("hidden");
   loginError.textContent = "";
+
+  // keep username if you want; I clear all for safety
   usernameInput.value = "";
   passwordInput.value = "";
   campusSelect.value = "";
@@ -153,6 +161,7 @@ function showLoginUI() {
 // ===== AUTH =====
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+
   loginError.classList.add("hidden");
   loginError.textContent = "";
 
@@ -181,8 +190,17 @@ loginForm.addEventListener("submit", async (e) => {
       return;
     }
 
-    setSession({ token: data.token, user: data.user });
-    showChatUI(data.user?.campus || campus);
+    // Worker returns: { ok, token, role, campus }
+    setSession({
+      token: data.token,
+      user: {
+        username,
+        role: data.role,
+        campus: data.campus
+      }
+    });
+
+    showChatUI(data.campus);
   } catch (err) {
     loginError.textContent = "Network error. Please try again.";
     loginError.classList.remove("hidden");
@@ -193,6 +211,13 @@ logoutBtn.addEventListener("click", () => {
   clearSession();
   showLoginUI();
 });
+
+// Auto-restore session
+(function boot() {
+  const s = getSession();
+  if (s?.token && s?.user?.campus) showChatUI(s.user.campus);
+  else showLoginUI();
+})();
 
 // ===== MENU PANEL =====
 function openMenuPanel(type) {
@@ -221,9 +246,16 @@ function openMenuPanel(type) {
 
     btn.addEventListener("click", () => {
       closeMenuPanel();
-      askPolicy(`Please show me the parent handbook for campus ${campus}.`);
+      askPolicy(`Show the parent handbook for campus ${campus}.`);
     });
     menuPanelBody.appendChild(btn);
+
+    const hint = document.createElement("p");
+    hint.style.fontSize = "0.9rem";
+    hint.style.color = "#6b7280";
+    hint.style.margin = "6px 2px 0";
+    hint.textContent = "You can also ask questions about the handbook (fees, hours, policies, etc.).";
+    menuPanelBody.appendChild(hint);
 
   } else {
     const items = MENU_ITEMS[type] || [];
@@ -238,7 +270,7 @@ function openMenuPanel(type) {
       btn.textContent = item.label;
       btn.addEventListener("click", () => {
         closeMenuPanel();
-        const qPrefix = type === "protocols" ? "Please show me the protocol: " : "Please show me the policy: ";
+        const qPrefix = type === "protocols" ? "Show the protocol: " : "Show the policy: ";
         askPolicy(qPrefix + item.label);
       });
       menuPanelBody.appendChild(btn);
@@ -276,7 +308,7 @@ chatForm.addEventListener("submit", (e) => {
 });
 
 async function askPolicy(question) {
-  const trimmed = question.trim();
+  const trimmed = String(question || "").trim();
   if (!trimmed) return;
 
   const s = getSession();
@@ -285,7 +317,6 @@ async function askPolicy(question) {
     return;
   }
 
-  // IMPORTANT: show the user question
   addMessage("user", escapeHtml(trimmed));
   showTyping();
 
@@ -296,7 +327,7 @@ async function askPolicy(question) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${s.token}`
       },
-      body: JSON.stringify({ query: trimmed })
+      body: JSON.stringify({ query: trimmed }) // campus comes from token (payload.sel)
     });
 
     const data = await res.json().catch(() => ({}));
@@ -305,6 +336,7 @@ async function askPolicy(question) {
     if (!res.ok) {
       const msg = data.error || "Something went wrong. Please try again.";
       addMessage("assistant", escapeHtml(msg));
+
       if (res.status === 401) {
         clearSession();
         showLoginUI();
@@ -314,19 +346,22 @@ async function askPolicy(question) {
 
     const title = data.policy?.title || "Result";
     const answer = data.answer || "";
-
+    const src = data.policy?.source ? ` (${data.policy.source})` : "";
     const linkPart = data.policy?.link
-      ? `<br><br><a href="${data.policy.link}" target="_blank" rel="noopener">Open full document</a>`
+      ? `<br><br><a href="${escapeAttr(data.policy.link)}" target="_blank" rel="noopener">Open full document</a>`
       : "";
 
-    addMessage("assistant", `<b>${escapeHtml(title)}</b><br><br>${escapeHtml(answer)}${linkPart}`);
+    addMessage(
+      "assistant",
+      `<b>${escapeHtml(title)}${escapeHtml(src)}</b><br><br>${escapeHtml(answer)}${linkPart}`
+    );
   } catch (err) {
     hideTyping();
     addMessage("assistant", "Network error — please try again.");
   }
 }
 
-// Prevent HTML injection
+// ===== SANITIZERS =====
 function escapeHtml(str) {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -335,10 +370,10 @@ function escapeHtml(str) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-
-// ===== BOOT =====
-(function boot() {
-  const s = getSession();
-  if (s?.token && s?.user?.campus) showChatUI(s.user.campus);
-  else showLoginUI();
-})();
+function escapeAttr(str) {
+  // safe enough for href attribute
+  return String(str)
+    .replaceAll('"', "%22")
+    .replaceAll("'", "%27")
+    .trim();
+}
