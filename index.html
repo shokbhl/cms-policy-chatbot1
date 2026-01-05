@@ -1,101 +1,107 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>CMS Policy Chatbot</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
-  <!-- HEADER -->
-  <header class="cms-header">
-    <div class="cms-header-inner">
-      <div class="left-header">
-        <img src="cms-logo.png" class="cms-logo" alt="Central Montessori School logo" />
-        <div class="cms-title-block">
-          <h1>CMS Policy Chatbot</h1>
-          <p class="cms-subtitle">
-            Internal staff assistant
-          </p>
+  <div class="app-shell">
+
+    <!-- Header -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-logo">
+          <!-- اگر لوگو داری، img بذار -->
+          <span class="brand-mark">CMS</span>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">CMS Policy Chatbot</div>
+          <div class="brand-subtitle">Internal staff assistant</div>
         </div>
       </div>
 
-      <!-- Right side: فقط بعد از لاگین دیده می‌شود -->
       <div id="header-actions" class="header-actions hidden">
-        <button id="logout-btn" class="secondary-btn">Logout</button>
+        <div id="campus-badge" class="badge hidden">Campus: —</div>
+        <button id="logout-btn" class="btn btn-ghost">Logout</button>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <!-- نوار منو – فقط بعد از لاگین -->
-  <nav id="top-menu-bar" class="top-menu-bar hidden">
-    <div class="top-menu-inner">
-      <button class="menu-pill" data-menu="policies">Policies</button>
-      <button class="menu-pill" data-menu="protocols">Protocols</button>
-      <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
-    </div>
-  </nav>
+    <!-- Login -->
+    <main id="login-screen" class="screen">
+      <div class="card login-card">
+        <h1 class="h1">Sign in</h1>
+        <p class="muted">
+          Enter your username + password and select your campus.
+        </p>
 
-  <!-- پنل لیست آیتم‌های هر منو -->
-  <div id="menu-panel" class="menu-panel hidden">
-    <div class="menu-panel-inner">
-      <div class="menu-panel-header">
-        <h2 id="menu-panel-title">Menu</h2>
-        <button id="menu-panel-close" class="icon-btn small-icon">×</button>
+        <form id="login-form" class="form">
+          <label class="label">Username</label>
+          <input id="username" class="input" type="text" autocomplete="username" placeholder="e.g. staff_yc" required />
+
+          <label class="label">Password</label>
+          <input id="password" class="input" type="password" autocomplete="current-password" placeholder="••••••••" required />
+
+          <label class="label">Campus</label>
+          <select id="campus" class="input" required>
+            <option value="" selected disabled>Select campus…</option>
+            <option value="YC">YC</option>
+            <option value="MC">MC</option>
+            <option value="TC">TC</option>
+            <option value="SC">SC</option>
+            <option value="WC">WC</option>
+          </select>
+
+          <div id="login-error" class="error" aria-live="polite"></div>
+
+          <button class="btn btn-primary" type="submit">Login</button>
+        </form>
+
+        <div class="hint">
+          Tip: Staff must pick their own campus. Admin can access all campuses.
+        </div>
       </div>
-      <div id="menu-panel-body" class="menu-panel-body">
-        <!-- با JS پر می‌شود -->
+    </main>
+
+    <!-- Chat -->
+    <main id="chat-screen" class="screen hidden">
+      <div id="top-menu-bar" class="menu-bar hidden">
+        <button class="menu-pill" data-menu="policies">Policies</button>
+        <button class="menu-pill" data-menu="protocols">Protocols</button>
+        <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
       </div>
-    </div>
+
+      <section class="chat-card">
+        <div class="chat-head">
+          <div class="chat-title">Ask any CMS policy question.</div>
+        </div>
+
+        <div id="chat-window" class="chat-window" aria-live="polite"></div>
+
+        <form id="chat-form" class="chat-form">
+          <input id="user-input" class="chat-input" type="text"
+                 placeholder="Example: When do we call parents if a child doesn’t arrive?"
+                 autocomplete="off"/>
+          <button class="btn btn-primary chat-send" type="submit">Ask</button>
+        </form>
+      </section>
+
+      <!-- Menu Panel -->
+      <div id="menu-overlay" class="overlay"></div>
+      <aside id="menu-panel" class="menu-panel hidden" role="dialog" aria-modal="true">
+        <div class="menu-panel-top">
+          <div id="menu-panel-title" class="menu-panel-title">Menu</div>
+          <button id="menu-panel-close" class="btn btn-ghost btn-icon" aria-label="Close">✕</button>
+        </div>
+        <div id="menu-panel-body" class="menu-panel-body"></div>
+      </aside>
+
+      <footer class="footer">© CMS — Staff internal tool</footer>
+    </main>
+
   </div>
-  <div id="menu-overlay" class="overlay hidden"></div>
-
-  <!-- MAIN -->
-  <main class="cms-main">
-
-    <!-- LOGIN CARD -->
-    <section id="login-screen" class="card">
-      <h2>Staff Access</h2>
-      <p>Please enter the staff access code.</p>
-
-      <form id="login-form" class="form-row">
-        <input
-          type="password"
-          id="access-code"
-          placeholder="Staff access code"
-          autocomplete="off"
-          required
-        />
-        <button type="submit" class="primary-btn fade-in">Login</button>
-      </form>
-
-      <p id="login-error" class="error-text"></p>
-    </section>
-
-    <!-- CHAT CARD -->
-    <section id="chat-screen" class="card hidden">
-      <p class="helper-text">Ask any CMS policy question.</p>
-
-      <div id="chat-window" class="chat-window"></div>
-
-      <form id="chat-form" class="chat-form">
-        <input
-          type="text"
-          id="user-input"
-          placeholder="Example: When do we call parents if a child doesn’t arrive?"
-          autocomplete="off"
-          required
-        />
-        <button type="submit" class="primary-btn fade-in">Ask</button>
-      </form>
-    </section>
-
-  </main>
-
-  <footer class="cms-footer">
-    © CMS – Staff internal tool
-  </footer>
 
   <script src="app.js"></script>
 </body>

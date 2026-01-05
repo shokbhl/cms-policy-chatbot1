@@ -1,8 +1,11 @@
-// ===== CONFIG =====
-const API_URL = "https://cms-policy-worker.shokbhl.workers.dev/api";
-const STAFF_CODE = "cms-staff-2025";
+// app.js
 
-// منوها
+// ===== CONFIG =====
+const API_BASE = "https://cms-policy-chatbot-v2.shokbhl.workers.dev";
+const LOGIN_URL = `${API_BASE}/login`;
+const API_URL = `${API_BASE}/api`;
+
+// ===== MENUS =====
 const MENU_ITEMS = {
   policies: [
     { id: "safe_arrival", label: "Safe Arrival & Dismissal" },
@@ -35,27 +38,29 @@ const MENU_ITEMS = {
     { id: "other", label: "other" },
     { id: "closing", label: "In closing" }
   ],
-  handbook: [
-    // فعلاً خالی – فقط پیام Coming soon نمایش می‌دهیم
-  ]
+  handbook: [] // we render based on campus
 };
 
 // ===== DOM =====
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
+
 const loginForm = document.getElementById("login-form");
-const accessCodeInput = document.getElementById("access-code");
+const usernameInput = document.getElementById("username");
+const passwordInput = document.getElementById("password");
+const campusSelect = document.getElementById("campus");
 const loginError = document.getElementById("login-error");
+
+const headerActions = document.getElementById("header-actions");
+const logoutBtn = document.getElementById("logout-btn");
+const campusBadge = document.getElementById("campus-badge");
+
+const topMenuBar = document.getElementById("top-menu-bar");
+const menuPills = document.querySelectorAll(".menu-pill");
 
 const chatWindow = document.getElementById("chat-window");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
-
-const headerActions = document.getElementById("header-actions");
-const logoutBtn = document.getElementById("logout-btn");
-
-const topMenuBar = document.getElementById("top-menu-bar");
-const menuPills = document.querySelectorAll(".menu-pill");
 
 const menuPanel = document.getElementById("menu-panel");
 const menuPanelTitle = document.getElementById("menu-panel-title");
@@ -63,10 +68,24 @@ const menuPanelBody = document.getElementById("menu-panel-body");
 const menuPanelClose = document.getElementById("menu-panel-close");
 const menuOverlay = document.getElementById("menu-overlay");
 
-// برای تایپینگ
 let typingBubble = null;
 
-// ===== HELPERS =====
+// ===== SESSION =====
+function getSession() {
+  try {
+    return JSON.parse(localStorage.getItem("cms_session") || "null");
+  } catch {
+    return null;
+  }
+}
+function setSession(s) {
+  localStorage.setItem("cms_session", JSON.stringify(s));
+}
+function clearSession() {
+  localStorage.removeItem("cms_session");
+}
+
+// ===== UI HELPERS =====
 function addMessage(role, htmlText) {
   const msg = document.createElement("div");
   msg.className = `msg ${role}`;
@@ -79,10 +98,8 @@ function clearChat() {
   chatWindow.innerHTML = "";
 }
 
-// typing indicator
 function showTyping() {
   hideTyping();
-
   const wrapper = document.createElement("div");
   wrapper.className = "typing-bubble";
 
@@ -109,73 +126,128 @@ function hideTyping() {
   typingBubble = null;
 }
 
-// ===== LOGIN / LOGOUT =====
-loginForm.addEventListener("submit", (e) => {
+function showChatUI(campus) {
+  loginScreen.classList.add("hidden");
+  chatScreen.classList.remove("hidden");
+  headerActions.classList.remove("hidden");
+  topMenuBar.classList.remove("hidden");
+
+  campusBadge.classList.remove("hidden");
+  campusBadge.textContent = `Campus: ${campus}`;
+
+  clearChat();
+  addMessage("assistant", "Hi 👋 You can ask about any CMS policy/protocol, or open your campus Parent Handbook from the menu above.");
+}
+
+function showLoginUI() {
+  closeMenuPanel();
+  chatScreen.classList.add("hidden");
+  loginScreen.classList.remove("hidden");
+  headerActions.classList.add("hidden");
+  topMenuBar.classList.add("hidden");
+  campusBadge.classList.add("hidden");
+  clearChat();
+  loginError.textContent = "";
+  usernameInput.value = "";
+  passwordInput.value = "";
+  campusSelect.value = "";
+}
+
+// ===== AUTH =====
+loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const code = accessCodeInput.value.trim();
+  loginError.textContent = "";
 
-  if (code === STAFF_CODE) {
-    loginError.textContent = "";
-    accessCodeInput.value = "";
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value.trim();
+  const campus = (campusSelect.value || "").trim().toUpperCase();
 
-    // نمایش چت
-    loginScreen.classList.add("hidden");
-    chatScreen.classList.remove("hidden");
+  if (!username || !password || !campus) {
+    loginError.textContent = "Please enter username, password, and campus.";
+    return;
+  }
 
-    // نمایش logout + منو بالا
-    headerActions.classList.remove("hidden");
-    topMenuBar.classList.remove("hidden");
+  try {
+    const res = await fetch(LOGIN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, campus })
+    });
 
-    clearChat();
-    addMessage(
-      "assistant",
-      "Hi 👋 You can ask about any CMS policy or use the menu above to jump to a specific policy."
-    );
-  } else {
-    loginError.textContent = "Incorrect access code.";
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      loginError.textContent = data.error || "Login failed.";
+      return;
+    }
+
+    // Save session
+    setSession({
+      token: data.token,
+      user: data.user
+    });
+
+    showChatUI(data.user.campus);
+  } catch (err) {
+    loginError.textContent = "Network error. Please try again.";
   }
 });
 
 logoutBtn.addEventListener("click", () => {
-  // بستن پنل منو
-  closeMenuPanel();
-
-  // برگشت به لاگین
-  chatScreen.classList.add("hidden");
-  loginScreen.classList.remove("hidden");
-
-  headerActions.classList.add("hidden");
-  topMenuBar.classList.add("hidden");
-
-  clearChat();
-  accessCodeInput.value = "";
+  clearSession();
+  showLoginUI();
 });
 
-// ===== MENU PANEL LOGIC =====
+// Auto-restore session
+(function boot() {
+  const s = getSession();
+  if (s?.token && s?.user?.campus) {
+    showChatUI(s.user.campus);
+  } else {
+    showLoginUI();
+  }
+})();
+
+// ===== MENU PANEL =====
 function openMenuPanel(type) {
-  // فعال کردن استیت ظاهری دکمه‌ها
-  menuPills.forEach((btn) =>
-    btn.classList.toggle("active", btn.dataset.menu === type)
-  );
+  menuPills.forEach((btn) => btn.classList.toggle("active", btn.dataset.menu === type));
 
   menuPanelTitle.textContent =
-    type === "policies"
-      ? "Policies"
-      : type === "protocols"
-      ? "Protocols"
-      : "Parent Handbook";
+    type === "policies" ? "Policies" :
+    type === "protocols" ? "Protocols" :
+    "Parent Handbook";
 
   menuPanelBody.innerHTML = "";
 
-  const items = MENU_ITEMS[type];
+  const s = getSession();
+  const campus = s?.user?.campus || "";
 
-  if (!items || items.length === 0) {
-    const p = document.createElement("p");
-    p.textContent = "Content coming soon.";
-    p.style.fontSize = "0.9rem";
-    p.style.color = "#6b7280";
-    menuPanelBody.appendChild(p);
+  if (type === "handbook") {
+    const label = document.createElement("div");
+    label.className = "menu-group-label";
+    label.textContent = campus ? `Your campus: ${campus}` : "Login required";
+    menuPanelBody.appendChild(label);
+
+    const btn = document.createElement("button");
+    btn.className = "menu-item-btn";
+    btn.textContent = campus ? `Open Parent Handbook — ${campus}` : "Please login first";
+    btn.disabled = !campus;
+
+    btn.addEventListener("click", () => {
+      closeMenuPanel();
+      askPolicy(`Please show me the parent handbook for campus ${campus}.`, true);
+    });
+    menuPanelBody.appendChild(btn);
+
+    const hint = document.createElement("p");
+    hint.style.fontSize = "0.9rem";
+    hint.style.color = "#6b7280";
+    hint.style.margin = "6px 2px 0";
+    hint.textContent = "You can also ask questions about the handbook (fees, hours, policies, etc.).";
+    menuPanelBody.appendChild(hint);
+
   } else {
+    const items = MENU_ITEMS[type] || [];
     const label = document.createElement("div");
     label.className = "menu-group-label";
     label.textContent = "Tap an item to view details";
@@ -187,10 +259,7 @@ function openMenuPanel(type) {
       btn.textContent = item.label;
       btn.addEventListener("click", () => {
         closeMenuPanel();
-        const qPrefix =
-          type === "protocols"
-            ? "Please show me the protocol: "
-            : "Please show me the policy: ";
+        const qPrefix = type === "protocols" ? "Please show me the protocol: " : "Please show me the policy: ";
         askPolicy(qPrefix + item.label, true);
       });
       menuPanelBody.appendChild(btn);
@@ -210,61 +279,15 @@ function closeMenuPanel() {
 menuPills.forEach((btn) => {
   btn.addEventListener("click", () => {
     const type = btn.dataset.menu;
-    // اگر تکراری کلیک شد، ببندیم
-    if (btn.classList.contains("active")) {
-      closeMenuPanel();
-    } else {
-      openMenuPanel(type);
-    }
+    if (btn.classList.contains("active")) closeMenuPanel();
+    else openMenuPanel(type);
   });
 });
 
 menuPanelClose.addEventListener("click", closeMenuPanel);
 menuOverlay.addEventListener("click", closeMenuPanel);
 
-// ===== CHAT / API =====
-async function askPolicy(question, fromMenu = false) {
-  const trimmed = question.trim();
-  if (!trimmed) return;
-
-  // پیام کاربر – همیشه زیر پیام قبلی
-  addMessage("user", trimmed);
-
-  showTyping();
-
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: trimmed })
-    });
-
-    hideTyping();
-
-    if (!res.ok) {
-      addMessage("assistant", "Network error — please try again.");
-      return;
-    }
-
-    const data = await res.json();
-
-    const title = data.policy?.title || "Policy found:";
-    const answer = data.answer || "";
-
-    const linkPart = data.policy?.link
-      ? `<br><br><a href="${data.policy.link}" target="_blank">Open full policy</a>`
-      : "";
-
-    addMessage(
-      "assistant",
-      `<b>${title}</b><br><br>${answer}${linkPart}`
-    );
-  } catch (err) {
-    hideTyping();
-    addMessage("assistant", "Error connecting to server.");
-  }
-}
-
+// ===== CHAT =====
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const q = userInput.value.trim();
@@ -272,3 +295,63 @@ chatForm.addEventListener("submit", (e) => {
   userInput.value = "";
   askPolicy(q, false);
 });
+
+async function askPolicy(question) {
+  const trimmed = question.trim();
+  if (!trimmed) return;
+
+  const s = getSession();
+  if (!s?.token) {
+    addMessage("assistant", "Please login first.");
+    return;
+  }
+
+  addMessage("user", escapeHtml(trimmed));
+  showTyping();
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${s.token}`
+      },
+      body: JSON.stringify({ query: trimmed })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    hideTyping();
+
+    if (!res.ok) {
+      // Friendly errors
+      const msg = data.error || "Something went wrong. Please try again.";
+      addMessage("assistant", escapeHtml(msg));
+      // If session expired
+      if (res.status === 401) {
+        clearSession();
+      }
+      return;
+    }
+
+    const title = data.policy?.title || "Result";
+    const answer = data.answer || "";
+    const linkPart = data.policy?.link
+      ? `<br><br><a href="${data.policy.link}" target="_blank" rel="noopener">Open full document</a>`
+      : "";
+
+    addMessage("assistant", `<b>${escapeHtml(title)}</b><br><br>${escapeHtml(answer)}${linkPart}`);
+  } catch (err) {
+    hideTyping();
+    addMessage("assistant", "Network error — please try again.");
+  }
+}
+
+// Prevent HTML injection
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
