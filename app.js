@@ -1,8 +1,8 @@
-// app.js
+// app.js (REPLACE ENTIRE FILE)
 
 // ===== CONFIG =====
 const API_BASE = "https://cms-policy-chatbot-v2.shokbhl.workers.dev";
-const LOGIN_URL = `${API_BASE}/login`;
+const LOGIN_URL = `${API_BASE}/auth/login`;   // ✅ FIX
 const API_URL = `${API_BASE}/api`;
 
 // ===== MENUS =====
@@ -38,10 +38,10 @@ const MENU_ITEMS = {
     { id: "other", label: "other" },
     { id: "closing", label: "In closing" }
   ],
-  handbook: [] // we render based on campus
+  handbook: []
 };
 
-// ===== DOM =====
+// ===== DOM (matches your HTML) =====
 const loginScreen = document.getElementById("login-screen");
 const chatScreen = document.getElementById("chat-screen");
 
@@ -51,11 +51,10 @@ const passwordInput = document.getElementById("password");
 const campusSelect = document.getElementById("campus");
 const loginError = document.getElementById("login-error");
 
-const headerActions = document.getElementById("header-actions");
+const topActions = document.getElementById("top-actions");     // ✅ in your HTML
+const campusPill = document.getElementById("campus-pill");     // ✅ in your HTML
 const logoutBtn = document.getElementById("logout-btn");
-const campusBadge = document.getElementById("campus-badge");
 
-const topMenuBar = document.getElementById("top-menu-bar");
 const menuPills = document.querySelectorAll(".menu-pill");
 
 const chatWindow = document.getElementById("chat-window");
@@ -100,6 +99,7 @@ function clearChat() {
 
 function showTyping() {
   hideTyping();
+
   const wrapper = document.createElement("div");
   wrapper.className = "typing-bubble";
 
@@ -129,24 +129,27 @@ function hideTyping() {
 function showChatUI(campus) {
   loginScreen.classList.add("hidden");
   chatScreen.classList.remove("hidden");
-  headerActions.classList.remove("hidden");
-  topMenuBar.classList.remove("hidden");
+  topActions.classList.remove("hidden");
 
-  campusBadge.classList.remove("hidden");
-  campusBadge.textContent = `Campus: ${campus}`;
+  campusPill.textContent = `Campus: ${campus}`;
 
   clearChat();
-  addMessage("assistant", "Hi 👋 You can ask about any CMS policy/protocol, or open your campus Parent Handbook from the menu above.");
+  addMessage(
+    "assistant",
+    "Hi 👋 You can ask about any CMS policy/protocol. Use the menu for quick access, or open your campus Parent Handbook."
+  );
 }
 
 function showLoginUI() {
   closeMenuPanel();
+
   chatScreen.classList.add("hidden");
   loginScreen.classList.remove("hidden");
-  headerActions.classList.add("hidden");
-  topMenuBar.classList.add("hidden");
-  campusBadge.classList.add("hidden");
+  topActions.classList.add("hidden");
+
   clearChat();
+
+  loginError.classList.add("hidden");
   loginError.textContent = "";
   usernameInput.value = "";
   passwordInput.value = "";
@@ -156,6 +159,8 @@ function showLoginUI() {
 // ===== AUTH =====
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+
+  loginError.classList.add("hidden");
   loginError.textContent = "";
 
   const username = usernameInput.value.trim();
@@ -164,6 +169,7 @@ loginForm.addEventListener("submit", async (e) => {
 
   if (!username || !password || !campus) {
     loginError.textContent = "Please enter username, password, and campus.";
+    loginError.classList.remove("hidden");
     return;
   }
 
@@ -178,18 +184,22 @@ loginForm.addEventListener("submit", async (e) => {
 
     if (!res.ok) {
       loginError.textContent = data.error || "Login failed.";
+      loginError.classList.remove("hidden");
       return;
     }
 
-    // Save session
+    // ✅ Worker returns: { ok, token, role, campus }
     setSession({
       token: data.token,
-      user: data.user
+      username,
+      role: data.role,
+      campus: data.campus
     });
 
-    showChatUI(data.user.campus);
-  } catch (err) {
+    showChatUI(data.campus);
+  } catch {
     loginError.textContent = "Network error. Please try again.";
+    loginError.classList.remove("hidden");
   }
 });
 
@@ -201,16 +211,15 @@ logoutBtn.addEventListener("click", () => {
 // Auto-restore session
 (function boot() {
   const s = getSession();
-  if (s?.token && s?.user?.campus) {
-    showChatUI(s.user.campus);
-  } else {
-    showLoginUI();
-  }
+  if (s?.token && s?.campus) showChatUI(s.campus);
+  else showLoginUI();
 })();
 
 // ===== MENU PANEL =====
 function openMenuPanel(type) {
-  menuPills.forEach((btn) => btn.classList.toggle("active", btn.dataset.menu === type));
+  menuPills.forEach((btn) =>
+    btn.classList.toggle("active", btn.dataset.menu === type)
+  );
 
   menuPanelTitle.textContent =
     type === "policies" ? "Policies" :
@@ -220,7 +229,7 @@ function openMenuPanel(type) {
   menuPanelBody.innerHTML = "";
 
   const s = getSession();
-  const campus = s?.user?.campus || "";
+  const campus = s?.campus || "";
 
   if (type === "handbook") {
     const label = document.createElement("div");
@@ -235,19 +244,20 @@ function openMenuPanel(type) {
 
     btn.addEventListener("click", () => {
       closeMenuPanel();
-      askPolicy(`Please show me the parent handbook for campus ${campus}.`, true);
+      askPolicy(`Please show me the parent handbook for campus ${campus}.`);
     });
+
     menuPanelBody.appendChild(btn);
 
     const hint = document.createElement("p");
     hint.style.fontSize = "0.9rem";
     hint.style.color = "#6b7280";
     hint.style.margin = "6px 2px 0";
-    hint.textContent = "You can also ask questions about the handbook (fees, hours, policies, etc.).";
+    hint.textContent = "You can also ask questions about the handbook (fees, hours, etc.).";
     menuPanelBody.appendChild(hint);
-
   } else {
     const items = MENU_ITEMS[type] || [];
+
     const label = document.createElement("div");
     label.className = "menu-group-label";
     label.textContent = "Tap an item to view details";
@@ -259,20 +269,25 @@ function openMenuPanel(type) {
       btn.textContent = item.label;
       btn.addEventListener("click", () => {
         closeMenuPanel();
-        const qPrefix = type === "protocols" ? "Please show me the protocol: " : "Please show me the policy: ";
-        askPolicy(qPrefix + item.label, true);
+        const qPrefix =
+          type === "protocols"
+            ? "Please show me the protocol: "
+            : "Please show me the policy: ";
+        askPolicy(qPrefix + item.label);
       });
       menuPanelBody.appendChild(btn);
     });
   }
 
   menuPanel.classList.remove("hidden");
+  menuOverlay.classList.remove("hidden");
   menuOverlay.classList.add("active");
 }
 
 function closeMenuPanel() {
   menuPanel.classList.add("hidden");
   menuOverlay.classList.remove("active");
+  menuOverlay.classList.add("hidden");
   menuPills.forEach((btn) => btn.classList.remove("active"));
 }
 
@@ -293,7 +308,7 @@ chatForm.addEventListener("submit", (e) => {
   const q = userInput.value.trim();
   if (!q) return;
   userInput.value = "";
-  askPolicy(q, false);
+  askPolicy(q);
 });
 
 async function askPolicy(question) {
@@ -314,8 +329,9 @@ async function askPolicy(question) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${s.token}`
+        "Authorization": `Bearer ${s.token}`
       },
+      // You CAN also send campus, but worker already uses token.sel.
       body: JSON.stringify({ query: trimmed })
     });
 
@@ -323,24 +339,29 @@ async function askPolicy(question) {
     hideTyping();
 
     if (!res.ok) {
-      // Friendly errors
       const msg = data.error || "Something went wrong. Please try again.";
       addMessage("assistant", escapeHtml(msg));
-      // If session expired
       if (res.status === 401) {
         clearSession();
+        addMessage("assistant", "Session expired. Please login again.");
+        showLoginUI();
       }
       return;
     }
 
-    const title = data.policy?.title || "Result";
+    const docTitle = data.policy?.title || "Result";
+    const docSource = data.policy?.source ? ` <span class="muted">(from ${escapeHtml(data.policy.source)})</span>` : "";
     const answer = data.answer || "";
+
     const linkPart = data.policy?.link
       ? `<br><br><a href="${data.policy.link}" target="_blank" rel="noopener">Open full document</a>`
       : "";
 
-    addMessage("assistant", `<b>${escapeHtml(title)}</b><br><br>${escapeHtml(answer)}${linkPart}`);
-  } catch (err) {
+    addMessage(
+      "assistant",
+      `<b>${escapeHtml(docTitle)}</b>${docSource}<br><br>${escapeHtml(answer)}${linkPart}`
+    );
+  } catch {
     hideTyping();
     addMessage("assistant", "Network error — please try again.");
   }
