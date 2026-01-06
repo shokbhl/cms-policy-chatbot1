@@ -54,20 +54,34 @@ body{
   min-width: 0;
 }
 .brand-logo{
-  width:54px;height:54px;
+  width: 64px;   /* قبلاً کوچیک بود */
+  height: 64px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #e9efff, #f7fbff);
-  border: 1px solid var(--line);
+  overflow: hidden;
   display:flex;
   align-items:center;
   justify-content:center;
-  overflow:hidden;
-  flex: 0 0 auto;
 }
+
 .brand-logo img{
   width: 100%;
   height: 100%;
-  object-fit: cover; /* اگر لوگو عریضه */
+  object-fit: contain;
+}
+.brand-logo{
+  width: 64px;   /* قبلاً کوچیک بود */
+  height: 64px;
+  border-radius: 14px;
+  overflow: hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.brand-logo img{
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .brand-text{
   min-width: 0;
