@@ -4,64 +4,52 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>CMS Policy Chatbot</title>
-
-  <!-- CSS -->
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=10" />
 </head>
-<body>
-  <div class="app">
 
-    <!-- ================= TOP BAR ================= -->
+<body>
+  <div class="app-shell">
+
+    <!-- TOP BAR -->
     <header class="topbar">
       <div class="brand">
         <div class="brand-logo">
           <img src="cms-logo.png" alt="CMS" />
         </div>
         <div class="brand-text">
-          <div class="title">CMS Policy Chatbot</div>
-          <div class="subtitle">Internal staff assistant</div>
+          <div class="brand-title">CMS Policy Chatbot</div>
+          <div class="brand-subtitle">Internal staff assistant</div>
         </div>
       </div>
 
-      <!-- Right side actions (shown after login) -->
-      <div class="top-actions hidden" id="top-actions">
-        <div class="pill" id="campus-pill">Campus: —</div>
-        <button class="btn ghost" id="logout-btn">Logout</button>
+      <div class="header-actions hidden" id="top-actions">
+        <div class="badge" id="campus-pill">Campus: —</div>
+        <button class="btn btn-ghost" id="logout-btn" type="button">Logout</button>
       </div>
     </header>
 
-    <!-- ================= MAIN ================= -->
-    <main class="container">
+    <!-- MAIN -->
+    <main class="screen">
 
-      <!-- ========== LOGIN SCREEN ========== -->
-      <section class="card" id="login-screen">
-        <h1>Sign in</h1>
+      <!-- LOGIN -->
+      <section class="card login-card" id="login-screen">
+        <h1 class="h1">Sign in</h1>
         <p class="muted">Enter your username + password and select your campus.</p>
 
-        <form id="login-form" class="grid">
+        <form id="login-form" class="form">
           <div>
-            <label>Username</label>
-            <input
-              id="username"
-              type="text"
-              placeholder="e.g. staff_yc"
-              autocomplete="username"
-            />
+            <div class="label">Username</div>
+            <input id="username" class="input" type="text" placeholder="e.g. staff_yc" autocomplete="username" />
           </div>
 
           <div>
-            <label>Password</label>
-            <input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              autocomplete="current-password"
-            />
+            <div class="label">Password</div>
+            <input id="password" class="input" type="password" placeholder="••••••••" autocomplete="current-password" />
           </div>
 
           <div>
-            <label>Campus</label>
-            <select id="campus">
+            <div class="label">Campus</div>
+            <select id="campus" class="input">
               <option value="">Select campus…</option>
               <option value="YC">YC</option>
               <option value="MC">MC</option>
@@ -71,58 +59,55 @@
             </select>
           </div>
 
-          <div class="grid-actions">
-            <button class="btn primary" type="submit">Login</button>
-            <div id="login-error" class="error hidden"></div>
+          <div class="error" id="login-error"></div>
+
+          <button class="btn btn-primary" type="submit">Login</button>
+
+          <div class="hint">
+            Tip: Staff must pick their own campus. Admin can access all campuses.
           </div>
         </form>
-
-        <div class="tip">
-          Tip: Staff must pick their own campus. Admin can access all campuses.
-        </div>
       </section>
 
-      <!-- ========== CHAT SCREEN ========== -->
-      <section class="card hidden" id="chat-screen">
+      <!-- CHAT -->
+      <section class="hidden" id="chat-screen">
 
-        <!-- Menu pills -->
-        <div class="menu-row">
-          <button class="menu-pill" data-menu="policies">Policies</button>
-          <button class="menu-pill" data-menu="protocols">Protocols</button>
-          <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
+        <div class="menu-bar" id="top-menu-bar">
+          <button class="menu-pill" data-menu="policies" type="button">Policies</button>
+          <button class="menu-pill" data-menu="protocols" type="button">Protocols</button>
+          <button class="menu-pill" data-menu="handbook" type="button">Parent Handbook</button>
         </div>
 
-        <!-- Chat messages -->
-        <div class="chat" id="chat-window"></div>
+        <div class="chat-card">
+          <div class="chat-head">
+            <div class="chat-title">Ask any CMS policy question.</div>
+          </div>
 
-        <!-- Chat input -->
-        <form class="chatbar" id="chat-form">
-          <input
-            id="user-input"
-            type="text"
-            placeholder="Ask a CMS policy question…"
-          />
-          <button class="btn primary" type="submit">Ask</button>
-        </form>
+          <div class="chat-window" id="chat-window"></div>
 
-        <div class="footer-note">© CMS — Staff internal tool</div>
+          <form class="chat-form" id="chat-form">
+            <input id="user-input" class="chat-input" type="text" placeholder="Ask a CMS policy question…" />
+            <button class="btn btn-primary chat-send" type="submit">Ask</button>
+          </form>
+        </div>
+
+        <div class="footer">© CMS — Staff internal tool</div>
       </section>
 
-      <!-- ========== SIDE MENU PANEL ========== -->
-      <div class="overlay hidden" id="menu-overlay"></div>
-
-      <aside class="panel hidden" id="menu-panel">
-        <div class="panel-head">
-          <div class="panel-title" id="menu-panel-title">Menu</div>
-          <button class="btn ghost" id="menu-panel-close">Close</button>
+      <!-- MENU PANEL -->
+      <div class="overlay" id="menu-overlay"></div>
+      <aside class="menu-panel hidden" id="menu-panel">
+        <div class="menu-panel-top">
+          <div class="menu-panel-title" id="menu-panel-title">Menu</div>
+          <button class="btn btn-ghost btn-icon" id="menu-panel-close" type="button">Close</button>
         </div>
-        <div class="panel-body" id="menu-panel-body"></div>
+        <div class="menu-panel-body" id="menu-panel-body"></div>
       </aside>
 
     </main>
   </div>
 
-  <!-- JS (cache-busted) -->
-  <script src="app.js?v=4"></script>
+  <!-- IMPORTANT: فقط همین یک اسکریپت -->
+  <script src="app.js?v=10"></script>
 </body>
 </html>
