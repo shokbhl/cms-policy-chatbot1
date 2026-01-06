@@ -10,7 +10,7 @@
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-logo" title="Central Montessori School">
+        <div class="brand-logo">
           <img src="cms-logo.png" alt="CMS" />
         </div>
         <div class="brand-text">
@@ -19,31 +19,34 @@
         </div>
       </div>
 
+      <!-- IMPORTANT: id="top-actions" -->
       <div class="top-actions hidden" id="top-actions">
+        <!-- IMPORTANT: id="campus-pill" -->
         <div class="pill" id="campus-pill">Campus: —</div>
-        <button class="btn ghost" id="logout-btn" type="button">Logout</button>
+        <!-- IMPORTANT: id="logout-btn" -->
+        <button class="btn ghost" id="logout-btn">Logout</button>
       </div>
     </header>
 
     <main class="container">
 
       <!-- LOGIN -->
-      <section class="card login-card" id="login-screen">
+      <section class="card" id="login-screen">
         <h1>Sign in</h1>
         <p class="muted">Enter your username + password and select your campus.</p>
 
         <form id="login-form" class="grid">
-          <div class="field">
+          <div>
             <label>Username</label>
             <input id="username" type="text" placeholder="e.g. staff_yc" autocomplete="username" />
           </div>
 
-          <div class="field">
+          <div>
             <label>Password</label>
             <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
           </div>
 
-          <div class="field">
+          <div>
             <label>Campus</label>
             <select id="campus">
               <option value="">Select campus…</option>
@@ -69,9 +72,9 @@
       <!-- CHAT -->
       <section class="card hidden" id="chat-screen">
         <div class="menu-row">
-          <button class="menu-pill" type="button" data-menu="policies">Policies</button>
-          <button class="menu-pill" type="button" data-menu="protocols">Protocols</button>
-          <button class="menu-pill" type="button" data-menu="handbook">Parent Handbook</button>
+          <button class="menu-pill" data-menu="policies">Policies</button>
+          <button class="menu-pill" data-menu="protocols">Protocols</button>
+          <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
         </div>
 
         <div class="chat" id="chat-window"></div>
@@ -86,11 +89,10 @@
 
       <!-- MENU PANEL -->
       <div class="overlay hidden" id="menu-overlay"></div>
-
-      <aside class="panel hidden" id="menu-panel" aria-hidden="true">
+      <aside class="panel hidden" id="menu-panel">
         <div class="panel-head">
           <div class="panel-title" id="menu-panel-title">Menu</div>
-          <button class="btn ghost" id="menu-panel-close" type="button">Close</button>
+          <button class="btn ghost" id="menu-panel-close">Close</button>
         </div>
         <div class="panel-body" id="menu-panel-body"></div>
       </aside>
