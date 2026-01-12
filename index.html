@@ -1,3 +1,4 @@
+<!-- index.html (SSO via Cloudflare Access) + Campus picker on entry + Campus switcher in app + Admin mode button -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,21 +20,41 @@
         </div>
       </div>
 
-      <!-- Right side: only after login -->
-      <div id="header-actions" class="header-actions hidden">
-        <span id="campus-badge" class="campus-badge">Campus: —</span>
-        <a id="admin-logs-btn" class="secondary-btn hidden" href="logs.html">Admin Logs</a>
-        <button id="logout-btn" class="secondary-btn">Logout</button>
+      <!-- Right side -->
+      <div class="header-actions">
+        <span id="mode-badge" class="status-badge neutral" title="Your current permission mode">
+          MODE: STAFF
+        </span>
+
+        <div class="campus-switch">
+          <label class="sr-only" for="campus-select">Campus</label>
+          <select id="campus-select" aria-label="Campus">
+            <option value="" selected disabled>Select campus</option>
+            <option value="MC">MC</option>
+            <option value="SC">SC</option>
+            <option value="TC">TC</option>
+            <option value="WC">WC</option>
+            <option value="YC">YC</option>
+          </select>
+        </div>
+
+        <button id="admin-mode-btn" class="secondary-btn" type="button" title="Enable admin mode using Admin PIN">
+          Admin Mode
+        </button>
+
+        <a id="admin-logs-link" class="secondary-btn hidden" href="logs.html" title="Open Admin Dashboard">
+          Admin Logs
+        </a>
       </div>
     </div>
   </header>
 
-  <!-- Top menu bar (after login) -->
-  <nav id="top-menu-bar" class="top-menu-bar hidden">
+  <!-- Top menu bar -->
+  <nav id="top-menu-bar" class="top-menu-bar">
     <div class="top-menu-inner">
-      <button class="menu-pill" data-menu="policies">Policies</button>
-      <button class="menu-pill" data-menu="protocols">Protocols</button>
-      <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
+      <button class="menu-pill" data-menu="policies" type="button">Policies</button>
+      <button class="menu-pill" data-menu="protocols" type="button">Protocols</button>
+      <button class="menu-pill" data-menu="handbook" type="button">Parent Handbook</button>
     </div>
   </nav>
 
@@ -47,32 +68,18 @@
       <div id="menu-panel-body" class="menu-panel-body"></div>
     </div>
   </div>
-  <div id="menu-overlay" class="overlay hidden"></div>
+  <div id="menu-overlay" class="overlay"></div>
 
   <!-- MAIN -->
   <main class="cms-main">
-    <!-- LOGIN CARD -->
-    <section id="login-screen" class="card">
-      <h2>Staff Access</h2>
-      <p class="helper-text">Please enter the staff or admin access code.</p>
-
-      <form id="login-form" class="form-row">
-        <input
-          type="password"
-          id="access-code"
-          placeholder="Access code"
-          autocomplete="off"
-          required
-        />
-        <button type="submit" class="primary-btn">Login</button>
-      </form>
-
-      <p id="login-error" class="error-text"></p>
-    </section>
-
     <!-- CHAT CARD -->
-    <section id="chat-screen" class="card hidden">
-      <p class="helper-text">Ask any CMS policy question.</p>
+    <section id="chat-screen" class="card">
+      <div class="row-between">
+        <p class="helper-text" style="margin:0">
+          Ask any CMS policy question. (Handbook answers depend on selected campus.)
+        </p>
+        <span id="last-campus-hint" class="muted" style="font-size:0.85rem"></span>
+      </div>
 
       <div id="chat-window" class="chat-window"></div>
 
@@ -90,6 +97,66 @@
   </main>
 
   <footer class="cms-footer">© CMS – Staff internal tool</footer>
+
+  <!-- CAMPUS PICKER MODAL (shows on first visit or if campus not selected) -->
+  <div id="campus-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="campus-modal-title">
+    <div class="modal-inner">
+      <div class="modal-header">
+        <h2 id="campus-modal-title">Select your campus</h2>
+        <button id="campus-modal-close" class="icon-btn small-icon" type="button" title="Close">×</button>
+      </div>
+
+      <p class="muted" style="margin-top:0">
+        This is used to load the correct Parent Handbook (MC/SC/TC/WC/YC). You can change it anytime in the header.
+      </p>
+
+      <div class="modal-body">
+        <div class="filters-row" style="margin-top:0">
+          <select id="campus-modal-select" aria-label="Campus (modal)">
+            <option value="" selected disabled>Choose campus…</option>
+            <option value="MC">MC</option>
+            <option value="SC">SC</option>
+            <option value="TC">TC</option>
+            <option value="WC">WC</option>
+            <option value="YC">YC</option>
+          </select>
+        </div>
+
+        <div class="row-between" style="margin-top:12px">
+          <span class="muted" style="font-size:0.85rem" id="campus-modal-msg"></span>
+          <button id="campus-save-btn" class="primary-btn" type="button">Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN PIN MODAL -->
+  <div id="admin-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="admin-modal-title">
+    <div class="modal-inner">
+      <div class="modal-header">
+        <h2 id="admin-modal-title">Enable Admin Mode</h2>
+        <button id="admin-modal-close" class="icon-btn small-icon" type="button" title="Close">×</button>
+      </div>
+
+      <p class="muted" style="margin-top:0">
+        Enter the Admin PIN to enable Admin Mode for 8 hours. This is NOT your Google password.
+      </p>
+
+      <div class="modal-body">
+        <div class="form-row" style="margin-top:0">
+          <input
+            id="admin-pin-input"
+            type="password"
+            placeholder="Admin PIN"
+            autocomplete="off"
+          />
+          <button id="admin-pin-submit" class="primary-btn" type="button">Enable</button>
+        </div>
+        <p id="admin-modal-error" class="error-text" style="margin-bottom:0"></p>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
