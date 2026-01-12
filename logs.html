@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CMS Admin Logs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <!-- HEADER -->
+  <header class="cms-header">
+    <div class="cms-header-inner">
+      <div class="left-header">
+        <img src="cms-logo.png" class="cms-logo" alt="Central Montessori School logo" />
+        <div class="cms-title-block">
+          <h1>CMS Admin Logs</h1>
+          <p class="cms-subtitle">Monitoring · Alerts · Trends</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <a href="index.html" class="secondary-btn">Back to Chat</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="cms-main">
+
+    <!-- ACCESS CARD -->
+    <section class="card">
+      <h2>Admin Access</h2>
+      <p class="helper-text">Enter admin code to view system logs.</p>
+
+      <div class="form-row">
+        <input
+          type="password"
+          id="admin-code"
+          placeholder="Admin code"
+          autocomplete="off"
+        />
+        <button id="load-logs-btn" class="primary-btn">Load Logs</button>
+      </div>
+
+      <p id="admin-error" class="error-text"></p>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section class="card hidden" id="dashboard-section">
+
+      <div class="dash-header">
+        <div class="dash-title-row">
+          <h2 style="margin:0;">Dashboard</h2>
+          <!-- ✅ Alert badge -->
+          <span id="dash-badge" class="status-badge neutral">—</span>
+        </div>
+
+        <div class="dash-sub">
+          System health overview ·
+          <span class="muted">Last refresh:</span>
+          <span id="last-refresh">—</span>
+        </div>
+      </div>
+
+      <!-- ALERT BOX -->
+      <div id="alert-box" class="alert-box hidden"></div>
+
+      <!-- QUICK STATS -->
+      <div class="dash-cards">
+        <div class="dash-card">
+          <div class="dash-label">Total</div>
+          <div id="stat-total" class="dash-value">—</div>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-label">Errors</div>
+          <div id="stat-errors" class="dash-value">—</div>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-label">ERR %</div>
+          <div id="stat-errpct" class="dash-value">—</div>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-label">Avg ms</div>
+          <div id="stat-avgms" class="dash-value">—</div>
+        </div>
+      </div>
+
+      <!-- TREND CHART -->
+      <div class="dash-panel" style="margin-top:14px;">
+        <h3>7-Day Trend</h3>
+        <canvas id="trendChart" height="120"></canvas>
+        <p class="helper-text" style="margin-top:6px;">
+          Daily total (dark), ERR% (mid), Avg latency ms (light)
+        </p>
+      </div>
+    </section>
+
+    <!-- FILTERS -->
+    <section class="card hidden" id="filters-section">
+      <h2>Filters</h2>
+
+      <div class="filters-row">
+        <select id="filter-campus">
+          <option value="">All campuses</option>
+          <option value="MC">Maplehurst (MC)</option>
+          <option value="SC">Senior Casa (SC)</option>
+          <option value="TC">Toddler Casa (TC)</option>
+          <option value="WC">Willowdale (WC)</option>
+          <option value="YC">York Mills (YC)</option>
+        </select>
+
+        <select id="filter-role">
+          <option value="">All roles</option>
+          <option value="staff">Staff</option>
+          <option value="admin">Admin</option>
+        </select>
+
+        <input type="date" id="filter-date" />
+
+        <input
+          type="text"
+          id="filter-search"
+          placeholder="Search query…"
+        />
+      </div>
+    </section>
+
+    <!-- LOG TABLE -->
+    <section class="card hidden" id="logs-section">
+      <h2>Request Logs</h2>
+
+      <div class="table-wrap">
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Campus</th>
+              <th>Role</th>
+              <th>Query</th>
+              <th>Status</th>
+              <th>ms</th>
+            </tr>
+          </thead>
+          <tbody id="logs-body">
+            <!-- filled by JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="cms-footer">
+    © CMS – Admin monitoring
+  </footer>
+
+  <!-- SCRIPT -->
+  <script src="logs.js"></script>
+</body>
+</html>
