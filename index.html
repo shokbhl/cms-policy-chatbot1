@@ -21,12 +21,8 @@
 
       <!-- Right side: only after login -->
       <div id="header-actions" class="header-actions hidden">
-        <!-- ✅ Campus badge -->
         <span id="campus-badge" class="campus-badge">Campus: —</span>
-
-        <!-- ✅ Admin logs (only shows for admin via JS) -->
         <a id="admin-logs-btn" class="secondary-btn hidden" href="logs.html">Admin Logs</a>
-
         <button id="logout-btn" class="secondary-btn">Logout</button>
       </div>
     </div>
@@ -46,14 +42,11 @@
     <div class="menu-panel-inner">
       <div class="menu-panel-header">
         <h2 id="menu-panel-title">Menu</h2>
-        <button id="menu-panel-close" class="icon-btn small-icon">×</button>
+        <button id="menu-panel-close" class="icon-btn small-icon" type="button">×</button>
       </div>
-      <div id="menu-panel-body" class="menu-panel-body">
-        <!-- filled by JS -->
-      </div>
+      <div id="menu-panel-body" class="menu-panel-body"></div>
     </div>
   </div>
-
   <div id="menu-overlay" class="overlay hidden"></div>
 
   <!-- MAIN -->
@@ -61,7 +54,7 @@
     <!-- LOGIN CARD -->
     <section id="login-screen" class="card">
       <h2>Staff Access</h2>
-      <p>Please enter the staff or admin access code.</p>
+      <p class="helper-text">Please enter the staff or admin access code.</p>
 
       <form id="login-form" class="form-row">
         <input
@@ -75,10 +68,6 @@
       </form>
 
       <p id="login-error" class="error-text"></p>
-
-      <p class="helper-text" style="margin-top:10px;">
-        Tip: After login you can choose campus, then ask policies or open the handbook.
-      </p>
     </section>
 
     <!-- CHAT CARD -->
@@ -101,7 +90,6 @@
   </main>
 
   <footer class="cms-footer">© CMS – Staff internal tool</footer>
-
   <script src="app.js"></script>
 </body>
 </html>
