@@ -1,0 +1,331 @@
+/* ================= ROOT VARIABLES ================= */
+:root {
+  --cms-navy: #003b8e;
+  --cms-yellow: #f5c400;
+  --cms-bg: #f5f7fb;
+  --cms-border: #d7deea;
+  --cms-text: #1f2933;
+  --cms-muted: #6b7280;
+  --cms-radius: 16px;
+
+  --user-bubble: #003b8e;
+  --bot-bubble: #ffffff;
+}
+
+/* ================= RESET ================= */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top left, #ffffff 0%, #f5f7fb 40%, #e6ecff 100%);
+  color: var(--cms-text);
+}
+
+/* ================= HEADER ================= */
+.cms-header {
+  background: #ffffffcc;
+  backdrop-filter: blur(10px);
+  border-bottom: 2px solid var(--cms-navy);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.cms-header-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.left-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cms-logo {
+  max-height: 52px;
+  width: auto;
+}
+
+.cms-title-block h1 {
+  margin: 0;
+  font-size: 1.45rem;
+  color: var(--cms-navy);
+}
+
+.cms-subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--cms-muted);
+}
+
+/* Header actions */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ================= CAMPUS BADGE ================= */
+.campus-badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: #eef4ff;
+  color: var(--cms-navy);
+  border: 1px solid var(--cms-border);
+}
+
+/* ================= BUTTONS & INPUTS ================= */
+input[type="password"],
+input[type="text"] {
+  flex: 1;
+  border-radius: 999px;
+  padding: 10px 14px;
+  border: 1px solid var(--cms-border);
+  background: #f9fafb;
+  font-size: 0.95rem;
+}
+
+input:focus {
+  border-color: var(--cms-navy);
+  box-shadow: 0 0 0 2px rgba(0, 59, 142, 0.25);
+  background: #fff;
+  outline: none;
+}
+
+.primary-btn,
+.secondary-btn {
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  cursor: pointer;
+  border: none;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, var(--cms-navy), #002a68);
+  color: #fff;
+  box-shadow: 0 8px 16px rgba(0, 59, 142, 0.35);
+}
+
+.primary-btn:hover {
+  transform: translateY(-1px);
+}
+
+.secondary-btn {
+  background: #ffffff;
+  color: var(--cms-navy);
+  border: 1px solid var(--cms-navy);
+}
+
+.secondary-btn:hover {
+  background: #eef4ff;
+}
+
+/* ================= MAIN LAYOUT ================= */
+.cms-main {
+  max-width: 960px;
+  margin: 20px auto 32px;
+  padding: 0 16px;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: var(--cms-radius);
+  border: 1px solid var(--cms-border);
+  padding: 22px 18px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+}
+
+.card h2 {
+  margin-top: 0;
+  color: var(--cms-navy);
+}
+
+.helper-text {
+  font-size: 0.9rem;
+  color: var(--cms-muted);
+}
+
+.error-text {
+  color: #b91c1c;
+  margin-top: 6px;
+}
+
+/* ================= TOP MENU ================= */
+.top-menu-bar {
+  border-bottom: 1px solid var(--cms-border);
+  background: #f9fafb;
+}
+
+.top-menu-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 8px 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.menu-pill {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: none;
+  background: #e5e7f7;
+  color: var(--cms-navy);
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.menu-pill.active,
+.menu-pill:hover {
+  background: var(--cms-navy);
+  color: #fff;
+}
+
+/* ================= CHAT ================= */
+.chat-window {
+  height: 360px;
+  overflow-y: auto;
+  border-radius: var(--cms-radius);
+  padding: 12px;
+  background: linear-gradient(180deg, #f9fafb 0%, #e9efff 100%);
+  border: 1px solid var(--cms-border);
+}
+
+.msg {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  margin: 6px 0;
+  line-height: 1.4;
+  font-size: 0.95rem;
+}
+
+.msg.user {
+  background: var(--user-bubble);
+  color: #fff;
+  margin-left: auto;
+  border-bottom-right-radius: 4px;
+}
+
+.msg.assistant {
+  background: var(--bot-bubble);
+  border: 1px solid var(--cms-border);
+  margin-right: auto;
+  border-bottom-left-radius: 4px;
+}
+
+/* ================= MENU PANEL ================= */
+.menu-panel {
+  position: fixed;
+  top: 72px;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+}
+
+.menu-panel-inner {
+  max-width: 520px;
+  width: 100%;
+  margin: 0 16px;
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid var(--cms-border);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.2);
+}
+
+.menu-panel-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--cms-border);
+  display: flex;
+  justify-content: space-between;
+}
+
+.menu-item-btn {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: none;
+  background: #f3f4ff;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.menu-item-btn:hover {
+  background: #e0e7ff;
+}
+
+/* ================= OVERLAY ================= */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 50;
+}
+
+/* ================= DASHBOARD BADGE ================= */
+.status-badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.status-badge.ok {
+  background: #16a34a15;
+  color: #166534;
+  border: 1px solid #16a34a55;
+}
+
+.status-badge.warn {
+  background: #f59e0b15;
+  color: #92400e;
+  border: 1px solid #f59e0b66;
+}
+
+.status-badge.bad {
+  background: #dc262615;
+  color: #991b1b;
+  border: 1px solid #dc262655;
+}
+
+.status-badge.neutral {
+  color: var(--cms-muted);
+}
+
+/* ================= UTILS ================= */
+.hidden {
+  display: none !important;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 640px) {
+  .cms-header-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .chat-window {
+    height: 300px;
+  }
+
+  .msg {
+    max-width: 90%;
+  }
+}
