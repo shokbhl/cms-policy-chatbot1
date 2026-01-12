@@ -7,7 +7,7 @@
 // - This file assumes your Worker is at API_URL below.
 // - Cloudflare Access protects the Pages site + Worker. If Access blocks, /api will return 401.
 
-const API_URL = "https://cms-policy-worker.shokbhl.workers.dev"; // no trailing slash
+const API_URL = ""; // same-origin (Pages Functions proxy)
 
 // ===== Menus (same as your working version) =====
 const MENU_ITEMS = {
