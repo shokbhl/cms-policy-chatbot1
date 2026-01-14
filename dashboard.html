@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CMS Admin Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <header class="cms-header">
+    <div class="cms-header-inner">
+      <div class="left-header">
+        <div class="cms-title-block">
+          <h1>Admin Dashboard</h1>
+          <p class="cms-subtitle">Health & performance summary</p>
+        </div>
+      </div>
+      <div class="right-header">
+        <a class="secondary-btn" href="index.html">Back</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="cms-main">
+    <section class="card">
+      <div class="chat-meta">
+        <span id="badge" class="meta-chip">STATUS: —</span>
+        <span id="last" class="meta-muted"></span>
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+        <button id="refresh" class="primary-btn">Refresh</button>
+        <button id="auto" class="secondary-btn">Auto refresh: ON (5 min)</button>
+      </div>
+
+      <div id="error" class="error-text"></div>
+
+      <div id="cards" style="display:grid; grid-template-columns:repeat(4, minmax(160px, 1fr)); gap:10px; margin:10px 0 14px;">
+        <div class="meta-chip" id="c-total">Total: —</div>
+        <div class="meta-chip" id="c-ok">OK: —</div>
+        <div class="meta-chip" id="c-bad">BAD: —</div>
+        <div class="meta-chip" id="c-avg">Avg ms: —</div>
+      </div>
+
+      <div style="overflow:auto; border:1px solid var(--cms-border); border-radius:12px;">
+        <table style="width:100%; border-collapse:collapse; min-width:540px;">
+          <thead style="background:#f3f6ff;">
+            <tr>
+              <th style="text-align:left; padding:10px; border-bottom:1px solid var(--cms-border);">Campus</th>
+              <th style="text-align:left; padding:10px; border-bottom:1px solid var(--cms-border);">Total</th>
+              <th style="text-align:left; padding:10px; border-bottom:1px solid var(--cms-border);">OK</th>
+              <th style="text-align:left; padding:10px; border-bottom:1px solid var(--cms-border);">BAD</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <p class="helper-text" style="margin-top:12px;">
+        Tooltip: hover on badge for quick meaning (OK/WARN/BAD).
+      </p>
+    </section>
+  </main>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
