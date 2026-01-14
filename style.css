@@ -440,6 +440,29 @@ input:focus {
 @media (max-width: 760px) {
   .form-grid { grid-template-columns: 1fr; }
 }
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.logs-table th, .logs-table td {
+  border: 1px solid var(--cms-border);
+  padding: 10px;
+  vertical-align: top;
+}
+.logs-table th {
+  background: #f9fafb;
+  color: var(--cms-navy);
+  text-align: left;
+  position: sticky;
+  top: 0;
+}
+.logs-table td:nth-child(6) {
+  max-width: 520px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 
 /* ===== Campus select ===== */

@@ -1,4 +1,5 @@
-const API_BASE = "https://cms-policy-worker.YOURNAME.workers.dev";
+const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
+const API_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
 
 const loadBtn = document.getElementById("load-logs");
 const tbody = document.getElementById("logs-body");
