@@ -1,8 +1,9 @@
 // ============================
-// CMS Policy Chatbot - app.js
-// (Works with the new Worker:
+// CMS Policy Chatbot - app.js (UPDATED)
+// Works with Worker:
 //  POST /auth/staff, POST /auth/admin, POST /api
-//  GET /admin/logs, GET /admin/stats)
+//  GET /admin/logs, GET /admin/stats
+// Supports multi-handbooks per campus (handbook_<CAMPUS> as ARRAY)
 // ============================
 
 // ===== CONFIG =====
@@ -45,7 +46,34 @@ const MENU_ITEMS = {
     { id: "sleep_infants", label: "Sleep Supervision – Infants" },
     { id: "students_volunteers", label: "Supervision of Students & Volunteers" }
   ],
-  handbook: [] // coming soon (handbook is campus-based via KV)
+  handbook: [] // now rendered dynamically based on campus (see HANDBOOK_CATALOG)
+};
+
+// ===== Handbooks catalog for UI (campus -> programs) =====
+// This does NOT need to match KV perfectly, it's just for a better UI.
+// The Worker will still pick the correct doc by content/keywords.
+const HANDBOOK_CATALOG = {
+  YC: [
+    { program: "Infant, Toddler & Jr. Casa", label: "YC — Infant, Toddler & Jr. Casa" },
+    { program: "Sr. Casa", label: "YC — Sr. Casa" },
+    { program: "Elementary", label: "YC — Elementary" }
+  ],
+  MC: [
+    { program: "Preschool", label: "MC — Preschool" },
+    { program: "Sr. Casa", label: "MC — Sr. Casa" },
+    { program: "Elementary", label: "MC — Elementary" }
+  ],
+  TC: [
+    { program: "Infant, Toddler & Jr. Casa (Preschool)", label: "TC — Infant/Toddler/Jr. Casa (Preschool)" },
+    { program: "Sr. Casa", label: "TC — Sr. Casa" },
+    { program: "Elementary", label: "TC — Elementary" }
+  ],
+  WC: [
+    { program: "Toddler & Jr. Casa", label: "WC — Toddler & Jr. Casa" }
+  ],
+  SC: [
+    { program: "Toddler", label: "SC — Toddler" }
+  ]
 };
 
 // ===== DOM =====
@@ -155,10 +183,6 @@ function showChatUI() {
   topMenuBar.classList.remove("hidden");
 }
 
-function toastAssistant(text) {
-  addMessage("assistant", escapeHtml(text));
-}
-
 // ============================
 // HELPERS - Session / Campus
 // ============================
@@ -188,10 +212,6 @@ function isAdminActive() {
   const token = localStorage.getItem(LS.adminToken);
   const until = Number(localStorage.getItem(LS.adminUntil) || "0");
   return !!token && Date.now() < until;
-}
-
-function getAdminToken() {
-  return localStorage.getItem(LS.adminToken) || "";
 }
 
 function clearAdminSession() {
@@ -239,6 +259,13 @@ loginForm.addEventListener("submit", async (e) => {
 
     const data = await res.json().catch(() => ({}));
 
+    // Rate limit UX
+    if (res.status === 429) {
+      const ra = Number(res.headers.get("Retry-After") || "60");
+      loginError.textContent = `Too many attempts. Please wait ${ra}s and try again.`;
+      return;
+    }
+
     if (!res.ok || !data.ok) {
       loginError.textContent = data.error || "Invalid code.";
       return;
@@ -263,7 +290,7 @@ loginForm.addEventListener("submit", async (e) => {
 
     addMessage(
       "assistant",
-      `Hi 👋 You’re signed in. Campus: <b>${escapeHtml(getCampus())}</b><br><br>
+      `Hi 👋 You’re signed in.<br>Campus: <b>${escapeHtml(getCampus())}</b><br><br>
        Ask about any policy, protocol, or the parent handbook for this campus.`
     );
   } catch (err) {
@@ -317,6 +344,12 @@ async function enterAdminMode(pin) {
     });
 
     const data = await res.json().catch(() => ({}));
+
+    if (res.status === 429) {
+      addMessage("assistant", "Too many admin attempts. Please wait and try again.");
+      return;
+    }
+
     if (!res.ok || !data.ok) {
       addMessage("assistant", `Admin PIN error: ${escapeHtml(data.error || "Invalid PIN")}`);
       return;
@@ -379,36 +412,78 @@ function openMenuPanel(type) {
 
   menuPanelBody.innerHTML = "";
 
-  const items = MENU_ITEMS[type];
-  if (!items || items.length === 0) {
-    const p = document.createElement("p");
-    p.textContent =
-      type === "handbook"
-        ? "Ask your handbook questions in chat (campus-based handbook)."
-        : "Content coming soon.";
-    p.style.fontSize = "0.9rem";
-    p.style.color = "#6b7280";
-    menuPanelBody.appendChild(p);
-  } else {
+  if (type === "handbook") {
+    const campus = getCampus();
+    const hbList = HANDBOOK_CATALOG[campus] || [];
+
     const label = document.createElement("div");
     label.className = "menu-group-label";
-    label.textContent = "Tap an item to view details";
+    label.textContent = `Campus: ${campus} — Choose a handbook program`;
     menuPanelBody.appendChild(label);
 
-    items.forEach((item) => {
-      const btn = document.createElement("button");
-      btn.className = "menu-item-btn";
-      btn.textContent = item.label;
-      btn.addEventListener("click", () => {
-        closeMenuPanel();
-        const qPrefix =
-          type === "protocols"
-            ? "Please show me the protocol: "
-            : "Please show me the policy: ";
-        askPolicy(qPrefix + item.label, true);
+    if (!hbList.length) {
+      const p = document.createElement("p");
+      p.textContent = "No handbook programs configured for this campus yet. Ask in chat normally.";
+      p.style.fontSize = "0.9rem";
+      p.style.color = "#6b7280";
+      menuPanelBody.appendChild(p);
+    } else {
+      hbList.forEach((hb) => {
+        const btn = document.createElement("button");
+        btn.className = "menu-item-btn";
+        btn.textContent = hb.label;
+        btn.addEventListener("click", () => {
+          closeMenuPanel();
+
+          // Strong hint to the model to select the right handbook among multiple
+          const q =
+            `Using the Parent Handbook for campus ${campus} (${hb.program}), answer this question:\n` +
+            `${userInput.value.trim() || "What does the handbook say about arrival/dismissal?"}`;
+
+          // If user input is empty, we still send a helpful default
+          userInput.value = "";
+          askPolicy(q, true);
+        });
+        menuPanelBody.appendChild(btn);
       });
-      menuPanelBody.appendChild(btn);
-    });
+
+      // Small helper note
+      const note = document.createElement("p");
+      note.style.marginTop = "10px";
+      note.style.fontSize = "0.85rem";
+      note.style.color = "#6b7280";
+      note.textContent = "Tip: Type your question first, then pick the program to target the exact handbook.";
+      menuPanelBody.appendChild(note);
+    }
+  } else {
+    const items = MENU_ITEMS[type];
+    if (!items || items.length === 0) {
+      const p = document.createElement("p");
+      p.textContent = "Content coming soon.";
+      p.style.fontSize = "0.9rem";
+      p.style.color = "#6b7280";
+      menuPanelBody.appendChild(p);
+    } else {
+      const label = document.createElement("div");
+      label.className = "menu-group-label";
+      label.textContent = "Tap an item to view details";
+      menuPanelBody.appendChild(label);
+
+      items.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.className = "menu-item-btn";
+        btn.textContent = item.label;
+        btn.addEventListener("click", () => {
+          closeMenuPanel();
+          const qPrefix =
+            type === "protocols"
+              ? "Please show me the protocol: "
+              : "Please show me the policy: ";
+          askPolicy(qPrefix + item.label, true);
+        });
+        menuPanelBody.appendChild(btn);
+      });
+    }
   }
 
   menuPanel.classList.remove("hidden");
@@ -444,7 +519,7 @@ async function askPolicy(question, fromMenu = false) {
     return;
   }
 
-  const trimmed = question.trim();
+  const trimmed = String(question || "").trim();
   if (!trimmed) return;
 
   const campus = getCampus();
@@ -474,6 +549,12 @@ async function askPolicy(question, fromMenu = false) {
       localStorage.removeItem(LS.staffUntil);
       clearAdminSession();
       showLoginUI();
+      return;
+    }
+
+    if (res.status === 429) {
+      const ra = Number(res.headers.get("Retry-After") || "60");
+      addMessage("assistant", `⏳ Too many requests. Please wait <b>${ra}s</b> and try again.`);
       return;
     }
 
@@ -527,7 +608,7 @@ chatForm.addEventListener("submit", (e) => {
     addMessage(
       "assistant",
       `Welcome back 👋 Campus: <b>${escapeHtml(getCampus())}</b><br><br>
-       Ask any CMS policy question.`
+       Ask any CMS policy / protocol / handbook question.`
     );
   } else {
     showLoginUI();
