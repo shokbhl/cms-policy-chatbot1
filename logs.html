@@ -2,37 +2,56 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>CMS Logs</title>
+  <title>CMS Admin Logs</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background:#f7f7fb; color:#111827; }
+    header { background:#0b2a5b; color:#fff; padding:16px 20px; display:flex; justify-content:space-between; align-items:center; }
+    header a { color:#fff; text-decoration:none; margin-left:12px; }
+    .wrap { max-width:1100px; margin: 18px auto; padding: 0 14px; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 12px;}
+    input, select, button { padding:10px 12px; border-radius:10px; border:1px solid #d1d5db; font-size:14px; }
+    button { background:#0b2a5b; color:#fff; border:none; cursor:pointer; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid #e5e7eb; font-size:14px; vertical-align: top;}
+    th { color:#374151; font-size:12px; text-transform: uppercase; letter-spacing: .06em; }
+    .k { color:#6b7280; font-size:12px; }
+    .ok { color:#166534; font-weight:700; }
+    .bad { color:#991b1b; font-weight:700; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:12px; color:#374151; }
+  </style>
 </head>
-
 <body>
-  <header class="cms-header">
-    <div class="cms-header-inner">
-      <div class="left-header">
-        <div class="cms-title-block">
-          <h1>Admin Logs</h1>
-          <p class="cms-subtitle">Requires Admin Mode token</p>
-        </div>
-      </div>
-
-      <div class="right-header">
-        <a class="secondary-btn" href="./index.html">Back</a>
-        <button id="load-logs" class="primary-btn">Load logs</button>
-      </div>
+  <header>
+    <div><b>CMS Admin Logs</b></div>
+    <div>
+      <a href="index.html">Main App</a>
+      <a href="dashboard.html">Dashboard</a>
     </div>
   </header>
 
-  <main class="cms-main">
-    <section class="card">
-      <div class="meta-row">
-        <div id="logs-status" class="meta-badge">Status: —</div>
-        <div id="logs-count" class="meta-badge">Count: —</div>
+  <div class="wrap">
+    <div class="card">
+      <div class="row">
+        <input id="q" placeholder="Search in questions..." style="flex:1; min-width:220px;">
+        <select id="campus">
+          <option value="">All campuses</option>
+          <option value="MC">MC</option><option value="SC">SC</option><option value="TC">TC</option>
+          <option value="WC">WC</option><option value="YC">YC</option>
+        </select>
+        <select id="role">
+          <option value="">All roles</option>
+          <option value="staff">staff</option>
+          <option value="admin">admin</option>
+        </select>
+        <button id="refresh">Refresh</button>
       </div>
 
-      <div id="logs-table-wrap" style="margin-top:12px; overflow:auto;">
-        <table class="logs-table">
+      <div class="k" id="meta">Loading…</div>
+
+      <div style="overflow:auto; margin-top:10px;">
+        <table>
           <thead>
             <tr>
               <th>Time</th>
@@ -40,16 +59,83 @@
               <th>Role</th>
               <th>OK</th>
               <th>ms</th>
-              <th>Query</th>
+              <th>Handbook</th>
+              <th>Question</th>
             </tr>
           </thead>
-          <tbody id="logs-body"></tbody>
+          <tbody id="rows"></tbody>
         </table>
       </div>
-      <p id="logs-error" class="error-text"></p>
-    </section>
-  </main>
+    </div>
+  </div>
 
-  <script src="logs.js"></script>
+  <script src="admin.js"></script>
+  <script>
+    let cache = [];
+
+    function fmtTime(ts){
+      try { return new Date(ts).toLocaleString(); } catch { return String(ts); }
+    }
+
+    function handbookLabel(hb){
+      if (!hb) return "";
+      const c = hb.campus ? hb.campus : "";
+      const p = hb.program ? hb.program : "";
+      const id = hb.id ? hb.id : "";
+      return [c, p, id].filter(Boolean).join(" | ");
+    }
+
+    function render(){
+      const q = document.getElementById("q").value.trim().toLowerCase();
+      const campus = document.getElementById("campus").value.trim().toUpperCase();
+      const role = document.getElementById("role").value.trim().toLowerCase();
+
+      const filtered = cache.filter(r => {
+        if (campus && (r.campus || "").toUpperCase() !== campus) return false;
+        if (role && (r.role || "").toLowerCase() !== role) return false;
+        if (q && !String(r.query || "").toLowerCase().includes(q)) return false;
+        return true;
+      });
+
+      document.getElementById("meta").textContent =
+        `Showing ${filtered.length} / ${cache.length} logs (latest first)`;
+
+      const tbody = document.getElementById("rows");
+      tbody.innerHTML = "";
+
+      for (const r of filtered) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${escapeHtml(fmtTime(r.ts))}</td>
+          <td>${escapeHtml(r.campus || "")}</td>
+          <td>${escapeHtml(r.role || "")}</td>
+          <td class="${r.ok ? "ok" : "bad"}">${r.ok ? "OK" : "BAD"}</td>
+          <td>${escapeHtml(String(r.ms ?? ""))}</td>
+          <td class="mono">${escapeHtml(handbookLabel(r.handbook))}</td>
+          <td>${escapeHtml(r.query || "")}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function load(){
+      if (!requireAdminOrRedirect()) return;
+      try {
+        const data = await adminFetch("/admin/logs?limit=200");
+        if (!data) return;
+        cache = data.logs || [];
+        render();
+      } catch(e){
+        alert("Logs error: " + e.message);
+      }
+    }
+
+    document.getElementById("refresh").addEventListener("click", load);
+    document.getElementById("q").addEventListener("input", render);
+    document.getElementById("campus").addEventListener("change", render);
+    document.getElementById("role").addEventListener("change", render);
+
+    load();
+  </script>
 </body>
 </html>
