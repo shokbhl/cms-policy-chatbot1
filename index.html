@@ -21,8 +21,8 @@
 
       <!-- Right side: only visible after login -->
       <div id="header-actions" class="header-actions hidden">
-        <!-- Optional campus switch (works if you want to change campus inside app) -->
-        <select id="campus-switch" class="campus-select">
+        <!-- Campus switch inside app -->
+        <select id="campus-switch" class="campus-select" aria-label="Select campus">
           <option value="MC">MC</option>
           <option value="SC">SC</option>
           <option value="TC">TC</option>
@@ -30,27 +30,29 @@
           <option value="YC">YC</option>
         </select>
 
-        <!-- Admin mode button -->
-        <button id="admin-mode-btn" class="secondary-btn">Admin Mode</button>
+        <!-- Admin mode -->
+        <button id="admin-mode-btn" class="secondary-btn" type="button">Admin Mode</button>
 
         <!-- Mode badge -->
         <span id="mode-badge" class="mode-badge">STAFF</span>
 
         <!-- Logout -->
-        <button id="logout-btn" class="secondary-btn">Logout</button>
+        <button id="logout-btn" class="secondary-btn" type="button">Logout</button>
       </div>
     </div>
   </header>
 
   <!-- Top menu bar (only after login) -->
-  <nav id="top-menu-bar" class="top-menu-bar hidden">
+  <nav id="top-menu-bar" class="top-menu-bar hidden" aria-label="Top menu">
     <div class="top-menu-inner">
-      <button class="menu-pill" data-menu="policies">Policies</button>
-      <button class="menu-pill" data-menu="protocols">Protocols</button>
-      <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
+      <div class="top-menu-pills">
+        <button class="menu-pill" data-menu="policies" type="button">Policies</button>
+        <button class="menu-pill" data-menu="protocols" type="button">Protocols</button>
+        <button class="menu-pill" data-menu="handbook" type="button">Parent Handbook</button>
+      </div>
 
       <!-- Admin quick links (only shown in admin mode via JS) -->
-      <div id="admin-links" class="admin-links hidden">
+      <div id="admin-links" class="admin-links hidden" aria-label="Admin links">
         <a class="admin-link" href="dashboard.html">Dashboard</a>
         <a class="admin-link" href="logs.html">Logs</a>
       </div>
@@ -58,11 +60,11 @@
   </nav>
 
   <!-- Menu panel -->
-  <div id="menu-panel" class="menu-panel hidden">
+  <div id="menu-panel" class="menu-panel hidden" aria-hidden="true">
     <div class="menu-panel-inner">
       <div class="menu-panel-header">
         <h2 id="menu-panel-title">Menu</h2>
-        <button id="menu-panel-close" class="icon-btn small-icon" type="button">×</button>
+        <button id="menu-panel-close" class="icon-btn small-icon" type="button" aria-label="Close menu">×</button>
       </div>
       <div id="menu-panel-body" class="menu-panel-body">
         <!-- filled by JS -->
@@ -77,7 +79,17 @@
     <!-- LOGIN CARD -->
     <section id="login-screen" class="card">
       <h2>Staff Access</h2>
-      <p class="helper-text">Enter the staff access code and choose your campus.</p>
+
+      <!-- Campus reminder / selection info -->
+      <div class="campus-reminder">
+        <p class="helper-text" style="margin:0;">
+          ✅ Please choose your campus before logging in.  
+          You will see policies/handbooks for the selected campus.
+        </p>
+        <p class="helper-text" style="margin:6px 0 0 0;">
+          Selected campus: <b><span id="campus-preview">MC</span></b>
+        </p>
+      </div>
 
       <form id="login-form" class="form-row">
         <input
@@ -88,7 +100,7 @@
           required
         />
 
-        <select id="campus-select" class="campus-select" required>
+        <select id="campus-select" class="campus-select" required aria-label="Select campus">
           <option value="MC">MC</option>
           <option value="SC">SC</option>
           <option value="TC">TC</option>
@@ -122,12 +134,12 @@
       </form>
     </section>
 
-    <!-- Admin PIN Modal (optional but recommended) -->
+    <!-- Admin PIN Modal -->
     <div id="admin-modal" class="modal hidden" aria-hidden="true">
       <div class="modal-inner">
         <div class="modal-header">
           <h3>Enter Admin PIN</h3>
-          <button id="admin-pin-cancel" class="icon-btn small-icon" type="button">×</button>
+          <button id="admin-pin-cancel" class="icon-btn small-icon" type="button" aria-label="Close admin modal">×</button>
         </div>
 
         <div class="modal-body">
@@ -152,6 +164,19 @@
   <footer class="cms-footer">
     © CMS – Staff internal tool
   </footer>
+
+  <!-- Small inline script ONLY for campus reminder on login page -->
+  <script>
+    (function () {
+      const campusSelect = document.getElementById("campus-select");
+      const preview = document.getElementById("campus-preview");
+      if (!campusSelect || !preview) return;
+
+      const update = () => { preview.textContent = campusSelect.value || "MC"; };
+      campusSelect.addEventListener("change", update);
+      update();
+    })();
+  </script>
 
   <script src="app.js"></script>
 </body>
