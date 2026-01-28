@@ -4,26 +4,29 @@
   <meta charset="UTF-8" />
   <title>CMS Policy Chatbot</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Styles -->
   <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-  <!-- HEADER -->
+  <!-- ================= HEADER ================= -->
   <header class="cms-header">
     <div class="cms-header-inner">
+      <!-- LEFT -->
       <div class="left-header">
         <img src="cms-logo.png" class="cms-logo" alt="Central Montessori School logo" />
         <div class="cms-title-block">
           <h1>CMS Policy Chatbot</h1>
-          <p class="cms-subtitle">Internal staff assistant</p>
+          <p class="cms-subtitle">Internal staff & parent assistant</p>
         </div>
       </div>
 
-      <!-- Right side: only visible after login -->
+      <!-- RIGHT (after login only) -->
       <div id="header-actions" class="header-actions hidden">
-        <!-- Campus switch (inside app) -->
-        <select id="campus-switch" class="campus-select">
-          <option value="" disabled>Select</option>
+        <!-- Campus switch -->
+        <select id="campus-switch" class="campus-select campus-select-header">
+          <option value="">Campus</option>
           <option value="MC">MC</option>
           <option value="SC">SC</option>
           <option value="TC">TC</option>
@@ -31,21 +34,24 @@
           <option value="YC">YC</option>
         </select>
 
-        <button id="admin-mode-btn" class="secondary-btn">Admin Mode</button>
+        <!-- Admin -->
+        <button id="admin-mode-btn" class="secondary-btn">Admin</button>
         <span id="mode-badge" class="mode-badge">STAFF</span>
+
+        <!-- Logout -->
         <button id="logout-btn" class="secondary-btn">Logout</button>
       </div>
     </div>
   </header>
 
-  <!-- Top menu bar (only after login) -->
+  <!-- ================= TOP MENU ================= -->
   <nav id="top-menu-bar" class="top-menu-bar hidden">
     <div class="top-menu-inner">
       <button class="menu-pill" data-menu="policies">Policies</button>
       <button class="menu-pill" data-menu="protocols">Protocols</button>
       <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
 
-      <!-- Admin quick links (only shown in admin mode via JS) -->
+      <!-- Admin quick links -->
       <div id="admin-links" class="admin-links hidden">
         <a class="admin-link" href="dashboard.html">Dashboard</a>
         <a class="admin-link" href="logs.html">Logs</a>
@@ -53,37 +59,46 @@
     </div>
   </nav>
 
-  <!-- Menu panel -->
+  <!-- ================= MENU PANEL ================= -->
   <div id="menu-panel" class="menu-panel hidden">
     <div class="menu-panel-inner">
       <div class="menu-panel-header">
         <h2 id="menu-panel-title">Menu</h2>
         <button id="menu-panel-close" class="icon-btn small-icon" type="button">×</button>
       </div>
-      <div id="menu-panel-body" class="menu-panel-body"></div>
+      <div id="menu-panel-body" class="menu-panel-body">
+        <!-- filled by JS -->
+      </div>
     </div>
   </div>
   <div id="menu-overlay" class="overlay hidden"></div>
 
-  <!-- MAIN -->
+  <!-- ================= MAIN ================= -->
   <main class="cms-main">
-    <!-- LOGIN CARD -->
+
+    <!-- ===== LOGIN ===== -->
     <section id="login-screen" class="card">
-      <h2>Staff Access</h2>
-      <p class="helper-text">Enter the staff access code and choose your campus.</p>
+      <h2>Login</h2>
+      <p class="helper-text">
+        Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.
+      </p>
 
       <form id="login-form" class="form-row">
         <input
           type="password"
           id="access-code"
-          placeholder="Staff access code"
+          placeholder="Access code"
           autocomplete="off"
           required
         />
 
-        <!-- Default = blank -->
-        <select id="campus-select" class="campus-select" required>
-          <option value="" selected disabled>Select campus</option>
+        <!-- Campus select (IMPORTANT: blank default) -->
+        <select
+          id="campus-select"
+          class="campus-select campus-select-login"
+          required
+        >
+          <option value="">Select campus</option>
           <option value="MC">MC</option>
           <option value="SC">SC</option>
           <option value="TC">TC</option>
@@ -97,10 +112,10 @@
       <p id="login-error" class="error-text"></p>
     </section>
 
-    <!-- CHAT CARD -->
+    <!-- ===== CHAT ===== -->
     <section id="chat-screen" class="card hidden">
       <p class="helper-text">
-        Ask any CMS policy, protocol, or parent handbook question (campus-based).
+        Ask a policy, protocol, or browse the Parent Handbook.
       </p>
 
       <div id="chat-window" class="chat-window"></div>
@@ -109,7 +124,7 @@
         <input
           type="text"
           id="user-input"
-          placeholder="Example: When do we call parents if a child doesn’t arrive?"
+          placeholder="Ask a question…"
           autocomplete="off"
           required
         />
@@ -117,7 +132,7 @@
       </form>
     </section>
 
-    <!-- Admin PIN Modal -->
+    <!-- ===== ADMIN PIN MODAL ===== -->
     <div id="admin-modal" class="modal hidden" aria-hidden="true">
       <div class="modal-inner">
         <div class="modal-header">
@@ -141,13 +156,15 @@
         </div>
       </div>
     </div>
+
   </main>
 
+  <!-- ================= FOOTER ================= -->
   <footer class="cms-footer">
-    © CMS – Staff internal tool
+    © CMS – Internal use only
   </footer>
 
-  <!-- IMPORTANT: app.js must be a separate file -->
+  <!-- ================= SCRIPT ================= -->
   <script src="app.js"></script>
 </body>
 </html>
