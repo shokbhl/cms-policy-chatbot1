@@ -151,7 +151,21 @@ function hideTyping() {
 function setInlineError(text) {
   if (loginError) loginError.textContent = text || "";
 }
+function applyRoleUI(role) {
+  const isParent = role === "parent";
 
+  // hide/show top menu pills
+  const btnPolicies = document.querySelector('.menu-pill[data-menu="policies"]');
+  const btnProtocols = document.querySelector('.menu-pill[data-menu="protocols"]');
+  const btnHandbook = document.querySelector('.menu-pill[data-menu="handbook"]');
+
+  if (btnPolicies) btnPolicies.style.display = isParent ? "none" : "";
+  if (btnProtocols) btnProtocols.style.display = isParent ? "none" : "";
+  if (btnHandbook) btnHandbook.style.display = ""; // always show
+
+  // if parent and menu panel open on policies/protocols, close it
+  if (isParent) closeMenuPanel();
+}
 // ============================
 // SESSION / CAMPUS
 // ============================
