@@ -598,6 +598,58 @@ chatForm.addEventListener("submit", (e) => {
   ask(q);
 });
 
+
+function $(id){ return document.getElementById(id); }
+
+document.addEventListener("DOMContentLoaded", () => {
+  // --- Admin button wiring ---
+  const adminBtn = $("adminBtn");
+  const adminModal = $("adminModal");
+  const adminCancel = $("adminCancel");
+  const adminSubmit = $("adminSubmit");
+
+  if (adminBtn && adminModal) {
+    adminBtn.addEventListener("click", () => {
+      adminModal.classList.remove("hidden");
+      $("adminError") && ($("adminError").textContent = "");
+      $("adminPin") && ($("adminPin").value = "");
+      setTimeout(() => $("adminPin")?.focus(), 50);
+    });
+  }
+
+  adminCancel?.addEventListener("click", () => {
+    adminModal.classList.add("hidden");
+  });
+
+  adminSubmit?.addEventListener("click", async () => {
+    const pin = ($("adminPin")?.value || "").trim();
+    if (!pin) {
+      if ($("adminError")) $("adminError").textContent = "Enter admin PIN";
+      return;
+    }
+    // اینجا باید همون endpoint قبلی خودت باشه:
+    // POST /auth/admin { pin }
+    try {
+      const r = await fetch(`${API_BASE}/auth/admin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin })
+      });
+      const data = await r.json();
+      if (!r.ok || !data.ok) throw new Error(data.error || "Admin login failed");
+
+      localStorage.setItem("cms_admin_token", data.token);
+      adminModal.classList.add("hidden");
+
+      // اگر میخوای همونجا Admin Mode فعال شه:
+      localStorage.setItem("cms_admin_mode", "1");
+      location.reload();
+
+    } catch (e) {
+      if ($("adminError")) $("adminError").textContent = e.message;
+    }
+  });
+});
 // ============================
 // INIT
 // ============================
