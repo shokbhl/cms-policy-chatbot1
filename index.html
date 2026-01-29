@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CMS Assistant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Icons (optional) -->
-  <link rel="icon" type="image/png" href="icons/favicon-32.png" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png" />
-  <meta name="theme-color" content="#0b2a5b" />
+  <!-- PWA / Icons (اگر داری) -->
+  <link rel="icon" href="icons/favicon-32x32.png" sizes="32x32" />
+  <link rel="icon" href="icons/favicon-16x16.png" sizes="16x16" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
 
   <link rel="stylesheet" href="style.css" />
   <script defer src="app.js"></script>
@@ -19,140 +20,120 @@
   <header class="app-header">
     <div class="header-inner">
       <div class="brand">
-        <!-- مسیر لوگوت رو درست کن -->
-        <img src="assets/cms-logo.png" alt="CMS" class="brand-logo" />
+        <!-- ✅ مسیر لوگو -->
+        <img class="brand-logo" src="assets/cms-logo.png" alt="CMS" />
         <div>
           <div class="brand-title">CMS Assistant</div>
           <div class="brand-subtitle">Internal staff & parent assistant</div>
         </div>
       </div>
 
-      <!-- Right side actions (app.js show/hide) -->
-      <div id="header-actions" class="header-actions hidden">
-        <select id="campus-switch" class="campus-switch">
-          <option value="">Campus</option>
-          <option value="MC">MC</option>
+      <div class="header-actions">
+        <!-- campus dropdown (بالا) -->
+        <select id="headerCampusSelect" class="campus-switch hidden">
+          <option value="YC">YC</option>
           <option value="SC">SC</option>
+          <option value="MC">MC</option>
           <option value="TC">TC</option>
           <option value="WC">WC</option>
-          <option value="YC">YC</option>
         </select>
 
-        <button id="admin-mode-btn" class="pill-btn">Admin</button>
+        <!-- ✅ دکمه Admin -->
+        <button id="adminBtn" class="pill-btn">Admin</button>
 
-        <!-- role badge -->
-        <span id="mode-badge" class="mode-badge staff">STAFF</span>
-
-        <button id="logout-btn" class="pill-btn danger">Logout</button>
+        <span id="roleBadge" class="mode-badge hidden">STAFF</span>
+        <button id="logoutBtn" class="pill-btn danger hidden">Logout</button>
       </div>
     </div>
+
+    <!-- ================= TOP MENU ================= -->
+    <nav id="top-menu-bar" class="top-menu-bar hidden">
+      <div class="top-menu-inner">
+        <button class="menu-pill" data-menu="policies">Policies</button>
+        <button class="menu-pill" data-menu="protocols">Protocols</button>
+        <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
+
+        <div id="admin-links" class="admin-links hidden">
+          <a class="admin-link" href="dashboard.html">Dashboard</a>
+          <a class="admin-link" href="logs.html">Logs</a>
+        </div>
+      </div>
+    </nav>
   </header>
-
-  <!-- ================= TOP MENU ================= -->
-  <nav id="top-menu-bar" class="top-menu-bar hidden">
-    <div class="top-menu-inner">
-      <button class="menu-pill" data-menu="policies">Policies</button>
-      <button class="menu-pill" data-menu="protocols">Protocols</button>
-      <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
-
-      <div id="admin-links" class="admin-links hidden">
-        <a class="admin-link" href="dashboard.html">Dashboard</a>
-        <a class="admin-link" href="logs.html">Logs</a>
-      </div>
-    </div>
-  </nav>
 
   <!-- ================= MAIN ================= -->
   <main class="app-main">
-
-    <!-- ============ LOGIN SCREEN ============ -->
-    <section id="login-screen" class="screen">
+    <!-- ================= LOGIN CARD ================= -->
+    <section id="loginScreen" class="screen">
       <div class="card login-card">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-          <div>
-            <h2 class="card-title">Login</h2>
-            <p class="card-hint">
-              Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.
-            </p>
-          </div>
+        <h2 class="card-title">Login</h2>
+        <p class="card-hint">Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.</p>
 
-          <!-- Admin login from first page -->
-          <button id="login-admin-btn" class="secondary-btn">Admin</button>
-        </div>
-
-        <form id="login-form" class="login-form">
+        <div class="login-form">
           <div class="login-row">
-            <input
-              id="access-code"
-              class="text-input"
-              type="password"
-              placeholder="Access code"
-              autocomplete="off"
-            />
-
-            <select id="campus-select" class="campus-select">
+            <input id="loginCode" class="text-input" placeholder="Access code" autocomplete="off" />
+            <select id="loginCampus" class="campus-select">
               <option value="">Select campus</option>
-              <option value="MC">MC</option>
+              <option value="YC">YC</option>
               <option value="SC">SC</option>
+              <option value="MC">MC</option>
               <option value="TC">TC</option>
               <option value="WC">WC</option>
-              <option value="YC">YC</option>
             </select>
 
-            <button type="submit" class="primary-btn">Login</button>
+            <button id="loginBtn" class="primary-btn">Login</button>
           </div>
 
-          <div id="login-error" class="error-text"></div>
-        </form>
-
-        <div class="footer-note">© CMS — Internal use only</div>
+          <div id="loginError" class="error-text"></div>
+          <div class="footer-note">© CMS — Internal use only</div>
+        </div>
       </div>
     </section>
 
-    <!-- ============ CHAT SCREEN ============ -->
-    <section id="chat-screen" class="screen hidden">
+    <!-- ================= APP SCREEN ================= -->
+    <section id="appScreen" class="screen hidden">
       <div class="chat-shell">
-        <div class="chat-top-hint">
+        <div id="chatHint" class="chat-top-hint">
           Ask any CMS policy, protocol, or parent handbook question (campus-based).
         </div>
 
-        <div id="chat-window" class="chat-window"></div>
+        <div id="chatWindow" class="chat-window"></div>
 
-        <form id="chat-form" class="chat-form">
-          <input id="user-input" class="text-input" type="text" placeholder="Ask a question..." autocomplete="off" />
+        <form id="chatForm" class="chat-form">
+          <input id="chatInput" class="text-input" placeholder="Ask a question..." autocomplete="off" />
           <button class="primary-btn" type="submit">Ask</button>
         </form>
       </div>
-
-      <div class="footer-note">© CMS — Staff internal tool</div>
     </section>
-
   </main>
 
-  <!-- ================= MENU OVERLAY + PANEL ================= -->
-  <div id="menu-overlay" class="overlay hidden"></div>
-
-  <div id="menu-panel" class="menu-panel hidden">
-    <div class="menu-panel-header">
-      <div id="menu-panel-title" class="menu-panel-title">Menu</div>
-      <button id="menu-panel-close" class="icon-btn" aria-label="Close">×</button>
-    </div>
-    <div id="menu-panel-body" class="menu-panel-body"></div>
-  </div>
-
-  <!-- ================= ADMIN MODAL ================= -->
-  <div id="admin-modal" class="modal hidden">
+  <!-- ================= MODALS (Admin Login) ================= -->
+  <div id="adminModal" class="modal hidden">
     <div class="modal-card">
-      <div class="modal-title">Admin PIN</div>
-      <div class="modal-hint">Enter the admin PIN to enable admin mode.</div>
+      <div class="modal-title">Admin Login</div>
+      <div class="modal-hint">Enter admin PIN to access dashboard/logs.</div>
 
-      <input id="admin-pin" class="text-input" type="password" placeholder="Admin PIN" />
+      <input id="adminPin" class="text-input" placeholder="Admin PIN" type="password" />
 
       <div class="modal-actions">
-        <button id="admin-pin-cancel" class="secondary-btn">Cancel</button>
-        <button id="admin-pin-submit" class="primary-btn">Continue</button>
+        <button id="adminCancel" class="secondary-btn" type="button">Cancel</button>
+        <button id="adminSubmit" class="primary-btn" type="button">Login</button>
       </div>
+
+      <div id="adminError" class="error-text"></div>
     </div>
+  </div>
+
+  <!-- Overlay for menu panels (optional) -->
+  <div id="overlay" class="overlay hidden"></div>
+
+  <!-- Menu panel -->
+  <div id="menuPanel" class="menu-panel hidden">
+    <div class="menu-panel-header">
+      <div id="menuTitle" class="menu-panel-title">Menu</div>
+      <button id="menuClose" class="icon-btn" type="button">×</button>
+    </div>
+    <div id="menuBody" class="menu-panel-body"></div>
   </div>
 
 </body>
