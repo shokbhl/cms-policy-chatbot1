@@ -1,140 +1,180 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>CMS Assistant</title>
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <!-- PWA / Icons (اگر داری) -->
-  <link rel="icon" href="icons/favicon-32x32.png" sizes="32x32" />
-  <link rel="icon" href="icons/favicon-16x16.png" sizes="16x16" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-  <link rel="manifest" href="manifest.webmanifest" />
+  <title>CMS Policy Chatbot</title>
 
   <link rel="stylesheet" href="style.css" />
-  <script defer src="app.js"></script>
 </head>
 
 <body>
   <!-- ================= HEADER ================= -->
   <header class="app-header">
     <div class="header-inner">
+      <!-- Left: Logo + Title -->
       <div class="brand">
-        <!-- ✅ مسیر لوگو -->
-        <img class="brand-logo" src="assets/cms-logo.png" alt="CMS" />
-        <div>
-          <div class="brand-title">CMS Assistant</div>
-          <div class="brand-subtitle">Internal staff & parent assistant</div>
+        <img class="brand-logo" src="cms-logo.png" alt="CMS" />
+        <div class="brand-text">
+          <div class="brand-title">CMS Policy Chatbot</div>
+          <div class="brand-subtitle">Internal staff &amp; parent assistant</div>
         </div>
       </div>
 
-      <div class="header-actions">
-        <!-- campus dropdown (بالا) -->
-        <select id="headerCampusSelect" class="campus-switch hidden">
+      <!-- Right: Actions -->
+      <div id="header-actions" class="header-actions hidden">
+        <select id="campus-switch" class="campus-switch">
+          <option value="">Campus</option>
           <option value="YC">YC</option>
-          <option value="SC">SC</option>
           <option value="MC">MC</option>
+          <option value="SC">SC</option>
           <option value="TC">TC</option>
           <option value="WC">WC</option>
         </select>
 
-        <!-- ✅ دکمه Admin -->
-        <button id="adminBtn" class="pill-btn">Admin</button>
+        <button id="admin-mode-btn" class="pill-btn" type="button">Admin</button>
+        <span id="mode-badge" class="mode-badge">STAFF</span>
 
-        <span id="roleBadge" class="mode-badge hidden">STAFF</span>
-        <button id="logoutBtn" class="pill-btn danger hidden">Logout</button>
+        <button id="logout-btn" class="pill-btn danger" type="button">Logout</button>
       </div>
     </div>
-
-    <!-- ================= TOP MENU ================= -->
-    <nav id="top-menu-bar" class="top-menu-bar hidden">
-      <div class="top-menu-inner">
-        <button class="menu-pill" data-menu="policies">Policies</button>
-        <button class="menu-pill" data-menu="protocols">Protocols</button>
-        <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
-
-        <div id="admin-links" class="admin-links hidden">
-          <a class="admin-link" href="dashboard.html">Dashboard</a>
-          <a class="admin-link" href="logs.html">Logs</a>
-        </div>
-      </div>
-    </nav>
   </header>
+
+  <!-- ================= TOP MENU ================= -->
+  <nav id="top-menu-bar" class="top-menu-bar hidden">
+    <div class="top-menu-inner">
+      <button class="menu-pill" data-menu="policies" type="button">Policies</button>
+      <button class="menu-pill" data-menu="protocols" type="button">Protocols</button>
+      <button class="menu-pill" data-menu="handbook" type="button">Parent Handbook</button>
+
+      <!-- Admin quick links (shown only if admin token active) -->
+      <div id="admin-links" class="admin-links hidden">
+        <a class="admin-link" href="dashboard.html">Dashboard</a>
+        <a class="admin-link" href="logs.html">Logs</a>
+      </div>
+    </div>
+  </nav>
 
   <!-- ================= MAIN ================= -->
   <main class="app-main">
-    <!-- ================= LOGIN CARD ================= -->
-    <section id="loginScreen" class="screen">
+    <!-- ============ LOGIN SCREEN ============ -->
+    <section id="login-screen" class="screen">
       <div class="card login-card">
         <h2 class="card-title">Login</h2>
-        <p class="card-hint">Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.</p>
+        <p class="card-hint">
+          Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.
+          <br />
+          <span class="muted">Tip: Campus is required so the handbook matches your campus.</span>
+        </p>
 
-        <div class="login-form">
+        <form id="login-form" class="login-form">
           <div class="login-row">
-            <input id="loginCode" class="text-input" placeholder="Access code" autocomplete="off" />
-            <select id="loginCampus" class="campus-select">
+            <input
+              id="access-code"
+              class="text-input"
+              type="password"
+              placeholder="Access Code (Staff or Parent)"
+              autocomplete="off"
+            />
+
+            <select id="campus-select" class="campus-select">
               <option value="">Select campus</option>
               <option value="YC">YC</option>
-              <option value="SC">SC</option>
               <option value="MC">MC</option>
+              <option value="SC">SC</option>
               <option value="TC">TC</option>
               <option value="WC">WC</option>
             </select>
 
-            <button id="loginBtn" class="primary-btn">Login</button>
+            <button class="primary-btn" type="submit">Login</button>
           </div>
 
-          <div id="loginError" class="error-text"></div>
-          <div class="footer-note">© CMS — Internal use only</div>
-        </div>
+          <div class="login-row">
+            <button id="login-admin-btn" class="secondary-btn" type="button">
+              Admin Login
+            </button>
+
+            <div class="campus-reminder">
+              You will login with campus:
+              <span class="campus-pill" id="campus-preview">—</span>
+            </div>
+          </div>
+
+          <div id="login-error" class="error-text"></div>
+        </form>
+
+        <div class="footer-note">© CMS – Internal use only</div>
       </div>
     </section>
 
-    <!-- ================= APP SCREEN ================= -->
-    <section id="appScreen" class="screen hidden">
+    <!-- ============ CHAT SCREEN ============ -->
+    <section id="chat-screen" class="screen hidden">
       <div class="chat-shell">
-        <div id="chatHint" class="chat-top-hint">
+        <div class="chat-top-hint">
           Ask any CMS policy, protocol, or parent handbook question (campus-based).
         </div>
 
-        <div id="chatWindow" class="chat-window"></div>
+        <div class="chat-window" id="chat-window"></div>
 
-        <form id="chatForm" class="chat-form">
-          <input id="chatInput" class="text-input" placeholder="Ask a question..." autocomplete="off" />
+        <form id="chat-form" class="chat-form">
+          <input
+            id="user-input"
+            class="text-input"
+            type="text"
+            placeholder="Ask a question..."
+            autocomplete="off"
+          />
           <button class="primary-btn" type="submit">Ask</button>
         </form>
       </div>
+
+      <div class="footer-note">© CMS – Staff internal tool</div>
     </section>
   </main>
 
-  <!-- ================= MODALS (Admin Login) ================= -->
-  <div id="adminModal" class="modal hidden">
+  <!-- ================= MENU PANEL (Modal) ================= -->
+  <div id="menu-overlay" class="overlay hidden"></div>
+
+  <aside id="menu-panel" class="menu-panel hidden" aria-hidden="true">
+    <div class="menu-panel-header">
+      <div id="menu-panel-title" class="menu-panel-title">Menu</div>
+      <button id="menu-panel-close" class="icon-btn" type="button" aria-label="Close">×</button>
+    </div>
+    <div id="menu-panel-body" class="menu-panel-body"></div>
+  </aside>
+
+  <!-- ================= ADMIN PIN MODAL ================= -->
+  <div id="admin-modal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal-card">
       <div class="modal-title">Admin Login</div>
-      <div class="modal-hint">Enter admin PIN to access dashboard/logs.</div>
+      <div class="modal-hint">Enter Admin PIN</div>
 
-      <input id="adminPin" class="text-input" placeholder="Admin PIN" type="password" />
+      <input id="admin-pin" class="text-input" type="password" placeholder="PIN" autocomplete="off" />
 
       <div class="modal-actions">
-        <button id="adminCancel" class="secondary-btn" type="button">Cancel</button>
-        <button id="adminSubmit" class="primary-btn" type="button">Login</button>
+        <button id="admin-pin-cancel" class="secondary-btn" type="button">Cancel</button>
+        <button id="admin-pin-submit" class="primary-btn" type="button">Submit</button>
       </div>
-
-      <div id="adminError" class="error-text"></div>
     </div>
   </div>
 
-  <!-- Overlay for menu panels (optional) -->
-  <div id="overlay" class="overlay hidden"></div>
+  <!-- ================= SCRIPT ================= -->
+  <script src="app.js"></script>
 
-  <!-- Menu panel -->
-  <div id="menuPanel" class="menu-panel hidden">
-    <div class="menu-panel-header">
-      <div id="menuTitle" class="menu-panel-title">Menu</div>
-      <button id="menuClose" class="icon-btn" type="button">×</button>
-    </div>
-    <div id="menuBody" class="menu-panel-body"></div>
-  </div>
+  <!-- Campus preview helper (no dependency on app.js) -->
+  <script>
+    (function () {
+      const sel = document.getElementById("campus-select");
+      const pill = document.getElementById("campus-preview");
+      if (!sel || !pill) return;
 
+      const update = () => {
+        pill.textContent = sel.value ? sel.value : "—";
+      };
+
+      sel.addEventListener("change", update);
+      update();
+    })();
+  </script>
 </body>
 </html>
