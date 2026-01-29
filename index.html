@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CMS Assistant</title>
 
-  <!-- App icons / PWA (optional but recommended) -->
+  <!-- Icons (optional) -->
   <link rel="icon" type="image/png" href="icons/favicon-32.png" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png" />
   <meta name="theme-color" content="#0b2a5b" />
@@ -15,30 +15,36 @@
 </head>
 
 <body>
-  <!-- ====== Header ====== -->
+  <!-- ================= HEADER ================= -->
   <header class="app-header">
-    <div class="brand">
-      <img src="assets/cms-logo.png" alt="CMS" class="brand-logo" />
-      <div class="brand-text">
-        <div class="brand-title">CMS Assistant</div>
-        <div class="brand-subtitle">Internal staff & parent assistant</div>
+    <div class="header-inner">
+      <div class="brand">
+        <!-- مسیر لوگوت رو درست کن -->
+        <img src="assets/cms-logo.png" alt="CMS" class="brand-logo" />
+        <div>
+          <div class="brand-title">CMS Assistant</div>
+          <div class="brand-subtitle">Internal staff & parent assistant</div>
+        </div>
       </div>
-    </div>
 
-    <!-- Actions appear after login (app.js will hide/show) -->
-    <div id="header-actions" class="header-actions hidden">
-      <select id="campus-switch" class="select campus-switch">
-        <option value="">Campus</option>
-        <option value="MC">MC</option>
-        <option value="SC">SC</option>
-        <option value="TC">TC</option>
-        <option value="WC">WC</option>
-        <option value="YC">YC</option>
-      </select>
+      <!-- Right side actions (app.js show/hide) -->
+      <div id="header-actions" class="header-actions hidden">
+        <select id="campus-switch" class="campus-switch">
+          <option value="">Campus</option>
+          <option value="MC">MC</option>
+          <option value="SC">SC</option>
+          <option value="TC">TC</option>
+          <option value="WC">WC</option>
+          <option value="YC">YC</option>
+        </select>
 
-      <button id="admin-mode-btn" class="btn btn-ghost">Admin</button>
-      <span id="mode-badge" class="mode-badge staff">STAFF</span>
-      <button id="logout-btn" class="btn btn-ghost danger">Logout</button>
+        <button id="admin-mode-btn" class="pill-btn">Admin</button>
+
+        <!-- role badge -->
+        <span id="mode-badge" class="mode-badge staff">STAFF</span>
+
+        <button id="logout-btn" class="pill-btn danger">Logout</button>
+      </div>
     </div>
   </header>
 
@@ -56,30 +62,35 @@
     </div>
   </nav>
 
-  <!-- ====== Main ====== -->
+  <!-- ================= MAIN ================= -->
   <main class="app-main">
-    <!-- ===== Login Screen ===== -->
+
+    <!-- ============ LOGIN SCREEN ============ -->
     <section id="login-screen" class="screen">
       <div class="card login-card">
-        <div class="login-head">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
           <div>
-            <h1 class="h1">Login</h1>
-            <p class="muted">Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.</p>
+            <h2 class="card-title">Login</h2>
+            <p class="card-hint">
+              Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.
+            </p>
           </div>
 
-          <!-- Admin can start from first page -->
-          <button id="login-admin-btn" class="btn btn-ghost">Admin</button>
+          <!-- Admin login from first page -->
+          <button id="login-admin-btn" class="secondary-btn">Admin</button>
         </div>
 
         <form id="login-form" class="login-form">
-          <label class="field">
-            <span class="label">Access code</span>
-            <input id="access-code" type="password" autocomplete="off" placeholder="Enter access code" />
-          </label>
+          <div class="login-row">
+            <input
+              id="access-code"
+              class="text-input"
+              type="password"
+              placeholder="Access code"
+              autocomplete="off"
+            />
 
-          <label class="field">
-            <span class="label">Campus</span>
-            <select id="campus-select" class="select">
+            <select id="campus-select" class="campus-select">
               <option value="">Select campus</option>
               <option value="MC">MC</option>
               <option value="SC">SC</option>
@@ -87,62 +98,62 @@
               <option value="WC">WC</option>
               <option value="YC">YC</option>
             </select>
-          </label>
 
-          <button type="submit" class="btn btn-primary">Login</button>
+            <button type="submit" class="primary-btn">Login</button>
+          </div>
+
+          <div id="login-error" class="error-text"></div>
         </form>
 
-        <div id="login-error" class="error"></div>
-
-        <p class="muted small" style="margin-top:12px;">
-          Staff can ask about <b>Policies</b>, <b>Protocols</b>, and <b>Handbooks</b>.
-          Parents can browse <b>Handbooks</b>.
-        </p>
+        <div class="footer-note">© CMS — Internal use only</div>
       </div>
-
-      <footer class="footer">© CMS — Internal use only</footer>
     </section>
 
-    <!-- ===== Chat Screen ===== -->
+    <!-- ============ CHAT SCREEN ============ -->
     <section id="chat-screen" class="screen hidden">
-      <div class="card chat-card">
-        <div class="chat-hint">
+      <div class="chat-shell">
+        <div class="chat-top-hint">
           Ask any CMS policy, protocol, or parent handbook question (campus-based).
         </div>
 
         <div id="chat-window" class="chat-window"></div>
 
         <form id="chat-form" class="chat-form">
-          <input id="user-input" type="text" placeholder="Ask a question..." autocomplete="off" />
-          <button class="btn btn-primary" type="submit">Ask</button>
+          <input id="user-input" class="text-input" type="text" placeholder="Ask a question..." autocomplete="off" />
+          <button class="primary-btn" type="submit">Ask</button>
         </form>
       </div>
 
-      <footer class="footer">© CMS — Staff internal tool</footer>
+      <div class="footer-note">© CMS — Staff internal tool</div>
     </section>
+
   </main>
 
-  <!-- ===== Menu Panel (right slide) ===== -->
-  <div id="menu-overlay" class="menu-overlay hidden"></div>
-  <aside id="menu-panel" class="menu-panel hidden">
-    <div class="menu-panel-head">
+  <!-- ================= MENU OVERLAY + PANEL ================= -->
+  <div id="menu-overlay" class="overlay hidden"></div>
+
+  <div id="menu-panel" class="menu-panel hidden">
+    <div class="menu-panel-header">
       <div id="menu-panel-title" class="menu-panel-title">Menu</div>
       <button id="menu-panel-close" class="icon-btn" aria-label="Close">×</button>
     </div>
     <div id="menu-panel-body" class="menu-panel-body"></div>
-  </aside>
+  </div>
 
-  <!-- ===== Admin Modal (PIN) ===== -->
+  <!-- ================= ADMIN MODAL ================= -->
   <div id="admin-modal" class="modal hidden">
     <div class="modal-card">
       <div class="modal-title">Admin PIN</div>
-      <p class="muted small">Enter the admin PIN to enable admin mode.</p>
-      <input id="admin-pin" type="password" placeholder="Admin PIN" />
+      <div class="modal-hint">Enter the admin PIN to enable admin mode.</div>
+
+      <input id="admin-pin" class="text-input" type="password" placeholder="Admin PIN" />
+
       <div class="modal-actions">
-        <button id="admin-pin-cancel" class="btn btn-ghost">Cancel</button>
-        <button id="admin-pin-submit" class="btn btn-primary">Continue</button>
+        <button id="admin-pin-cancel" class="secondary-btn">Cancel</button>
+        <button id="admin-pin-submit" class="primary-btn">Continue</button>
       </div>
     </div>
   </div>
+
 </body>
 </html>
