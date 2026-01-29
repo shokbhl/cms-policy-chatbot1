@@ -2,156 +2,113 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
   <title>CMS Assistant</title>
 
-  <!-- App Identity -->
-  <meta name="application-name" content="CMS Assistant">
-  <meta name="apple-mobile-web-app-title" content="CMS Assistant">
-  <meta name="theme-color" content="#0B3A6A">
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0b2e6f" />
 
   <!-- Icons -->
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="/cms-assistant-180.png">
-
-  <!-- Optional PWA -->
-  <!-- <link rel="manifest" href="/manifest.json"> -->
+  <link rel="icon" type="image/png" href="/icons/cms-assistant-192.png" />
 
   <!-- Styles -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 </head>
 
 <body>
 
-  <!-- ================= HEADER ================= -->
-  <header class="app-header">
-    <div class="header-left">
-      <img src="/cms-logo.png" alt="CMS Logo" class="cms-logo">
-      <div>
-        <h1>CMS Policy Chatbot</h1>
-        <p class="subtitle">Internal staff & parent assistant</p>
-      </div>
-    </div>
-
-    <div id="header-actions" class="header-actions hidden">
-      <select id="campus-switch" class="campus-select">
-        <option value="">Campus</option>
-        <option value="YC">YC</option>
-        <option value="SC">SC</option>
-        <option value="MC">MC</option>
-        <option value="TC">TC</option>
-        <option value="WC">WC</option>
-      </select>
-
-      <button id="admin-mode-btn" class="btn secondary">Admin</button>
-      <span id="mode-badge" class="mode-badge">STAFF</span>
-      <button id="logout-btn" class="btn danger">Logout</button>
-    </div>
-  </header>
-
-  <!-- ================= TOP MENU ================= -->
-  <nav id="top-menu-bar" class="top-menu-bar hidden">
-    <div class="top-menu-inner">
-      <button class="menu-pill" data-menu="policies">Policies</button>
-      <button class="menu-pill" data-menu="protocols">Protocols</button>
-      <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
-
-      <!-- Admin quick links -->
-      <div id="admin-links" class="admin-links hidden">
-        <a class="admin-link" href="dashboard.html">Dashboard</a>
-        <a class="admin-link" href="logs.html">Logs</a>
-      </div>
-    </div>
-  </nav>
-
-  <!-- ================= LOGIN SCREEN ================= -->
-  <main id="login-screen" class="screen">
-    <div class="login-card">
-      <h2>Login</h2>
-      <p class="login-hint">
-        Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.
-      </p>
-
-      <form id="login-form">
-        <input
-          id="access-code"
-          type="password"
-          placeholder="Access code"
-          autocomplete="off"
-        />
-
-        <select id="campus-select" class="campus-select large">
-          <option value="">Select campus</option>
-          <option value="YC">York Mills (YC)</option>
-          <option value="SC">Sheppard (SC)</option>
-          <option value="MC">Midtown (MC)</option>
-          <option value="TC">Thornhill (TC)</option>
-          <option value="WC">Willowdale (WC)</option>
-        </select>
-
-        <button type="submit" class="btn primary full">Login</button>
-        <p id="login-error" class="error-text"></p>
-      </form>
-    </div>
-  </main>
-
-  <!-- ================= CHAT SCREEN ================= -->
-  <main id="chat-screen" class="screen hidden">
-    <div class="chat-container">
-
-      <div class="chat-header">
-        <p class="chat-hint">
-          Ask any CMS policy, protocol, or parent handbook question (campus-based).
-        </p>
-      </div>
-
-      <div id="chat-window" class="chat-window"></div>
-
-      <form id="chat-form" class="chat-input-bar">
-        <input
-          id="user-input"
-          type="text"
-          placeholder="Ask a question..."
-          autocomplete="off"
-        />
-        <button type="submit" class="btn primary">Ask</button>
-      </form>
-
-    </div>
-  </main>
-
-  <!-- ================= MENU PANEL ================= -->
-  <div id="menu-overlay" class="menu-overlay hidden"></div>
-
-  <aside id="menu-panel" class="menu-panel hidden">
-    <div class="menu-panel-header">
-      <h3 id="menu-panel-title"></h3>
-      <button id="menu-panel-close" class="menu-close">×</button>
-    </div>
-    <div id="menu-panel-body" class="menu-panel-body"></div>
-  </aside>
-
-  <!-- ================= ADMIN PIN MODAL ================= -->
-  <div id="admin-modal" class="modal hidden">
-    <div class="modal-content">
-      <h3>Enter Admin PIN</h3>
-      <input id="admin-pin" type="password" placeholder="Admin PIN">
-      <div class="modal-actions">
-        <button id="admin-pin-submit" class="btn primary">Confirm</button>
-        <button id="admin-pin-cancel" class="btn secondary">Cancel</button>
-      </div>
+<!-- ================= HEADER ================= -->
+<header class="top-header">
+  <div class="header-left">
+    <img src="/icons/cms-assistant-192.png" class="logo" />
+    <div>
+      <h1>CMS Assistant</h1>
+      <p class="subtitle">Internal staff & parent assistant</p>
     </div>
   </div>
 
-  <!-- ================= FOOTER ================= -->
-  <footer class="app-footer">
-    © CMS – Internal use only
-  </footer>
+  <div class="header-right">
+    <select id="campusSelect">
+      <option value="">Campus</option>
+      <option value="YC">YC</option>
+      <option value="SC">SC</option>
+      <option value="MC">MC</option>
+      <option value="TC">TC</option>
+    </select>
 
-  <!-- Scripts -->
-  <script src="app.js"></script>
+    <button id="adminModeBtn" class="pill hidden">Admin</button>
+    <span id="roleBadge" class="role-badge hidden"></span>
+    <button id="logoutBtn" class="pill hidden">Logout</button>
+  </div>
+</header>
+
+<!-- ================= TOP MENU ================= -->
+<nav id="topMenu" class="top-menu hidden">
+  <button class="menu-pill" data-menu="policies">Policies</button>
+  <button class="menu-pill" data-menu="protocols">Protocols</button>
+  <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
+
+  <div id="adminLinks" class="admin-links hidden">
+    <a href="dashboard.html">Dashboard</a>
+    <a href="logs.html">Logs</a>
+  </div>
+</nav>
+
+<!-- ================= LOGIN ================= -->
+<section id="loginSection" class="card">
+  <h2>Login</h2>
+  <p>Enter your <strong>Staff</strong> or <strong>Parent</strong> access code and select a campus.</p>
+
+  <input type="password" id="accessCode" placeholder="Access code" />
+
+  <select id="loginCampus">
+    <option value="">Select campus</option>
+    <option value="YC">YC</option>
+    <option value="SC">SC</option>
+    <option value="MC">MC</option>
+    <option value="TC">TC</option>
+  </select>
+
+  <button id="loginBtn" class="primary-btn">Login</button>
+
+  <p class="hint">
+    Admins can log in using the <strong>Admin</strong> button above.
+  </p>
+</section>
+
+<!-- ================= INFO ================= -->
+<section id="infoSection" class="card hidden">
+  <p id="infoText"></p>
+</section>
+
+<!-- ================= CHAT ================= -->
+<section id="chatSection" class="card hidden">
+  <h3 id="activeTitle">Ask a question</h3>
+
+  <div id="chatMessages" class="chat-box"></div>
+
+  <div class="chat-input">
+    <input type="text" id="questionInput" placeholder="Ask a question…" />
+    <button id="askBtn">Ask</button>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <small>© CMS – Internal use only</small>
+</footer>
+
+<!-- ================= APP ================= -->
+<script src="app.js"></script>
+
+<!-- ================= SERVICE WORKER ================= -->
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js");
+}
+</script>
 
 </body>
 </html>
