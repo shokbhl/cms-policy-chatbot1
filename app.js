@@ -1,4 +1,4 @@
-/* ==========================================================
+/* =========================================================
    CMS Assistant - app.js (FULL FEATURE)
    - Staff/Parent/Admin login from first screen
    - Campus required (blank default)
@@ -7,817 +7,796 @@
    - Handbook list per campus + sections clickable
    - Admin mode badge + admin links (Dashboard/Logs)
    - Campus switch inside app + "Campus switched" message
-   ========================================================== */
+   - Fixes:
+     * Access code hidden (password)
+     * Logo path + fallback
+     * Admin button opens Admin PIN modal + login
+========================================================= */
 
 (() => {
-  /* -------------------- CONFIG -------------------- */
+  // -------------------------------
+  // Config (adjust only if needed)
+  // -------------------------------
+  const API_BASE = ""; // keep "" if you use Pages Functions proxy (recommended)
+  // If you directly call the Worker, set e.g.:
+  // const API_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
 
-  // You can define in index.html:
-  // <script>window.CMS_CONFIG = { API_BASE: "https://YOUR-WORKER.workers.dev" };</script>
-  const API_BASE =
-    (window.CMS_CONFIG && window.CMS_CONFIG.API_BASE) ||
-    localStorage.getItem("CMS_API_BASE") ||
-    ""; // "" means same origin (ONLY works if you proxy via Pages/Worker route)
-
-  const LS = {
-    role: "cms_role",          // "parent" | "staff" | "admin"
-    token: "cms_token",        // bearer token for staff/parent
-    adminToken: "cms_admin_token", // bearer token for admin endpoints
-    campus: "cms_campus",      // "YC" | "MC" ...
-    name: "cms_name",          // optional
+  const STORAGE = {
+    role: "cms_role",
+    campus: "cms_campus",
+    token: "cms_token",          // staff/parent session token
+    adminToken: "cms_admin_token"// admin session token (for /admin/*)
   };
 
-  const ROLES = { parent: "parent", staff: "staff", admin: "admin" };
   const CAMPUSES = ["MC", "SC", "TC", "WC", "YC"];
 
-  /* -------------------- DOM HELPERS -------------------- */
+  // -------------------------------
+  // Helpers
+  // -------------------------------
+  const $ = (id) => document.getElementById(id);
+  const firstEl = (...ids) => ids.map($).find(Boolean) || null;
 
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  function safeText(el, txt) { if (el) el.textContent = txt; }
-  function show(el) { if (el) el.classList.remove("hidden"); }
-  function hide(el) { if (el) el.classList.add("hidden"); }
-
-  function escapeHtml(str) {
-    return String(str ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
   }
 
   function toast(msg) {
-    // minimal toast (doesn't need extra CSS)
-    const t = document.createElement("div");
-    t.style.position = "fixed";
-    t.style.left = "50%";
-    t.style.bottom = "18px";
-    t.style.transform = "translateX(-50%)";
-    t.style.background = "rgba(17,24,39,.92)";
-    t.style.color = "#fff";
-    t.style.padding = "10px 12px";
-    t.style.borderRadius = "12px";
-    t.style.fontWeight = "700";
-    t.style.zIndex = "9999";
-    t.style.maxWidth = "92vw";
-    t.style.textAlign = "center";
-    t.textContent = msg;
-    document.body.appendChild(t);
-    setTimeout(() => t.remove(), 1800);
+    const el = document.createElement("div");
+    el.textContent = msg;
+    el.style.position = "fixed";
+    el.style.left = "50%";
+    el.style.bottom = "22px";
+    el.style.transform = "translateX(-50%)";
+    el.style.background = "rgba(17,24,39,.92)";
+    el.style.color = "#fff";
+    el.style.padding = "10px 14px";
+    el.style.borderRadius = "999px";
+    el.style.fontWeight = "800";
+    el.style.zIndex = "9999";
+    el.style.boxShadow = "0 10px 24px rgba(0,0,0,.18)";
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2200);
   }
 
-  function apiUrl(path) {
-    // If API_BASE empty, use relative path
-    return (API_BASE ? API_BASE.replace(/\/$/, "") : "") + path;
+  function setHidden(el, hidden) {
+    if (!el) return;
+    el.classList.toggle("hidden", !!hidden);
   }
 
-  async function http(path, { method = "GET", headers = {}, body } = {}) {
-    const res = await fetch(apiUrl(path), {
-      method,
+  function apiFetch(path, options = {}) {
+    const url = `${API_BASE}${path}`;
+    return fetch(url, {
+      ...options,
       headers: {
         "Content-Type": "application/json",
-        ...headers,
-      },
-      body: body ? JSON.stringify(body) : undefined,
+        ...(options.headers || {})
+      }
     });
-    const text = await res.text();
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
-    if (!res.ok) {
-      const msg = (data && (data.error || data.message)) || `HTTP ${res.status}`;
-      throw new Error(msg);
+  }
+
+  function getCampus() {
+    return (localStorage.getItem(STORAGE.campus) || "").toUpperCase();
+  }
+  function setCampus(c) {
+    localStorage.setItem(STORAGE.campus, (c || "").toUpperCase());
+  }
+  function getRole() {
+    return (localStorage.getItem(STORAGE.role) || "").toLowerCase();
+  }
+  function setRole(r) {
+    localStorage.setItem(STORAGE.role, (r || "").toLowerCase());
+  }
+  function getToken() {
+    return localStorage.getItem(STORAGE.token) || "";
+  }
+  function setToken(t) {
+    localStorage.setItem(STORAGE.token, t || "");
+  }
+  function getAdminToken() {
+    return localStorage.getItem(STORAGE.adminToken) || "";
+  }
+  function setAdminToken(t) {
+    localStorage.setItem(STORAGE.adminToken, t || "");
+  }
+
+  function isAdmin() {
+    return getRole() === "admin";
+  }
+  function isStaff() {
+    return getRole() === "staff";
+  }
+  function isParent() {
+    return getRole() === "parent";
+  }
+  function authed() {
+    return !!getToken() && !!getRole() && !!getCampus();
+  }
+
+  function normalizeCampusSelect(selectEl, allowBlank = true) {
+    if (!selectEl) return;
+    // Ensure options exist
+    const existing = Array.from(selectEl.options || []).map(o => o.value);
+    if (existing.length <= 1) {
+      selectEl.innerHTML = "";
+      if (allowBlank) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "Select campus";
+        selectEl.appendChild(opt);
+      }
+      for (const c of CAMPUSES) {
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        selectEl.appendChild(opt);
+      }
     }
+  }
+
+  // -------------------------------
+  // DOM (support multiple id names)
+  // -------------------------------
+  const els = {
+    // Brand / header
+    brandLogo: firstEl("brandLogo", "logoImg", "cmsLogo"),
+    modeBadge: firstEl("modeBadge", "roleBadge"),
+    campusSwitch: firstEl("campusSwitch", "campusSwitcher", "headerCampusSelect"),
+    logoutBtn: firstEl("logoutBtn", "btnLogout"),
+
+    // Screens
+    loginScreen: firstEl("loginScreen", "screenLogin"),
+    appScreen: firstEl("appScreen", "screenApp"),
+
+    // Login form
+    accessCode: firstEl("accessCode", "codeInput", "accessInput"),
+    campusSelect: firstEl("campusSelect", "loginCampus", "campusSelectLogin"),
+    loginBtn: firstEl("loginBtn", "btnLogin"),
+    adminBtn: firstEl("adminBtn", "btnAdmin"),
+
+    loginError: firstEl("loginError", "errorText"),
+
+    // Admin modal
+    adminModal: firstEl("adminModal", "modalAdmin"),
+    adminPin: firstEl("adminPin", "adminPinInput"),
+    adminLoginBtn: firstEl("adminLoginBtn", "btnAdminLogin"),
+    adminCancelBtn: firstEl("adminCancelBtn", "btnAdminCancel"),
+
+    // Top menu
+    topMenuBar: firstEl("topMenuBar", "menuBar"),
+    menuPolicies: firstEl("menuPolicies", "btnPolicies"),
+    menuProtocols: firstEl("menuProtocols", "btnProtocols"),
+    menuHandbooks: firstEl("menuHandbooks", "btnHandbooks"),
+
+    // Menu panel modal
+    overlay: firstEl("overlay", "menuOverlay"),
+    menuPanel: firstEl("menuPanel", "panelMenu"),
+    menuTitle: firstEl("menuTitle", "panelTitle"),
+    menuBody: firstEl("menuBody", "panelBody"),
+    menuClose: firstEl("menuClose", "panelClose"),
+
+    // Admin links container
+    adminLinks: firstEl("adminLinks"),
+    dashboardLink: firstEl("dashboardLink"),
+    logsLink: firstEl("logsLink"),
+
+    // Chat
+    chatWindow: firstEl("chatWindow", "chatMessages"),
+    chatInput: firstEl("chatInput", "questionInput"),
+    chatSend: firstEl("chatSend", "sendBtn"),
+    chatHint: firstEl("chatHint", "chatTopHint")
+  };
+
+  // -------------------------------
+  // UI: Logo fix + access input hide
+  // -------------------------------
+  function setupLogo() {
+    if (!els.brandLogo) return;
+    // Your real file exists: assets/cms-logo.png
+    const candidates = [
+      "assets/cms-logo.png",
+      "assets/icons/cms-192.png",
+      "favicon-48.png",
+      "favicon-32.png"
+    ];
+    let idx = 0;
+    const tryNext = () => {
+      idx++;
+      if (idx < candidates.length) {
+        els.brandLogo.src = candidates[idx];
+      }
+    };
+    els.brandLogo.onerror = tryNext;
+    els.brandLogo.src = candidates[0];
+  }
+
+  function setupAccessCodeInput() {
+    if (!els.accessCode) return;
+    // Hide code while typing
+    els.accessCode.type = "password";
+    els.accessCode.autocomplete = "off";
+    els.accessCode.autocapitalize = "off";
+    els.accessCode.spellcheck = false;
+  }
+
+  function setLoginError(msg) {
+    if (!els.loginError) return;
+    els.loginError.textContent = msg || "";
+  }
+
+  function showScreen(which) {
+    // which: "login" | "app"
+    setHidden(els.loginScreen, which !== "login");
+    setHidden(els.appScreen, which !== "app");
+  }
+
+  function updateBadgesAndMenus() {
+    const role = getRole();
+    const campus = getCampus();
+
+    if (els.modeBadge) {
+      els.modeBadge.textContent = role ? role.toUpperCase() : "";
+      els.modeBadge.classList.remove("staff", "parent", "admin");
+      if (role) els.modeBadge.classList.add(role);
+      setHidden(els.modeBadge, !role);
+    }
+
+    // Campus switch in header (only after login)
+    if (els.campusSwitch) {
+      normalizeCampusSelect(els.campusSwitch, false);
+      els.campusSwitch.value = campus || CAMPUSES[0];
+      setHidden(els.campusSwitch, !authed());
+    }
+
+    // Top menu visible only after login
+    setHidden(els.topMenuBar, !authed());
+
+    // Admin links only for admin
+    if (els.adminLinks) setHidden(els.adminLinks, !isAdmin());
+    if (els.dashboardLink) setHidden(els.dashboardLink, !isAdmin());
+    if (els.logsLink) setHidden(els.logsLink, !isAdmin());
+
+    // Menu pills per role
+    if (els.menuPolicies) setHidden(els.menuPolicies, !(isStaff() || isAdmin()));
+    if (els.menuProtocols) setHidden(els.menuProtocols, !(isStaff() || isAdmin()));
+    if (els.menuHandbooks) setHidden(els.menuHandbooks, !(isParent() || isStaff() || isAdmin()));
+
+    // Logout
+    if (els.logoutBtn) setHidden(els.logoutBtn, !authed());
+
+    // Chat hint
+    if (els.chatHint && authed()) {
+      els.chatHint.textContent = `You are logged in as ${role.toUpperCase()} • Campus ${campus}`;
+    }
+  }
+
+  // -------------------------------
+  // Menu panel modal
+  // -------------------------------
+  function closeMenuPanel() {
+    setHidden(els.overlay, true);
+    setHidden(els.menuPanel, true);
+    if (els.menuTitle) els.menuTitle.textContent = "";
+    if (els.menuBody) els.menuBody.innerHTML = "";
+  }
+
+  function openMenuPanel(title) {
+    if (els.menuTitle) els.menuTitle.textContent = title || "";
+    setHidden(els.overlay, false);
+    setHidden(els.menuPanel, false);
+  }
+
+  // -------------------------------
+  // Admin modal
+  // -------------------------------
+  function openAdminModal() {
+    if (!els.adminModal) return;
+    setHidden(els.adminModal, false);
+    if (els.adminPin) {
+      els.adminPin.value = "";
+      els.adminPin.type = "password";
+      els.adminPin.focus();
+    }
+  }
+  function closeAdminModal() {
+    if (!els.adminModal) return;
+    setHidden(els.adminModal, true);
+  }
+
+  // -------------------------------
+  // Backend calls (you can keep same Worker)
+  // -------------------------------
+  async function loginStaffOrParent(code, campus) {
+    // Expected worker endpoint: POST /auth/login
+    const res = await apiFetch("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ code, campus })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      throw new Error(data?.error || "Login failed");
+    }
+    // data: {ok:true, role:"staff"|"parent", token:"..."}
     return data;
   }
 
-  function getRole() { return localStorage.getItem(LS.role) || ""; }
-  function getCampus() { return (localStorage.getItem(LS.campus) || "").toUpperCase(); }
-  function setCampus(c) { localStorage.setItem(LS.campus, (c || "").toUpperCase()); }
-
-  function getToken() { return localStorage.getItem(LS.token) || ""; }
-  function getAdminToken() { return localStorage.getItem(LS.adminToken) || ""; }
-
-  function setAuth({ role, token, adminToken, campus }) {
-    if (role) localStorage.setItem(LS.role, role);
-    if (typeof token === "string") localStorage.setItem(LS.token, token);
-    if (typeof adminToken === "string") localStorage.setItem(LS.adminToken, adminToken);
-    if (campus) setCampus(campus);
-  }
-
-  function clearAuth() {
-    localStorage.removeItem(LS.role);
-    localStorage.removeItem(LS.token);
-    localStorage.removeItem(LS.adminToken);
-    // keep campus optional:
-    // localStorage.removeItem(LS.campus);
-  }
-
-  /* -------------------- FIND IMPORTANT ELEMENTS -------------------- */
-
-  // Header
-  const elHeaderCampus = $("#campusSelect") || $(".campus-switch") || $("#campusSwitch");
-  const elBtnAdminTop = $("#adminBtn") || $("#btnAdmin") || $('[data-action="admin-login"]') || $(".btn-admin");
-  const elBtnLogout = $("#logoutBtn") || $("#btnLogout") || $('[data-action="logout"]');
-
-  const elBadge = $("#modeBadge") || $(".mode-badge");
-  const elBadgeAdmin = $("#adminBadge") || $("#badgeAdmin");
-
-  const elAdminLinksWrap = $("#adminLinks") || $(".admin-links");
-  const elLinkDashboard = $("#dashboardLink") || $('a[href="dashboard.html"]');
-  const elLinkLogs = $("#logsLink") || $('a[href="logs.html"]');
-
-  // Screens
-  const elScreenLogin = $("#screenLogin") || $("#loginScreen") || $("#loginCard") || $(".login-card")?.closest(".screen") || $("#login");
-  const elScreenApp = $("#screenApp") || $("#appScreen") || $("#mainScreen") || $("#app");
-
-  // Login form
-  const elAccessCode = $("#accessCode") || $("#code") || $('input[name="accessCode"]') || $('input[placeholder*="Access"]');
-  const elCampusLogin = $("#campusLogin") || $("#campus") || $('select[name="campus"]') || $(".campus-select");
-  const elBtnLogin = $("#loginBtn") || $("#btnLogin") || $('button[type="submit"]') || $('button:contains("Login")');
-  const elLoginError = $("#loginError") || $("#error") || $(".error-text");
-
-  // Top menu
-  const elMenuPolicies = $("#menuPolicies") || $('[data-menu="policies"]');
-  const elMenuProtocols = $("#menuProtocols") || $('[data-menu="protocols"]');
-  const elMenuHandbook = $("#menuHandbook") || $("#menuParentHandbook") || $('[data-menu="handbook"]');
-
-  // Chat
-  const elChatWrap = $("#chatWrap") || $(".chat-shell");
-  const elChatWindow = $("#chatWindow") || $("#messages") || $(".chat-window");
-  const elChatInput = $("#chatInput") || $("#prompt") || $('input[placeholder*="Ask"]') || $('textarea');
-  const elChatSend = $("#chatSend") || $("#askBtn") || $('button:contains("Ask")') || $(".ask-btn");
-  const elChatHint = $("#chatHint") || $(".chat-top-hint");
-
-  // Modals / Panels (optional in HTML)
-  const elOverlay = $("#overlay") || $(".overlay");
-  const elMenuPanel = $("#menuPanel") || $(".menu-panel");
-  const elMenuPanelTitle = $("#menuPanelTitle") || $(".menu-panel-title");
-  const elMenuPanelBody = $("#menuPanelBody") || $(".menu-panel-body");
-  const elMenuClose = $("#menuClose") || $('[data-action="close-menu"]') || $(".menu-close");
-
-  /* -------------------- RUNTIME STATE -------------------- */
-
-  let state = {
-    role: getRole(),
-    campus: getCampus(),
-    token: getToken(),
-    adminToken: getAdminToken(),
-    activeMenu: "", // policies|protocols|handbook
-    handbooksCache: {}, // campus -> array
-    policiesCache: null,
-    protocolsCache: null,
-  };
-
-  /* -------------------- UI CORE -------------------- */
-
-  function ensureInputsPrivacy() {
-    // Hide access code text even if HTML has type="text"
-    if (elAccessCode) {
-      elAccessCode.setAttribute("type", "password");
-      elAccessCode.setAttribute("autocomplete", "current-password");
-    }
-  }
-
-  function ensureCampusOptions(selectEl) {
-    if (!selectEl) return;
-    const opts = Array.from(selectEl.options || []);
-    const hasBlank = opts.some(o => (o.value || "") === "");
-    if (!hasBlank) {
-      const o = document.createElement("option");
-      o.value = "";
-      o.textContent = "Select campus";
-      o.selected = true;
-      selectEl.insertBefore(o, selectEl.firstChild);
-    }
-    // If options empty, populate
-    if ((selectEl.options?.length || 0) <= 1) {
-      CAMPUSES.forEach(c => {
-        const o = document.createElement("option");
-        o.value = c;
-        o.textContent = c;
-        selectEl.appendChild(o);
-      });
-    }
-  }
-
-  function setActiveMenu(menu) {
-    state.activeMenu = menu;
-    // toggle active class if present
-    const items = [
-      [elMenuPolicies, "policies"],
-      [elMenuProtocols, "protocols"],
-      [elMenuHandbook, "handbook"],
-    ];
-    items.forEach(([el, key]) => {
-      if (!el) return;
-      if (key === menu) el.classList.add("active");
-      else el.classList.remove("active");
+  async function loginAdmin(pin) {
+    // Expected worker endpoint: POST /admin/login
+    const res = await apiFetch("/admin/login", {
+      method: "POST",
+      body: JSON.stringify({ pin })
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      throw new Error(data?.error || "Admin login failed");
+    }
+    // data: {ok:true, role:"admin", token:"ADMIN_TOKEN"}
+    return data;
   }
 
-  function setBadge() {
-    if (!elBadge) return;
+  async function fetchPolicies(campus) {
+    // Expected: GET /policies?campus=YC  (or ignore campus server-side)
+    const res = await apiFetch(`/policies?campus=${encodeURIComponent(campus)}`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || "Policies load failed");
+    return data; // { items:[{id,title,content,keywords,link?...}] } OR {policies:[...]}
+  }
 
-    const r = state.role;
-    const c = state.campus || "";
-    if (!r) {
-      elBadge.className = "mode-badge hidden";
+  async function fetchProtocols(campus) {
+    const res = await apiFetch(`/protocols?campus=${encodeURIComponent(campus)}`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || "Protocols load failed");
+    return data;
+  }
+
+  async function fetchHandbooks(campus) {
+    // Your KV keys are handbook_YC etc. Server should map by campus.
+    const res = await apiFetch(`/handbooks?campus=${encodeURIComponent(campus)}`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || "Handbooks load failed");
+    return data; // { handbooks:[...] } or {items:[...]}
+  }
+
+  async function chatAsk(question, campus) {
+    const res = await apiFetch(`/chat`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ question, campus, role: getRole() })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) throw new Error(data?.error || "Chat failed");
+    // data: {ok:true, answer:"...", handbook?:{...}, ms?:123}
+    return data;
+  }
+
+  // -------------------------------
+  // Renderers
+  // -------------------------------
+  function renderMessage(kind, text) {
+    if (!els.chatWindow) return;
+    const div = document.createElement("div");
+    div.className = `msg ${kind}`;
+    div.innerHTML = escapeHtml(text);
+    els.chatWindow.appendChild(div);
+    els.chatWindow.scrollTop = els.chatWindow.scrollHeight;
+  }
+
+  function renderTyping(on) {
+    if (!els.chatWindow) return;
+    const existing = els.chatWindow.querySelector(".typing-bubble");
+    if (!on) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (existing) return;
+    const bub = document.createElement("div");
+    bub.className = "typing-bubble";
+    bub.innerHTML = `
+      <div class="typing-dots">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+      <div style="font-weight:800;color:#6b7280;">Typing…</div>
+    `;
+    els.chatWindow.appendChild(bub);
+    els.chatWindow.scrollTop = els.chatWindow.scrollHeight;
+  }
+
+  function getItemsFromData(data) {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.items)) return data.items;
+    if (Array.isArray(data.policies)) return data.policies;
+    if (Array.isArray(data.protocols)) return data.protocols;
+    if (Array.isArray(data.handbooks)) return data.handbooks;
+    return [];
+  }
+
+  function renderListAsButtons(items, onClick) {
+    if (!els.menuBody) return;
+    els.menuBody.innerHTML = "";
+    if (!items.length) {
+      els.menuBody.innerHTML = `<div class="muted" style="font-weight:800;">No items found.</div>`;
+      return;
+    }
+    for (const it of items) {
+      const btn = document.createElement("button");
+      btn.className = "menu-item-btn";
+      btn.type = "button";
+      btn.innerHTML = `<b>${escapeHtml(it.title || it.name || it.id || "Untitled")}</b>`;
+      btn.addEventListener("click", () => onClick(it));
+      els.menuBody.appendChild(btn);
+    }
+  }
+
+  function renderHandbookCardList(handbooks) {
+    if (!els.menuBody) return;
+    els.menuBody.innerHTML = "";
+
+    if (!handbooks.length) {
+      els.menuBody.innerHTML = `<div class="muted" style="font-weight:800;">No handbooks found for this campus.</div>`;
       return;
     }
 
-    elBadge.className = "mode-badge";
-    if (r === ROLES.admin) elBadge.classList.add("admin");
-    if (r === ROLES.staff) elBadge.classList.add("staff");
-    if (r === ROLES.parent) elBadge.classList.add("parent");
+    for (const hb of handbooks) {
+      const card = document.createElement("div");
+      card.className = "hb-card";
 
-    elBadge.textContent = (r === "admin" ? "ADMIN" : r.toUpperCase()) + (c ? ` · ${c}` : "");
-  }
+      const title = document.createElement("div");
+      title.className = "hb-title";
+      title.textContent = hb.title || hb.id || "Handbook";
 
-  function renderRoleMenus() {
-    // Parent: only handbook
-    const isParent = state.role === ROLES.parent;
-    const isStaff = state.role === ROLES.staff;
-    const isAdmin = state.role === ROLES.admin;
+      const meta = document.createElement("div");
+      meta.className = "hb-meta";
+      meta.textContent = [hb.campus, hb.program, hb.type].filter(Boolean).join(" • ");
 
-    if (elMenuPolicies) (isParent ? hide(elMenuPolicies) : show(elMenuPolicies));
-    if (elMenuProtocols) (isParent ? hide(elMenuProtocols) : show(elMenuProtocols));
-    if (elMenuHandbook) show(elMenuHandbook);
+      card.appendChild(title);
+      card.appendChild(meta);
 
-    // Admin links only for admin
-    if (elAdminLinksWrap) (isAdmin ? show(elAdminLinksWrap) : hide(elAdminLinksWrap));
-    if (elLinkDashboard) elLinkDashboard.style.display = isAdmin ? "" : "none";
-    if (elLinkLogs) elLinkLogs.style.display = isAdmin ? "" : "none";
-  }
-
-  function renderCampusControls() {
-    ensureCampusOptions(elCampusLogin);
-    ensureCampusOptions(elHeaderCampus);
-
-    const c = state.campus || "";
-
-    if (elCampusLogin) elCampusLogin.value = c || "";
-    if (elHeaderCampus) elHeaderCampus.value = c || "";
-  }
-
-  function renderScreens() {
-    const loggedIn = !!state.role;
-    if (loggedIn) {
-      if (elScreenLogin) hide(elScreenLogin);
-      if (elScreenApp) show(elScreenApp);
-    } else {
-      if (elScreenApp) hide(elScreenApp);
-      if (elScreenLogin) show(elScreenLogin);
-    }
-  }
-
-  function renderChatAvailability() {
-    // rule: admin alone can browse but to ask chat must be staff/parent
-    // (your earlier logic)
-    const canAsk = state.role === ROLES.staff || state.role === ROLES.parent;
-    if (!elChatInput || !elChatSend) return;
-
-    elChatInput.disabled = !canAsk;
-    elChatSend.disabled = !canAsk;
-
-    if (elChatHint) {
-      if (state.role === ROLES.admin) {
-        safeText(elChatHint, "Admin mode enabled. You can browse menus and access Dashboard/Logs. To ask in chat, login with a Staff or Parent code.");
-      } else if (state.role) {
-        safeText(elChatHint, "Ask any CMS policy, protocol, or parent handbook question (campus-based).");
-      } else {
-        safeText(elChatHint, "");
+      if (hb.link) {
+        const a = document.createElement("a");
+        a.className = "hb-open-link";
+        a.href = hb.link;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = "Open official link";
+        card.appendChild(a);
       }
+
+      // Sections
+      const sections = Array.isArray(hb.sections) ? hb.sections : [];
+      if (sections.length) {
+        for (const s of sections) {
+          const sb = document.createElement("button");
+          sb.type = "button";
+          sb.className = "hb-section-btn";
+          sb.textContent = s.title || s.key || "Section";
+          sb.addEventListener("click", () => {
+            // show section content (if empty show placeholder)
+            const content = (s.content || "").trim();
+            openMenuPanel(`${hb.title || hb.id} • ${s.title || s.key}`);
+            if (!els.menuBody) return;
+
+            const back = document.createElement("button");
+            back.type = "button";
+            back.className = "secondary-btn";
+            back.textContent = "← Back";
+            back.addEventListener("click", async () => {
+              // go back to handbook list
+              openMenuPanel("Parent Handbooks");
+              renderHandbookCardList(handbooks);
+            });
+
+            const body = document.createElement("div");
+            body.style.marginTop = "10px";
+            body.style.whiteSpace = "pre-wrap";
+            body.style.lineHeight = "1.55";
+            body.style.fontWeight = "650";
+            body.style.color = "#111827";
+            body.textContent = content || "No content added yet for this section.";
+
+            els.menuBody.innerHTML = "";
+            els.menuBody.appendChild(back);
+            els.menuBody.appendChild(body);
+
+            if (hb.link) {
+              const link = document.createElement("a");
+              link.className = "hb-open-link";
+              link.href = hb.link;
+              link.target = "_blank";
+              link.rel = "noopener noreferrer";
+              link.textContent = "Open official link";
+              els.menuBody.appendChild(link);
+            }
+          });
+          card.appendChild(sb);
+        }
+      }
+
+      els.menuBody.appendChild(card);
     }
   }
 
-  function applyAllUI() {
-    ensureInputsPrivacy();
-    renderScreens();
-    renderCampusControls();
-    setBadge();
-    renderRoleMenus();
-    renderChatAvailability();
-  }
+  // -------------------------------
+  // Menu actions
+  // -------------------------------
+  async function openPolicies() {
+    const campus = getCampus();
+    openMenuPanel("Policies");
+    if (els.menuBody) els.menuBody.innerHTML = `<div class="muted" style="font-weight:800;">Loading…</div>`;
+    const data = await fetchPolicies(campus);
+    const items = getItemsFromData(data);
 
-  /* -------------------- MENU PANEL -------------------- */
-
-  function openMenuPanel(title) {
-    if (elOverlay) show(elOverlay);
-    if (elMenuPanel) show(elMenuPanel);
-    if (elMenuPanelTitle) safeText(elMenuPanelTitle, title || "");
-  }
-
-  function closeMenuPanel() {
-    if (elOverlay) hide(elOverlay);
-    if (elMenuPanel) hide(elMenuPanel);
-  }
-
-  function menuBodyHtml(html) {
-    if (!elMenuPanelBody) return;
-    elMenuPanelBody.innerHTML = html;
-  }
-
-  /* -------------------- AUTH / LOGIN -------------------- */
-
-  async function loginStaffOrParent(code, campus) {
-    // Worker should validate STAFF_CODE/PARENT_CODE and return role+token
-    // Expected response:
-    // { ok:true, role:"staff"|"parent", token:"...", campus:"YC" }
-    const data = await http("/auth/login", {
-      method: "POST",
-      body: { code, campus },
+    renderListAsButtons(items, (it) => {
+      openMenuPanel(it.title || "Policy");
+      if (!els.menuBody) return;
+      const content = (it.content || it.text || "").trim();
+      els.menuBody.innerHTML = `
+        <div style="font-weight:900;color:#111827;margin-bottom:10px;">${escapeHtml(it.title || "")}</div>
+        ${it.link ? `<a class="hb-open-link" href="${escapeHtml(it.link)}" target="_blank" rel="noopener noreferrer">Open official link</a>` : ""}
+        <div style="white-space:pre-wrap;line-height:1.55;font-weight:650;">${escapeHtml(content || "No content yet.")}</div>
+      `;
     });
+  }
 
-    if (!data || !data.role) throw new Error("Login failed");
+  async function openProtocols() {
+    const campus = getCampus();
+    openMenuPanel("Protocols");
+    if (els.menuBody) els.menuBody.innerHTML = `<div class="muted" style="font-weight:800;">Loading…</div>`;
+    const data = await fetchProtocols(campus);
+    const items = getItemsFromData(data);
 
-    setAuth({ role: data.role, token: data.token || "", campus: data.campus || campus });
-    state.role = data.role;
-    state.token = data.token || "";
-    state.campus = (data.campus || campus || "").toUpperCase();
+    renderListAsButtons(items, (it) => {
+      openMenuPanel(it.title || "Protocol");
+      if (!els.menuBody) return;
+      const content = (it.content || it.text || "").trim();
+      els.menuBody.innerHTML = `
+        <div style="font-weight:900;color:#111827;margin-bottom:10px;">${escapeHtml(it.title || "")}</div>
+        ${it.link ? `<a class="hb-open-link" href="${escapeHtml(it.link)}" target="_blank" rel="noopener noreferrer">Open official link</a>` : ""}
+        <div style="white-space:pre-wrap;line-height:1.55;font-weight:650;">${escapeHtml(content || "No content yet.")}</div>
+      `;
+    });
+  }
 
-    // clear input
-    if (elAccessCode) elAccessCode.value = "";
-    toast(`Logged in as ${state.role.toUpperCase()} · ${state.campus}`);
-    applyAllUI();
+  async function openHandbooks() {
+    const campus = getCampus();
+    openMenuPanel("Parent Handbooks");
+    if (els.menuBody) els.menuBody.innerHTML = `<div class="muted" style="font-weight:800;">Loading…</div>`;
+    const data = await fetchHandbooks(campus);
+    const handbooks = getItemsFromData(data);
+    renderHandbookCardList(handbooks);
+  }
 
-    // default menu
-    if (state.role === ROLES.parent) {
-      setActiveMenu("handbook");
-      await showHandbooksMenu();
-    } else {
-      setActiveMenu("policies");
-      await showPoliciesMenu();
+  // -------------------------------
+  // Login flows
+  // -------------------------------
+  async function handleLogin() {
+    setLoginError("");
+
+    const code = (els.accessCode?.value || "").trim();
+    const campus = (els.campusSelect?.value || "").trim().toUpperCase();
+
+    if (!code) return setLoginError("Please enter your access code.");
+    if (!campus) return setLoginError("Please select a campus.");
+
+    try {
+      // staff/parent login
+      const data = await loginStaffOrParent(code, campus);
+      setRole(data.role);
+      setToken(data.token);
+      setCampus(campus);
+
+      // If backend returns admin role from code, still allow admin (optional)
+      if (data.role === "admin" && data.adminToken) {
+        setAdminToken(data.adminToken);
+      }
+
+      showScreen("app");
+      updateBadgesAndMenus();
+      toast(`Logged in • ${data.role.toUpperCase()} • ${campus}`);
+      renderMessage("assistant", `Hi! Ask me anything about CMS policies, protocols, or parent handbook. (Campus: ${campus})`);
+    } catch (e) {
+      setLoginError(e.message || "Login failed");
     }
   }
 
-  async function loginAdmin(pin) {
-    // Worker should validate ADMIN_PIN and return adminToken
-    // Expected: { ok:true, adminToken:"..." }
-    const data = await http("/admin/login", {
-      method: "POST",
-      body: { pin },
-    });
+  async function handleAdminLogin() {
+    setLoginError("");
+    const pin = (els.adminPin?.value || "").trim();
+    if (!pin) {
+      alert("Enter Admin PIN");
+      return;
+    }
+    try {
+      const data = await loginAdmin(pin);
+      // In admin mode you still need a campus chosen for content
+      const campus = (els.campusSelect?.value || "").trim().toUpperCase();
+      if (!campus) {
+        alert("Select campus first (Admin also needs a campus).");
+        return;
+      }
 
-    if (!data || !data.adminToken) throw new Error("Admin login failed");
+      setRole("admin");
+      setToken(data.token);      // session token for main app
+      setAdminToken(data.token); // also works for admin endpoints if same token
+      setCampus(campus);
 
-    setAuth({ role: ROLES.admin, adminToken: data.adminToken, campus: state.campus || "YC" });
-    state.role = ROLES.admin;
-    state.adminToken = data.adminToken;
-    state.token = ""; // admin is separate
-    if (!state.campus) state.campus = "YC";
-    setCampus(state.campus);
-
-    toast(`Admin mode · ${state.campus}`);
-    applyAllUI();
-
-    // open handbook by default in admin mode
-    setActiveMenu("handbook");
-    await showHandbooksMenu();
+      closeAdminModal();
+      showScreen("app");
+      updateBadgesAndMenus();
+      toast(`Admin logged in • ${campus}`);
+      renderMessage("assistant", `Admin mode enabled. Campus: ${campus}.`);
+    } catch (e) {
+      alert(e.message || "Admin login failed");
+    }
   }
 
   function logout() {
-    clearAuth();
-    state.role = "";
-    state.token = "";
-    state.adminToken = "";
-    // keep campus
-    state.campus = getCampus();
-    applyAllUI();
-    closeMenuPanel();
-    if (elChatWindow) elChatWindow.innerHTML = "";
+    localStorage.removeItem(STORAGE.role);
+    localStorage.removeItem(STORAGE.token);
+    // keep admin token optional
+    // localStorage.removeItem(STORAGE.adminToken);
+    showScreen("login");
+    updateBadgesAndMenus();
+    if (els.chatWindow) els.chatWindow.innerHTML = "";
+    if (els.accessCode) els.accessCode.value = "";
     toast("Logged out");
   }
 
-  /* -------------------- ADMIN MODAL -------------------- */
+  // -------------------------------
+  // Chat
+  // -------------------------------
+  async function handleSend() {
+    if (!authed()) return;
+    const q = (els.chatInput?.value || "").trim();
+    if (!q) return;
 
-  function openAdminModal() {
-    // Build modal dynamically (so index.html doesn't need extra markup)
-    const modal = document.createElement("div");
-    modal.className = "modal";
-    modal.innerHTML = `
-      <div class="modal-card" role="dialog" aria-modal="true">
-        <div class="modal-title">Admin Login</div>
-        <div class="modal-hint">Enter admin PIN to enable Admin mode (Dashboard/Logs access).</div>
-        <input id="__adminPin" class="text-input" type="password" placeholder="Admin PIN" autocomplete="current-password" />
-        <div id="__adminErr" class="error-text"></div>
-        <div class="modal-actions">
-          <button id="__adminCancel" class="secondary-btn" type="button">Cancel</button>
-          <button id="__adminGo" class="primary-btn" type="button">Login</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    const pinEl = $("#__adminPin", modal);
-    const errEl = $("#__adminErr", modal);
-    const cancelEl = $("#__adminCancel", modal);
-    const goEl = $("#__adminGo", modal);
-
-    const close = () => modal.remove();
-
-    cancelEl.addEventListener("click", close);
-    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
-
-    goEl.addEventListener("click", async () => {
-      safeText(errEl, "");
-      const pin = (pinEl.value || "").trim();
-      if (!pin) { safeText(errEl, "PIN required."); return; }
-      try {
-        await loginAdmin(pin);
-        close();
-      } catch (e) {
-        safeText(errEl, e.message || "Admin login error");
-      }
-    });
-
-    pinEl.focus();
-  }
-
-  /* -------------------- DATA LOADERS -------------------- */
-
-  async function fetchHandbooks(campus) {
-    const c = (campus || "").toUpperCase();
-    if (!c) throw new Error("Campus required");
-    if (state.handbooksCache[c]) return state.handbooksCache[c];
-
-    // Expected response: { handbooks: [...] }
-    const data = await http(`/handbooks?campus=${encodeURIComponent(c)}`, { method: "GET" });
-    const list = (data && (data.handbooks || data.items || data)) || [];
-    state.handbooksCache[c] = Array.isArray(list) ? list : [];
-    return state.handbooksCache[c];
-  }
-
-  async function fetchPolicies() {
-    if (state.policiesCache) return state.policiesCache;
-    const data = await http(`/policies`, { method: "GET" });
-    const list = (data && (data.policies || data.items || data)) || [];
-    state.policiesCache = Array.isArray(list) ? list : [];
-    return state.policiesCache;
-  }
-
-  async function fetchProtocols() {
-    if (state.protocolsCache) return state.protocolsCache;
-    const data = await http(`/protocols`, { method: "GET" });
-    const list = (data && (data.protocols || data.items || data)) || [];
-    state.protocolsCache = Array.isArray(list) ? list : [];
-    return state.protocolsCache;
-  }
-
-  /* -------------------- MENU RENDERERS -------------------- */
-
-  async function showHandbooksMenu() {
-    setActiveMenu("handbook");
-    openMenuPanel("Parent Handbook");
+    els.chatInput.value = "";
+    renderMessage("user", q);
+    renderTyping(true);
 
     try {
-      const campus = state.campus;
-      if (!campus) {
-        menuBodyHtml(`<div class="muted"><b>Select a campus first.</b></div>`);
-        return;
+      const campus = getCampus();
+      const data = await chatAsk(q, campus);
+      renderTyping(false);
+
+      const answer = data.answer || "No answer.";
+      renderMessage("assistant", answer);
+
+      // If backend returns a matched handbook/policy/protocol, show a hint
+      if (data.handbook?.title) {
+        renderMessage("assistant", `Matched handbook: ${data.handbook.title}`);
       }
-
-      const handbooks = await fetchHandbooks(campus);
-
-      if (!handbooks.length) {
-        menuBodyHtml(`<div class="muted">No handbooks found for campus <b>${escapeHtml(campus)}</b>.</div>`);
-        return;
-      }
-
-      const html = handbooks.map(hb => {
-        const title = hb.title || hb.program || hb.id || "Handbook";
-        const meta = [hb.campus, hb.program, hb.id].filter(Boolean).join(" · ");
-        const link = hb.link ? `<a class="hb-open-link" href="${escapeHtml(hb.link)}" target="_blank" rel="noopener">Open source link</a>` : "";
-
-        const sections = Array.isArray(hb.sections) ? hb.sections : [];
-        const sectionsHtml = sections.map(s => `
-          <button class="hb-section-btn" data-action="ask-section"
-            data-hbid="${escapeHtml(hb.id || "")}"
-            data-seckey="${escapeHtml(s.key || "")}"
-            data-sectitle="${escapeHtml(s.title || "")}"
-            data-hbtitle="${escapeHtml(title)}"
-          >
-            ${escapeHtml(s.title || s.key || "Section")}
-          </button>
-        `).join("");
-
-        return `
-          <div class="hb-card">
-            <div class="hb-title">${escapeHtml(title)}</div>
-            <div class="hb-meta">${escapeHtml(meta)}</div>
-            ${link}
-            <div class="menu-group-label">Sections</div>
-            ${sectionsHtml || `<div class="muted">No sections defined yet.</div>`}
-          </div>
-        `;
-      }).join("");
-
-      menuBodyHtml(html);
     } catch (e) {
-      menuBodyHtml(`<div class="error-text">${escapeHtml(e.message || "Handbook load error")}</div>`);
+      renderTyping(false);
+      renderMessage("assistant", `Error: ${e.message || "Chat failed"}`);
     }
   }
 
-  async function showPoliciesMenu() {
-    setActiveMenu("policies");
-    openMenuPanel("Policies");
+  // -------------------------------
+  // Campus switch inside app
+  // -------------------------------
+  async function handleCampusSwitch(newCampus) {
+    const campus = (newCampus || "").toUpperCase();
+    if (!campus) return;
 
-    try {
-      const items = await fetchPolicies();
-      if (!items.length) {
-        menuBodyHtml(`<div class="muted">No policies found yet.</div>`);
-        return;
-      }
+    setCampus(campus);
+    updateBadgesAndMenus();
+    toast(`Campus switched to ${campus}`);
 
-      const html = `
-        <div class="menu-group-label">Select a policy to ask about</div>
-        ${items.map(p => `
-          <button class="menu-item-btn" data-action="ask-item"
-            data-kind="policy"
-            data-id="${escapeHtml(p.id || "")}"
-            data-title="${escapeHtml(p.title || p.id || "Policy")}"
-          >
-            <b>${escapeHtml(p.title || p.id || "Policy")}</b>
-          </button>
-        `).join("")}
-      `;
-      menuBodyHtml(html);
-    } catch (e) {
-      menuBodyHtml(`<div class="error-text">${escapeHtml(e.message || "Policies load error")}</div>`);
+    // Optional: clear chat window when switching
+    if (els.chatWindow) {
+      els.chatWindow.innerHTML = "";
+      await sleep(50);
+      renderMessage("assistant", `Campus switched to ${campus}. Ask your question.`);
     }
   }
 
-  async function showProtocolsMenu() {
-    setActiveMenu("protocols");
-    openMenuPanel("Protocols");
-
-    try {
-      const items = await fetchProtocols();
-      if (!items.length) {
-        menuBodyHtml(`<div class="muted">No protocols found yet.</div>`);
-        return;
-      }
-
-      const html = `
-        <div class="menu-group-label">Select a protocol to ask about</div>
-        ${items.map(p => `
-          <button class="menu-item-btn" data-action="ask-item"
-            data-kind="protocol"
-            data-id="${escapeHtml(p.id || "")}"
-            data-title="${escapeHtml(p.title || p.id || "Protocol")}"
-          >
-            <b>${escapeHtml(p.title || p.id || "Protocol")}</b>
-          </button>
-        `).join("")}
-      `;
-      menuBodyHtml(html);
-    } catch (e) {
-      menuBodyHtml(`<div class="error-text">${escapeHtml(e.message || "Protocols load error")}</div>`);
-    }
-  }
-
-  /* -------------------- CHAT -------------------- */
-
-  function addMsg(role, text) {
-    if (!elChatWindow) return;
-    const div = document.createElement("div");
-    div.className = "msg " + (role === "user" ? "user" : "assistant");
-    div.textContent = text;
-    elChatWindow.appendChild(div);
-    elChatWindow.scrollTop = elChatWindow.scrollHeight;
-  }
-
-  function addTyping() {
-    if (!elChatWindow) return null;
-    const wrap = document.createElement("div");
-    wrap.className = "typing-bubble";
-    wrap.innerHTML = `
-      <div class="typing-dots">
-        <span class="typing-dot"></span>
-        <span class="typing-dot"></span>
-        <span class="typing-dot"></span>
-      </div>
-      <div class="muted" style="font-weight:800;">Thinking…</div>
-    `;
-    elChatWindow.appendChild(wrap);
-    elChatWindow.scrollTop = elChatWindow.scrollHeight;
-    return wrap;
-  }
-
-  async function sendChat(query, extra = {}) {
-    const campus = state.campus;
-    if (!campus) throw new Error("Select campus first.");
-    if (!query.trim()) throw new Error("Type a question.");
-
-    const token = state.token;
-    if (!token) throw new Error("Login with Staff or Parent code first.");
-
-    const body = {
-      campus,
-      query,
-      ...extra,
-    };
-
-    // Expected response: { answer: "..." }
-    const data = await http("/chat", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body,
-    });
-
-    return (data && (data.answer || data.response || data.text)) || "";
-  }
-
-  /* -------------------- EVENTS -------------------- */
-
-  async function onLoginClick() {
-    safeText(elLoginError, "");
-    const code = (elAccessCode?.value || "").trim();
-    const campus = (elCampusLogin?.value || "").trim().toUpperCase();
-
-    if (!campus) { safeText(elLoginError, "Please select a campus."); return; }
-    if (!code) { safeText(elLoginError, "Please enter your access code."); return; }
-
-    try {
-      await loginStaffOrParent(code, campus);
-    } catch (e) {
-      safeText(elLoginError, e.message || "Login error");
-    }
-  }
-
-  async function onCampusSwitch(value) {
-    const c = (value || "").toUpperCase();
-    if (!c) return;
-    state.campus = c;
-    setCampus(c);
-    renderCampusControls();
-    setBadge();
-    toast(`Campus switched to ${c}`);
-
-    // refresh menus if open
-    if (state.activeMenu === "handbook") await showHandbooksMenu();
-  }
-
-  async function onAskClick() {
-    try {
-      const q = (elChatInput?.value || "").trim();
-      if (!q) return;
-      elChatInput.value = "";
-      addMsg("user", q);
-      const typing = addTyping();
-      const ans = await sendChat(q);
-      if (typing) typing.remove();
-      addMsg("assistant", ans || "No answer.");
-    } catch (e) {
-      addMsg("assistant", "Error: " + (e.message || "chat error"));
-    }
-  }
-
-  // Delegated clicks inside menu panel
-  async function onMenuClick(e) {
-    const btn = e.target.closest("button");
-    if (!btn) return;
-
-    const action = btn.getAttribute("data-action");
-    if (!action) return;
-
-    if (action === "ask-section") {
-      const hbTitle = btn.getAttribute("data-hbtitle") || "Handbook";
-      const secTitle = btn.getAttribute("data-sectitle") || "Section";
-      const hbId = btn.getAttribute("data-hbid") || "";
-      const secKey = btn.getAttribute("data-seckey") || "";
-
-      closeMenuPanel();
-
-      // If admin, they can't ask in chat (by your rules)
-      if (!(state.role === ROLES.staff || state.role === ROLES.parent)) {
-        toast("To ask in chat, login with Staff or Parent code.");
-        return;
-      }
-
-      const prompt = `For campus ${state.campus}, based on "${hbTitle}" section "${secTitle}", answer this question: `;
-      if (elChatInput) {
-        elChatInput.value = prompt;
-        elChatInput.focus();
-      }
-      return;
-    }
-
-    if (action === "ask-item") {
-      closeMenuPanel();
-
-      if (!(state.role === ROLES.staff || state.role === ROLES.parent)) {
-        toast("To ask in chat, login with Staff or Parent code.");
-        return;
-      }
-
-      const kind = btn.getAttribute("data-kind") || "item";
-      const title = btn.getAttribute("data-title") || "";
-      const prompt = `For campus ${state.campus}, regarding the ${kind} "${title}", answer this question: `;
-
-      if (elChatInput) {
-        elChatInput.value = prompt;
-        elChatInput.focus();
-      }
-      return;
-    }
-  }
-
+  // -------------------------------
+  // Init
+  // -------------------------------
   function wireEvents() {
-    // Login button (try several)
-    if (elBtnLogin) elBtnLogin.addEventListener("click", (e) => { e.preventDefault(); onLoginClick(); });
+    // Login select setup
+    normalizeCampusSelect(els.campusSelect, true);
 
-    // Enter key for login
-    if (elAccessCode) {
-      elAccessCode.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") onLoginClick();
-      });
-    }
+    // Buttons
+    els.loginBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleLogin();
+    });
 
-    // Admin top button
-    if (elBtnAdminTop) elBtnAdminTop.addEventListener("click", (e) => { e.preventDefault(); openAdminModal(); });
+    // Enter to login
+    els.accessCode?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleLogin();
+    });
+
+    // Admin button opens modal
+    els.adminBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      openAdminModal();
+    });
+
+    // Admin modal actions
+    els.adminCancelBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeAdminModal();
+    });
+
+    els.adminLoginBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleAdminLogin();
+    });
+
+    els.adminPin?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleAdminLogin();
+    });
+
+    // Menu panel close
+    els.menuClose?.addEventListener("click", closeMenuPanel);
+    els.overlay?.addEventListener("click", closeMenuPanel);
+
+    // Top menu
+    els.menuPolicies?.addEventListener("click", async () => {
+      try { await openPolicies(); } catch (e) { alert(e.message); closeMenuPanel(); }
+    });
+    els.menuProtocols?.addEventListener("click", async () => {
+      try { await openProtocols(); } catch (e) { alert(e.message); closeMenuPanel(); }
+    });
+    els.menuHandbooks?.addEventListener("click", async () => {
+      try { await openHandbooks(); } catch (e) { alert(e.message); closeMenuPanel(); }
+    });
 
     // Logout
-    if (elBtnLogout) elBtnLogout.addEventListener("click", (e) => { e.preventDefault(); logout(); });
+    els.logoutBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      logout();
+    });
 
-    // Campus switch (header)
-    if (elHeaderCampus) elHeaderCampus.addEventListener("change", (e) => onCampusSwitch(e.target.value));
-
-    // Menu pills
-    if (elMenuHandbook) elMenuHandbook.addEventListener("click", (e) => { e.preventDefault(); showHandbooksMenu(); });
-    if (elMenuPolicies) elMenuPolicies.addEventListener("click", (e) => { e.preventDefault(); showPoliciesMenu(); });
-    if (elMenuProtocols) elMenuProtocols.addEventListener("click", (e) => { e.preventDefault(); showProtocolsMenu(); });
-
-    // Menu close
-    if (elMenuClose) elMenuClose.addEventListener("click", closeMenuPanel);
-    if (elOverlay) elOverlay.addEventListener("click", closeMenuPanel);
-
-    // Menu panel delegated
-    if (elMenuPanelBody) elMenuPanelBody.addEventListener("click", onMenuClick);
+    // Campus switch after login
+    els.campusSwitch?.addEventListener("change", (e) => {
+      handleCampusSwitch(e.target.value);
+    });
 
     // Chat send
-    if (elChatSend) elChatSend.addEventListener("click", (e) => { e.preventDefault(); onAskClick(); });
-    if (elChatInput) {
-      elChatInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          onAskClick();
-        }
-      });
-    }
+    els.chatSend?.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleSend();
+    });
+
+    els.chatInput?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleSend();
+    });
   }
 
-  /* -------------------- INIT -------------------- */
-
-  function initFromStorage() {
-    state.role = getRole();
-    state.campus = getCampus();
-    state.token = getToken();
-    state.adminToken = getAdminToken();
-  }
-
-  function sanityCheckApiBase() {
-    // If you are on pages.dev and API_BASE is empty, login will call pages.dev/auth/login (wrong).
-    if (!API_BASE) {
-      console.warn("[CMS] API_BASE is empty. If your API is on workers.dev, set window.CMS_CONFIG.API_BASE in index.html.");
-    }
-  }
-
-  document.addEventListener("DOMContentLoaded", async () => {
-    initFromStorage();
-    sanityCheckApiBase();
-
-    // Ensure selects have blank + campus list
-    ensureInputsPrivacy();
-    ensureCampusOptions(elCampusLogin);
-    ensureCampusOptions(elHeaderCampus);
-
-    // Keep stored campus, but login campus default can be blank if none stored
-    if (!state.campus) {
-      if (elCampusLogin) elCampusLogin.value = "";
-      if (elHeaderCampus) elHeaderCampus.value = "";
-    } else {
-      renderCampusControls();
-    }
-
-    applyAllUI();
+  function boot() {
+    setupLogo();
+    setupAccessCodeInput();
     wireEvents();
 
-    // If already logged in, open appropriate default menu
-    if (state.role === ROLES.parent) {
-      setActiveMenu("handbook");
-    } else if (state.role === ROLES.staff) {
-      setActiveMenu("policies");
-    } else if (state.role === ROLES.admin) {
-      setActiveMenu("handbook");
+    // Start state
+    if (authed()) {
+      showScreen("app");
+      updateBadgesAndMenus();
+      renderMessage("assistant", `Welcome back. Campus: ${getCampus()}.`);
+    } else {
+      showScreen("login");
+      updateBadgesAndMenus();
     }
+  }
 
-    // Optional: auto-open menu on load if logged in
-    if (state.role === ROLES.parent || state.role === ROLES.admin) {
-      try { await showHandbooksMenu(); } catch {}
-    } else if (state.role === ROLES.staff) {
-      try { await showPoliciesMenu(); } catch {}
-    }
-  });
+  // Run
+  document.addEventListener("DOMContentLoaded", boot);
 })();
