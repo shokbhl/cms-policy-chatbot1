@@ -2,18 +2,23 @@
 // CMS Policy Chatbot - app.js (FULL)
 // - Staff/Parent login + Admin-only mode
 // - Campus required on login (blank default)
-// - Parent role can ONLY see Parent Handbook (UI + hard guard)
-// - Staff role sees Policies/Protocols/Handbook
-// - Admin-only can browse Policies/Protocols/Handbook + Dashboard/Logs (but cannot chat without staff/parent)
+// - Parent role: can see Parent Handbook + Parent Portal modules (announcements, calendar, forms, support, etc.)
+// - Staff role: Policies/Protocols/Handbook + Parent Portal modules
+// - Admin-only: can browse Policies/Protocols/Handbook/Parent Portal + Dashboard/Logs (but cannot chat without staff/parent)
 // - Parent Handbook browser via /handbooks endpoint (list -> sections -> section content)
+// - Parent Portal modules via /parent/view endpoint (campus + module)
 // ============================
 
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
+
 const API_URL = `${WORKER_BASE}/api`;
 const STAFF_AUTH_URL = `${WORKER_BASE}/auth/staff`;
 const PARENT_AUTH_URL = `${WORKER_BASE}/auth/parent`;
 const ADMIN_AUTH_URL = `${WORKER_BASE}/auth/admin`;
+
 const HANDBOOKS_URL = `${WORKER_BASE}/handbooks`;
+const PARENT_VIEW_URL = `${WORKER_BASE}/parent/view`;      // ✅ NEW
+const PARENT_MODULES_URL = `${WORKER_BASE}/parent/modules`; // ✅ NEW (optional helper)
 
 const LS = {
   staffToken: "cms_staff_token",
@@ -25,8 +30,21 @@ const LS = {
   campus: "cms_selected_campus"
 };
 
+// Parent Portal modules (must match what Worker expects)
+const PARENT_PORTAL_MODULES = [
+  { id: "announcements", label: "Announcements" },
+  { id: "calendar", label: "Calendar" },
+  { id: "forms", label: "Forms" },
+  { id: "support", label: "Support" },
+  { id: "eca", label: "ECA" },
+  { id: "parent_interview", label: "Parent Interview" },
+  { id: "tuition", label: "Tuition" },
+  { id: "uniform", label: "Uniform Policy" },
+  { id: "daily_schedule", label: "Daily Schedule" },
+  { id: "age_info", label: "Age-based Info" }
+];
+
 // NOTE: These are “ask in chat” quick prompts (not documents).
-// If you want Parent to never access these, we block in UI AND in openMenuPanel guard.
 const MENU_ITEMS = {
   policies: [
     { id: "safe_arrival", label: "Safe Arrival & Dismissal" },
@@ -95,7 +113,6 @@ const adminPinInput = document.getElementById("admin-pin");
 const adminPinSubmit = document.getElementById("admin-pin-submit");
 const adminPinCancel = document.getElementById("admin-pin-cancel");
 
-// might exist in HTML or injected dynamically
 let adminLinks = document.getElementById("admin-links");
 
 // Ensure a top-menu-bar exists
@@ -165,23 +182,35 @@ function setInlineError(text) {
   if (loginError) loginError.textContent = text || "";
 }
 
-// Parent must ONLY see handbook menu
+// Parent: hide Policies/Protocols, show Handbook + Parent modules
 function applyRoleUI(role) {
   const isParent = role === "parent";
 
   const btnPolicies = document.querySelector('.menu-pill[data-menu="policies"]');
   const btnProtocols = document.querySelector('.menu-pill[data-menu="protocols"]');
-  const btnHandbook = document.querySelector('.menu-pill[data-menu="handbook"]');
 
   if (btnPolicies) btnPolicies.style.display = isParent ? "none" : "";
   if (btnProtocols) btnProtocols.style.display = isParent ? "none" : "";
-  if (btnHandbook) btnHandbook.style.display = ""; // always show
 
+  // Parent modules are allowed for everyone (parent/staff/admin browse)
+  // so we don't hide them.
   // If parent and currently open panel is policies/protocols => close
   if (isParent) {
     const activeType = document.querySelector(".menu-pill.active")?.dataset?.menu;
     if (activeType === "policies" || activeType === "protocols") closeMenuPanel();
   }
+}
+
+function getMenuTitle(type) {
+  if (type === "policies") return "Policies";
+  if (type === "protocols") return "Protocols";
+  if (type === "handbook") return "Parent Handbook";
+
+  // Parent portal module titles
+  const found = PARENT_PORTAL_MODULES.find((m) => m.id === type);
+  if (found) return found.label;
+
+  return "Menu";
 }
 
 // ============================
@@ -251,7 +280,7 @@ function getActiveBearerTokenForChat() {
 }
 
 function getAnyBearerToken() {
-  // used for handbook browsing: staff/parent/admin can work
+  // used for handbook browsing + parent modules browsing: staff/parent/admin can work
   if (isStaffActive()) return localStorage.getItem(LS.staffToken) || "";
   if (isParentActive()) return localStorage.getItem(LS.parentToken) || "";
   if (isAdminActive()) return localStorage.getItem(LS.adminToken) || "";
@@ -299,11 +328,19 @@ function ensureTopMenuBar() {
     const nav = document.createElement("nav");
     nav.id = "top-menu-bar";
     nav.className = "top-menu-bar hidden";
+
+    // ✅ build pills including parent portal modules
+    const parentPillsHtml = PARENT_PORTAL_MODULES.map(
+      (m) => `<button class="menu-pill" data-menu="${m.id}">${escapeHtml(m.label)}</button>`
+    ).join("");
+
     nav.innerHTML = `
       <div class="top-menu-inner">
         <button class="menu-pill" data-menu="policies">Policies</button>
         <button class="menu-pill" data-menu="protocols">Protocols</button>
         <button class="menu-pill" data-menu="handbook">Parent Handbook</button>
+
+        ${parentPillsHtml}
 
         <div id="admin-links" class="admin-links hidden">
           <a class="admin-link" href="dashboard.html">Dashboard</a>
@@ -368,7 +405,7 @@ function showChatUI() {
   forceShowTopMenu();
 
   syncModeBadge();
-  applyRoleUI(getActiveUserRole()); // ✅ important
+  applyRoleUI(getActiveUserRole());
 }
 
 // ============================
@@ -431,9 +468,8 @@ loginForm?.addEventListener("submit", async (e) => {
     showChatUI();
     clearChat();
 
-    // keep admin if already active
     syncModeBadge();
-    applyRoleUI(role); // ✅ important
+    applyRoleUI(role);
 
     const campus = escapeHtml(getCampus());
     const isParent = role === "parent";
@@ -441,7 +477,7 @@ loginForm?.addEventListener("submit", async (e) => {
     const welcome = isParent
       ? `Hi 👋 You’re signed in as <b>Parent</b>.<br>
          <b>Campus: ${campus}</b><br><br>
-         You can view the <b>Parent Handbook</b> for this campus.`
+         You can view the <b>Parent Handbook</b> and the <b>Parent Portal</b> menus (Announcements, Calendar, Forms, Support, etc.).`
       : `Hi 👋 You’re signed in as <b>Staff</b>.<br>
          <b>Campus: ${campus}</b><br><br>
          Ask about any <b>policy</b>, <b>protocol</b>, or <b>parent handbook</b> for this campus.`;
@@ -466,9 +502,7 @@ logoutBtn?.addEventListener("click", () => {
   if (accessCodeInput) accessCodeInput.value = "";
   setInlineError("");
 
-  // reset campus to blank
   setCampus("");
-
   showLoginUI();
 });
 
@@ -485,7 +519,6 @@ campusSwitch?.addEventListener("change", async () => {
 
   setCampus(c);
 
-  // reset handbook cache
   handbookListCache = [];
   handbookOpenId = null;
 
@@ -493,11 +526,8 @@ campusSwitch?.addEventListener("change", async () => {
     addMessage("assistant", `✅ Campus switched to <b>${escapeHtml(getCampus())}</b>.`);
   }
 
-  // If handbook panel open, refresh
-  const activeHandbookBtn = document.querySelector('.menu-pill[data-menu="handbook"]');
-  if (activeHandbookBtn?.classList.contains("active")) {
-    await openMenuPanel("handbook");
-  }
+  const active = document.querySelector(".menu-pill.active")?.dataset?.menu;
+  if (active) await openMenuPanel(active);
 });
 
 // ============================
@@ -569,23 +599,20 @@ adminModeBtn?.addEventListener("click", () => {
 async function openMenuPanel(type) {
   if (!menuPanel || !menuPanelBody || !menuPanelTitle) return;
 
-  // ✅ HARD GUARD: Parent cannot open policies/protocols even if button appears
   const role = getActiveUserRole();
+
+  // ✅ HARD GUARD: Parent cannot open policies/protocols
   if (role === "parent" && (type === "policies" || type === "protocols")) {
     closeMenuPanel();
-    addMessage("assistant", "Parents can only access the Parent Handbook.");
+    addMessage("assistant", "Parents cannot access Policies/Protocols.");
     return;
   }
 
   menuPills.forEach((btn) => btn.classList.toggle("active", btn.dataset.menu === type));
-
-  menuPanelTitle.textContent =
-    type === "policies" ? "Policies" :
-    type === "protocols" ? "Protocols" :
-    "Parent Handbook";
-
+  menuPanelTitle.textContent = getMenuTitle(type);
   menuPanelBody.innerHTML = "";
 
+  // Handbook
   if (type === "handbook") {
     await renderHandbookBrowser();
     menuPanel.classList.remove("hidden");
@@ -593,49 +620,69 @@ async function openMenuPanel(type) {
     return;
   }
 
-  // policies/protocols quick ask items
-  const items = MENU_ITEMS[type] || [];
-
-  if (!items.length) {
-    const p = document.createElement("p");
-    p.textContent = "Content coming soon.";
-    p.style.fontSize = "0.9rem";
-    p.style.color = "#6b7280";
-    menuPanelBody.appendChild(p);
-  } else {
-    const label = document.createElement("div");
-    label.className = "menu-group-label";
-    label.textContent = "Tap an item to ask in chat";
-    menuPanelBody.appendChild(label);
-
-    items.forEach((item) => {
-      const btn = document.createElement("button");
-      btn.className = "menu-item-btn";
-      btn.textContent = item.label;
-
-      btn.onclick = () => {
-        closeMenuPanel();
-
-        // admin-only cannot chat (no staff/parent)
-        if (!getActiveUserRole()) {
-          addMessage(
-            "assistant",
-            `You’re in <b>Admin mode</b> (dashboard/logs).<br>
-             To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
-          );
-          return;
-        }
-
-        const qPrefix = type === "protocols"
-          ? "Please show me the protocol: "
-          : "Please show me the policy: ";
-
-        askPolicy(qPrefix + item.label);
-      };
-
-      menuPanelBody.appendChild(btn);
-    });
+  // Parent Portal module
+  if (PARENT_PORTAL_MODULES.some((m) => m.id === type)) {
+    await renderParentPortalModule(type);
+    menuPanel.classList.remove("hidden");
+    if (menuOverlay) menuOverlay.classList.remove("hidden");
+    return;
   }
+
+  // policies/protocols quick ask items
+  if (type === "policies" || type === "protocols") {
+    const items = MENU_ITEMS[type] || [];
+
+    if (!items.length) {
+      const p = document.createElement("p");
+      p.textContent = "Content coming soon.";
+      p.style.fontSize = "0.9rem";
+      p.style.color = "#6b7280";
+      menuPanelBody.appendChild(p);
+    } else {
+      const label = document.createElement("div");
+      label.className = "menu-group-label";
+      label.textContent = "Tap an item to ask in chat";
+      menuPanelBody.appendChild(label);
+
+      items.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.className = "menu-item-btn";
+        btn.textContent = item.label;
+
+        btn.onclick = () => {
+          closeMenuPanel();
+
+          // admin-only cannot chat
+          if (!getActiveUserRole()) {
+            addMessage(
+              "assistant",
+              `You’re in <b>Admin mode</b> (dashboard/logs).<br>
+               To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
+            );
+            return;
+          }
+
+          const qPrefix = type === "protocols"
+            ? "Please show me the protocol: "
+            : "Please show me the policy: ";
+
+          askPolicy(qPrefix + item.label);
+        };
+
+        menuPanelBody.appendChild(btn);
+      });
+    }
+
+    menuPanel.classList.remove("hidden");
+    if (menuOverlay) menuOverlay.classList.remove("hidden");
+    return;
+  }
+
+  // fallback
+  const p = document.createElement("p");
+  p.textContent = "Unknown menu.";
+  p.className = "muted";
+  menuPanelBody.appendChild(p);
 
   menuPanel.classList.remove("hidden");
   if (menuOverlay) menuOverlay.classList.remove("hidden");
@@ -645,6 +692,125 @@ function closeMenuPanel() {
   if (menuPanel) menuPanel.classList.add("hidden");
   if (menuOverlay) menuOverlay.classList.add("hidden");
   menuPills.forEach((btn) => btn.classList.remove("active"));
+}
+
+// ============================
+// PARENT PORTAL MODULE VIEW
+// ============================
+async function fetchParentModule(campus, module) {
+  const token = getAnyBearerToken();
+  if (!token) throw new Error("Not logged in");
+
+  const qs = `campus=${encodeURIComponent(campus)}&module=${encodeURIComponent(module)}`;
+  const res = await fetch(`${PARENT_VIEW_URL}?${qs}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    throw new Error(data?.error || "No content yet for this module.");
+  }
+  return data;
+}
+
+function renderPayloadHtml(payload) {
+  // payload could be string OR JSON object/array
+  if (payload == null) return `<div class="muted">No content yet.</div>`;
+
+  if (typeof payload === "string") {
+    const text = payload.trim();
+    if (!text) return `<div class="muted">No content yet.</div>`;
+    // preserve line breaks
+    return `<div style="white-space:pre-wrap; line-height:1.35;">${escapeHtml(text)}</div>`;
+  }
+
+  // if it's JSON, show pretty
+  try {
+    const pretty = JSON.stringify(payload, null, 2);
+    return `
+      <div class="muted" style="margin-bottom:8px;">(JSON content)</div>
+      <pre style="white-space:pre-wrap; font-size:12px; line-height:1.35; background:#0b1020; color:#e5e7eb; padding:10px; border-radius:10px; overflow:auto;">${escapeHtml(pretty)}</pre>
+    `;
+  } catch {
+    return `<div style="white-space:pre-wrap;">${escapeHtml(String(payload))}</div>`;
+  }
+}
+
+async function renderParentPortalModule(moduleId) {
+  const campus = getCampus();
+  const token = getAnyBearerToken();
+  const label = PARENT_PORTAL_MODULES.find((m) => m.id === moduleId)?.label || moduleId;
+
+  const wrap = document.createElement("div");
+  wrap.className = "handbook-wrap";
+
+  wrap.innerHTML = `
+    <div class="handbook-top">
+      <div><b>${escapeHtml(label)}</b></div>
+      <div class="handbook-meta">Campus: <b>${escapeHtml(campus || "(not selected)")}</b></div>
+    </div>
+    <div class="muted" style="margin-top:6px;">Loading...</div>
+  `;
+
+  menuPanelBody.innerHTML = "";
+  menuPanelBody.appendChild(wrap);
+
+  if (!campus) {
+    wrap.innerHTML += `<div class="muted" style="margin-top:8px;">Please select a campus first.</div>`;
+    return;
+  }
+
+  if (!token) {
+    wrap.innerHTML += `<div class="muted" style="margin-top:8px;">Not logged in.</div>`;
+    return;
+  }
+
+  try {
+    const data = await fetchParentModule(campus, moduleId);
+
+    const payloadHtml = renderPayloadHtml(data.payload);
+
+    wrap.innerHTML = `
+      <div class="handbook-top">
+        <div><b>${escapeHtml(label)}</b></div>
+        <div class="handbook-meta">
+          Campus: <b>${escapeHtml(campus)}</b>
+          ${data.source_key ? ` • Source: <span class="muted">${escapeHtml(data.source_key)}</span>` : ""}
+        </div>
+      </div>
+
+      <div class="hb-section-view">
+        <div class="hb-section-head">
+          <div class="hb-section-title">${escapeHtml(label)}</div>
+          <div class="hb-section-actions">
+            ${
+              getActiveUserRole()
+                ? `<button class="mini-btn" id="pp-ask-btn">Ask in chat</button>`
+                : `<div class="muted" style="font-size:12px;">(Login as Staff/Parent to chat)</div>`
+            }
+          </div>
+        </div>
+
+        <div class="hb-section-content">${payloadHtml}</div>
+      </div>
+    `;
+
+    document.getElementById("pp-ask-btn")?.addEventListener("click", () => {
+      closeMenuPanel();
+      askPolicy(`Using Parent Portal module "${label}" for campus ${campus}, please answer my question: `);
+    });
+  } catch (err) {
+    wrap.innerHTML = `
+      <div class="handbook-top">
+        <div><b>${escapeHtml(label)}</b></div>
+        <div class="handbook-meta">Campus: <b>${escapeHtml(campus)}</b></div>
+      </div>
+      <div class="muted" style="margin-top:10px;">
+        ${escapeHtml(err?.message || "No content yet.")}
+      </div>
+    `;
+  }
 }
 
 // ============================
@@ -713,7 +879,7 @@ async function renderHandbookBrowser() {
     const hint = document.createElement("div");
     hint.className = "muted";
     hint.style.marginTop = "8px";
-    hint.innerHTML = `Tip: You can login as <b>Parent</b> or <b>Staff</b> for chat, or use <b>Admin mode</b> to browse handbooks and view dashboard/logs.`;
+    hint.innerHTML = `Tip: You can login as <b>Parent</b> or <b>Staff</b> for chat, or use <b>Admin mode</b> to browse content and view dashboard/logs.`;
     wrap.appendChild(hint);
 
     menuPanelBody.innerHTML = "";
@@ -984,7 +1150,7 @@ chatForm?.addEventListener("submit", (e) => {
     syncModeBadge();
 
     const role = getActiveUserRole();
-    applyRoleUI(role); // ✅ important
+    applyRoleUI(role);
 
     const campus = escapeHtml(getCampus() || "(not selected)");
     const roleLabel = role === "parent" ? "Parent" : "Staff";
@@ -993,7 +1159,7 @@ chatForm?.addEventListener("submit", (e) => {
       ? `Welcome back 👋<br>
          Signed in as <b>${roleLabel}</b><br>
          <b>Campus: ${campus}</b><br><br>
-         You can view the <b>Parent Handbook</b> for this campus.`
+         You can view the <b>Parent Handbook</b> and <b>Parent Portal</b> menus.`
       : `Welcome back 👋<br>
          Signed in as <b>${roleLabel}</b><br>
          <b>Campus: ${campus}</b><br><br>
@@ -1014,7 +1180,7 @@ chatForm?.addEventListener("submit", (e) => {
       "assistant",
       `✅ Admin mode enabled.<br>
        <b>Campus: ${escapeHtml(getCampus() || "(not selected)")}</b><br><br>
-       You can browse <b>Policies</b>, <b>Protocols</b>, and <b>Parent Handbook</b>, and access <b>Dashboard/Logs</b>.<br>
+       You can browse <b>Policies</b>, <b>Protocols</b>, <b>Parent Handbook</b>, and <b>Parent Portal</b> (Announcements, Calendar, Forms, Support...).<br>
        To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
     );
     return;
