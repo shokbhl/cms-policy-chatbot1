@@ -4,19 +4,15 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CMS Policy Chatbot</title>
+
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/cms-180.png">
-  <!-- Favicon -->
   <link rel="icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-
-  <!-- Apple (iPhone / iPad) -->
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-
-  <!-- PWA -->
   <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#1e3a8a">
- 
+
   <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -33,7 +29,7 @@
         </div>
       </div>
 
-      <!-- Right: Actions -->
+      <!-- Right: Actions (ONLY after login) -->
       <div id="header-actions" class="header-actions hidden">
         <select id="campus-switch" class="campus-switch">
           <option value="">Campus</option>
@@ -52,8 +48,9 @@
     </div>
   </header>
 
-   <!-- ================= TOP MENU ================= -->
-  <nav id="top-menu-bar" class="top-menu-bar hidden">
+  <!-- ================= TOP MENU (ONLY after login) ================= -->
+  <!-- IMPORTANT: stays hidden until app.js calls showChatUI() -->
+  <nav id="top-menu-bar" class="top-menu-bar hidden" aria-hidden="true">
     <div class="top-menu-inner">
       <!-- Staff -->
       <button class="menu-pill" data-menu="policies" type="button">Policies</button>
@@ -92,7 +89,7 @@
           <span class="muted">Tip: Campus is required so the handbook matches your campus.</span>
         </p>
 
-        <form id="login-form" class="login-form">
+        <form id="login-form" class="login-form" autocomplete="off">
           <div class="login-row">
             <input
               id="access-code"
@@ -115,7 +112,9 @@
           </div>
 
           <div class="login-row">
-            <button id="login-admin-btn" class="secondary-btn" type="button">
+            <!-- IMPORTANT: give this the same id app.js expects for admin -->
+            <!-- So admin PIN modal works from login screen too -->
+            <button id="admin-mode-btn-login" class="secondary-btn" type="button">
               Admin Login
             </button>
 
@@ -141,7 +140,7 @@
 
         <div class="chat-window" id="chat-window"></div>
 
-        <form id="chat-form" class="chat-form">
+        <form id="chat-form" class="chat-form" autocomplete="off">
           <input
             id="user-input"
             class="text-input"
@@ -186,19 +185,31 @@
   <!-- ================= SCRIPT ================= -->
   <script src="app.js"></script>
 
-  <!-- Campus preview helper (no dependency on app.js) -->
+  <!-- Campus preview helper -->
   <script>
     (function () {
       const sel = document.getElementById("campus-select");
       const pill = document.getElementById("campus-preview");
       if (!sel || !pill) return;
 
-      const update = () => {
-        pill.textContent = sel.value ? sel.value : "—";
-      };
-
+      const update = () => { pill.textContent = sel.value ? sel.value : "—"; };
       sel.addEventListener("change", update);
       update();
+    })();
+
+    // Make Admin Login button on login screen trigger the same admin modal
+    // app.js listens to #admin-mode-btn (header). This bridges login-screen button to it.
+    (function () {
+      const loginAdminBtn = document.getElementById("admin-mode-btn-login");
+      if (!loginAdminBtn) return;
+
+      loginAdminBtn.addEventListener("click", () => {
+        // If app.js already wired admin modal on #admin-mode-btn, we can just open modal directly.
+        const modal = document.getElementById("admin-modal");
+        const pin = document.getElementById("admin-pin");
+        if (modal) modal.classList.remove("hidden");
+        if (pin) pin.focus();
+      });
     })();
   </script>
 </body>
