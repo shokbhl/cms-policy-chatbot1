@@ -617,3 +617,85 @@ body{
   .login-row > *{ flex: 1 1 100%; }
   .campus-select{ min-width: 100%; } /* ensure full width on mobile */
 }
+/* ===== Top menu pills layout fix ===== */
+.top-menu-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.top-menu-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  align-items: center;
+}
+
+.menu-pill {
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.05s ease, background 0.2s ease;
+}
+
+.menu-pill:hover { background: rgba(0,0,0,0.03); }
+.menu-pill:active { transform: scale(0.98); }
+.menu-pill.active {
+  background: rgba(30,58,138,0.08);
+  border-color: rgba(30,58,138,0.35);
+}
+
+/* ===== Overlay/panel always above ===== */
+.overlay { z-index: 40; }
+.menu-panel { z-index: 50; }
+
+/* ===== Parent Portal cards ===== */
+.pp-wrap { padding: 8px; }
+.pp-head { margin-bottom: 12px; }
+.pp-head-meta { font-size: 12px; color: #6b7280; margin-top: 4px; }
+.pp-text { line-height: 1.55; white-space: pre-wrap; }
+
+.pp-pre {
+  padding: 12px;
+  background: rgba(0,0,0,0.03);
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 12px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.pp-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.pp-card {
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 14px;
+  padding: 12px;
+  background: #fff;
+}
+
+.pp-title { font-weight: 700; margin-bottom: 6px; }
+.pp-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.pp-tag {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+.pp-line { font-size: 13px; color: #111827; }
+.pp-note { margin-top: 6px; font-size: 13px; color: #374151; }
+
+.pp-actions { margin-top: 14px; display: flex; gap: 10px; }
