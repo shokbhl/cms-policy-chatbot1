@@ -6,6 +6,9 @@
 // - Parent sees: Parent Handbook + Parent Portal (Announcements/ECA/Calendar/...)
 // - Staff sees: Policies/Protocols/Handbook (NO Parent Portal pills by default)
 // - Admin-only can browse Handbooks + Parent Portal (optional), and dashboard/logs
+// Fixes:
+// ✅ UI: top menu wrap + panel width + scrolling
+// ✅ JSON: smart rendering (items/content/categories + parse JSON strings)
 // ============================
 
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
@@ -141,6 +144,58 @@ function setInlineError(text) {
 }
 
 // ============================
+// UI FIX (inject styles)
+// ============================
+function injectUiFixStyles() {
+  const css = `
+    /* make top menu wrap */
+    #top-menu-bar {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      gap: 10px !important;
+      align-items: center !important;
+    }
+    .menu-pill {
+      white-space: nowrap !important;
+    }
+
+    /* panel size + scroll */
+    #menu-panel {
+      max-width: 920px !important;
+      width: min(920px, calc(100vw - 40px)) !important;
+    }
+    #menu-panel-body {
+      max-height: 65vh !important;
+      overflow: auto !important;
+    }
+
+    /* nicer parent portal cards if css missing */
+    .pp-cards { display: grid; gap: 10px; }
+    .pp-card {
+      background: rgba(255,255,255,0.6);
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .pp-title { font-weight: 700; margin-bottom: 6px; }
+    .pp-tags { display:flex; gap:8px; flex-wrap: wrap; margin-bottom: 6px; }
+    .pp-tag {
+      background: rgba(0,0,0,0.06);
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+    .pp-line { margin: 4px 0; }
+    .pp-note { margin-top: 8px; opacity: 0.85; font-size: 13px; }
+    .pp-pre { white-space: pre-wrap; }
+    .pp-text { white-space: pre-wrap; line-height: 1.5; }
+  `;
+  const style = document.createElement("style");
+  style.textContent = css;
+  document.head.appendChild(style);
+}
+
+// ============================
 // SESSION / CAMPUS
 // ============================
 function normalizeCampus(code) {
@@ -244,10 +299,9 @@ function syncModeBadge() {
 // ============================
 function applyRoleUI(role) {
   const isParent = role === "parent";
-  const isStaff = role === "staff";
   const isAdminOnly = !role && isAdminActive();
 
-  // These might exist in HTML
+  // Might exist in HTML
   const policiesBtn = document.querySelector('.menu-pill[data-menu="policies"]');
   const protocolsBtn = document.querySelector('.menu-pill[data-menu="protocols"]');
   const handbookBtn = document.querySelector('.menu-pill[data-menu="handbook"]');
@@ -255,17 +309,14 @@ function applyRoleUI(role) {
   // Parent portal pills
   PARENT_PORTAL_KEYS.forEach((k) => {
     const b = document.querySelector(`.menu-pill[data-menu="${k}"]`);
-    if (b) {
-      // show for parent; also OK for admin-only (optional). hide for staff.
-      b.style.display = (isParent || isAdminOnly) ? "" : "none";
-    }
+    if (b) b.style.display = (isParent || isAdminOnly) ? "" : "none";
   });
 
   // Policies/Protocols only for staff/admin-only (not for parent)
   if (policiesBtn) policiesBtn.style.display = isParent ? "none" : "";
   if (protocolsBtn) protocolsBtn.style.display = isParent ? "none" : "";
 
-  // Handbook for everyone (parent + staff + admin)
+  // Handbook for everyone
   if (handbookBtn) handbookBtn.style.display = "";
 
   // Update hint text in chat screen
@@ -311,7 +362,7 @@ function ensureTopMenuBar() {
 function forceShowTopMenu() {
   if (!topMenuBar) return;
   topMenuBar.classList.remove("hidden");
-  topMenuBar.style.display = "block";
+  topMenuBar.style.display = "flex";
   topMenuBar.style.visibility = "visible";
   topMenuBar.style.opacity = "1";
 }
@@ -577,7 +628,6 @@ async function openMenuPanel(type) {
   menuPanel.classList.remove("hidden");
   if (menuOverlay) menuOverlay.classList.remove("hidden");
 
-  // If admin-only (no staff/parent), remind
   if (isAdminOnly) {
     const box = document.createElement("div");
     box.className = "muted";
@@ -627,47 +677,110 @@ async function fetchParentPortalValue(campus, key) {
   return data;
 }
 
+// ---------- JSON rendering helpers (Fix JSON raw display) ----------
+function tryParseJsonString(maybeJson) {
+  if (typeof maybeJson !== "string") return maybeJson;
+  const s = maybeJson.trim();
+  if (!s) return maybeJson;
+  if (!(s.startsWith("{") || s.startsWith("["))) return maybeJson;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return maybeJson;
+  }
+}
+
+function looksLikeEmptyObject(obj) {
+  if (!obj || typeof obj !== "object") return false;
+  const keys = Object.keys(obj);
+  return keys.length === 0;
+}
+
 function renderJsonPretty(value) {
-  // value could be string | object
   if (value == null) return `<div class="muted">No data.</div>`;
 
+  // If value is a JSON string, parse it
+  value = tryParseJsonString(value);
+
+  // Empty object
+  if (looksLikeEmptyObject(value)) {
+    return `<div class="muted">No information set yet.</div>`;
+  }
+
+  // plain string
   if (typeof value === "string") {
     const txt = value.trim();
     if (!txt) return `<div class="muted">No information set yet.</div>`;
-    // show as paragraph
     return `<div class="pp-text">${escapeHtml(txt)}</div>`;
   }
 
-  // object
-  // Special case: items[]
-  if (Array.isArray(value.items)) {
-    const items = value.items;
-    if (!items.length) return `<div class="muted">No items yet.</div>`;
+  // object cases
+  if (typeof value === "object" && value) {
+    // Typical "content modules"
+    if ("content" in value) {
+      const txt = String(value.content ?? "").trim();
+      if (!txt) return `<div class="muted">No information set yet.</div>`;
+      return `<div class="pp-text">${escapeHtml(txt)}</div>`;
+    }
 
-    const cards = items.map((it) => {
-      const title = escapeHtml(it.title || "Item");
-      const day = it.day ? `<span class="pp-tag">📅 ${escapeHtml(it.day)}</span>` : "";
-      const time = it.time ? `<span class="pp-tag">⏰ ${escapeHtml(it.time)}</span>` : "";
-      const grades = it.grades ? `<div class="pp-line"><b>Grades:</b> ${escapeHtml(it.grades)}</div>` : "";
-      const notes = it.notes ? `<div class="pp-note">${escapeHtml(it.notes)}</div>` : "";
+    // Items list (ECA, Announcements, Calendar, Forms, etc if using items[])
+    if (Array.isArray(value.items)) {
+      const items = value.items;
+      if (!items.length) return `<div class="muted">No items yet.</div>`;
 
-      return `
-        <div class="pp-card">
-          <div class="pp-title">${title}</div>
-          <div class="pp-tags">${day}${time}</div>
-          ${grades}
-          ${notes}
-        </div>
-      `;
-    }).join("");
+      const cards = items
+        .map((it) => {
+          const title = escapeHtml(it.title || "Item");
+          const day = it.day ? `<span class="pp-tag">📅 ${escapeHtml(it.day)}</span>` : "";
+          const time = it.time ? `<span class="pp-tag">⏰ ${escapeHtml(it.time)}</span>` : "";
+          const grades = it.grades ? `<div class="pp-line"><b>Grades:</b> ${escapeHtml(it.grades)}</div>` : "";
+          const notes = it.notes ? `<div class="pp-note">${escapeHtml(it.notes)}</div>` : "";
 
-    return `<div class="pp-cards">${cards}</div>`;
+          return `
+            <div class="pp-card">
+              <div class="pp-title">${title}</div>
+              <div class="pp-tags">${day}${time}</div>
+              ${grades}
+              ${notes}
+            </div>
+          `;
+        })
+        .join("");
+
+      return `<div class="pp-cards">${cards}</div>`;
+    }
+
+    // Support-style object: { categories: {...} }
+    if (value.categories && typeof value.categories === "object") {
+      const cats = value.categories;
+      const blocks = Object.keys(cats)
+        .map((catKey) => {
+          const c = cats[catKey] || {};
+          const hasTicket = c.ticket_enabled ? "✅ Ticket enabled" : "—";
+          const faqCount = Array.isArray(c.faq) ? c.faq.length : 0;
+          const formsCount = Array.isArray(c.forms) ? c.forms.length : 0;
+          const notes = String(c.chatbot_notes || "").trim();
+
+          return `
+            <div class="pp-card">
+              <div class="pp-title">${escapeHtml(catKey)}</div>
+              <div class="pp-line"><b>FAQ:</b> ${faqCount}</div>
+              <div class="pp-line"><b>Forms:</b> ${formsCount}</div>
+              ${notes ? `<div class="pp-note">${escapeHtml(notes)}</div>` : `<div class="pp-note">${escapeHtml(hasTicket)}</div>`}
+            </div>
+          `;
+        })
+        .join("");
+
+      return `<div class="pp-cards">${blocks}</div>`;
+    }
   }
 
   // fallback: show JSON but pretty
   return `<pre class="pp-pre">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 }
 
+// ✅ REQUIRED by you: renderParentPortalModule is included here
 async function renderParentPortalModule(key) {
   const campus = getCampus();
   const token = getAnyBearerToken();
@@ -726,9 +839,7 @@ async function renderParentPortalModule(key) {
       askPolicy(`Using Parent Portal for campus ${campus}, module "${title}", please answer: `);
     });
   } catch (err) {
-    wrap.innerHTML = `
-      <div class="muted">${escapeHtml(err?.message || "Could not load module.")}</div>
-    `;
+    wrap.innerHTML = `<div class="muted">${escapeHtml(err?.message || "Could not load module.")}</div>`;
   }
 }
 
@@ -1037,6 +1148,7 @@ chatForm?.addEventListener("submit", (e) => {
 // INIT
 // ============================
 (function init() {
+  injectUiFixStyles();
   ensureTopMenuBar();
 
   if (!isStaffActive()) clearStaffSession();
