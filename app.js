@@ -1,17 +1,24 @@
 /* =========================
    CMS Chatbot - app.js
-   - Parent Portal disabled everywhere
-   - Staff: Policies + Protocols + Handbook
-   - Parent: Handbook only
-   - Admin: Policies + Protocols + Handbook + admin links
+   Parent Portal disabled everywhere
+   Staff: Policies + Protocols + Handbook
+   Parent: Handbook only
+   Admin: Policies + Protocols + Handbook + admin links
    ========================= */
 
 (() => {
   // -------------------------
   // Config
   // -------------------------
-  const API_BASE = ""; // same origin
   const STORAGE_KEY = "cms_chat_session_v3";
+
+  // Read API base from meta tag (index.html)
+  function getApiBase() {
+    const meta = document.querySelector('meta[name="cms-api-base"]');
+    const v = (meta?.getAttribute("content") || "").trim();
+    return v; // e.g. https://xxx.workers.dev
+  }
+  const API_BASE = getApiBase(); // MUST be set, otherwise you will get 404 on Pages
 
   // -------------------------
   // DOM
@@ -19,11 +26,9 @@
   const $ = (id) => document.getElementById(id);
 
   const el = {
-    // screens
     loginScreen: $("login-screen"),
     chatScreen: $("chat-screen"),
 
-    // header/menu
     headerActions: $("header-actions"),
     topMenuBar: $("top-menu-bar"),
     adminLinks: $("admin-links"),
@@ -33,27 +38,23 @@
     adminModeBtn: $("admin-mode-btn"),
     logoutBtn: $("logout-btn"),
 
-    // login form
     loginForm: $("login-form"),
     accessCode: $("access-code"),
     campusSelect: $("campus-select"),
     loginError: $("login-error"),
-    adminLoginBtn: $("admin-mode-btn-login"), // login screen admin button
+    adminLoginBtn: $("admin-mode-btn-login"),
 
-    // admin modal
     adminModal: $("admin-modal"),
     adminPin: $("admin-pin"),
     adminPinCancel: $("admin-pin-cancel"),
     adminPinSubmit: $("admin-pin-submit"),
 
-    // menu panel (modal panel)
     menuOverlay: $("menu-overlay"),
     menuPanel: $("menu-panel"),
     menuPanelTitle: $("menu-panel-title"),
     menuPanelBody: $("menu-panel-body"),
     menuPanelClose: $("menu-panel-close"),
 
-    // chat
     chatWindow: $("chat-window"),
     chatForm: $("chat-form"),
     userInput: $("user-input"),
@@ -64,7 +65,7 @@
   // -------------------------
   const state = {
     token: "",
-    role: "", // "parent" | "staff" | "admin"
+    role: "", // parent | staff | admin
     campus: "",
   };
 
@@ -124,6 +125,12 @@
   }
 
   async function apiFetch(path, opts = {}) {
+    if (!API_BASE) {
+      const err = new Error("API base is not set. Check <meta name='cms-api-base'> in index.html");
+      err.status = 0;
+      throw err;
+    }
+
     const res = await fetch(`${API_BASE}${path}`, {
       ...opts,
       headers: {
@@ -137,26 +144,23 @@
     const data = isJson ? await res.json().catch(() => ({})) : await res.text();
 
     if (!res.ok) {
-      const msg =
-        (data && data.error) ||
-        (data && data.message) ||
-        `Request failed (${res.status})`;
+      // Try to show the real backend error
+      const backendMsg =
+        (data && typeof data === "object" && (data.error || data.message)) ? (data.error || data.message) : "";
+
+      const msg = backendMsg || `Request failed (${res.status})`;
       const err = new Error(msg);
       err.status = res.status;
       err.data = data;
       throw err;
     }
+
     return data;
   }
 
   function setModeBadge(role) {
     if (!el.modeBadge) return;
     el.modeBadge.textContent = String(role || "").toUpperCase();
-  }
-
-  function clearChatWindow() {
-    if (!el.chatWindow) return;
-    el.chatWindow.innerHTML = "";
   }
 
   function showLoginUI() {
@@ -167,7 +171,6 @@
     setHidden(el.adminLinks, true);
     closeMenuPanel();
     clearChatWindow();
-    setLoginError("");
   }
 
   function showChatUI() {
@@ -176,7 +179,6 @@
     setHidden(el.headerActions, false);
     setHidden(el.topMenuBar, false);
 
-    // admin links only for admin
     setHidden(el.adminLinks, state.role !== "admin");
 
     if (el.campusSwitch) el.campusSwitch.value = state.campus || "";
@@ -202,24 +204,10 @@
   }
 
   function isMenuAllowedForRole(menuKey, role) {
-    // Parent portal menus disabled entirely
-    const disabled = new Set([
-      "announcements",
-      "eca",
-      "calendar",
-      "parent_interview",
-      "tuition",
-      "uniform",
-      "daily_schedule",
-      "age_info",
-      "forms",
-      "support",
-    ]);
-    if (disabled.has(menuKey)) return false;
-
+    // Only these menus exist now
     if (role === "parent") return menuKey === "handbook";
-    if (role === "staff") return ["policies", "protocols", "handbook"].includes(menuKey);
-    if (role === "admin") return ["policies", "protocols", "handbook"].includes(menuKey);
+    if (role === "staff") return menuKey === "policies" || menuKey === "protocols" || menuKey === "handbook";
+    if (role === "admin") return menuKey === "policies" || menuKey === "protocols" || menuKey === "handbook";
     return false;
   }
 
@@ -231,25 +219,30 @@
     if (el.menuPanelBody) el.menuPanelBody.innerHTML = html || "";
     setHidden(el.menuOverlay, false);
     setHidden(el.menuPanel, false);
+    if (el.menuPanel) el.menuPanel.setAttribute("aria-hidden", "false");
   }
 
   function closeMenuPanel() {
     setHidden(el.menuOverlay, true);
     setHidden(el.menuPanel, true);
+    if (el.menuPanel) el.menuPanel.setAttribute("aria-hidden", "true");
     if (el.menuPanelBody) el.menuPanelBody.innerHTML = "";
   }
 
   // -------------------------
-  // Chat UI helpers
+  // Chat UI
   // -------------------------
+  function clearChatWindow() {
+    if (!el.chatWindow) return;
+    el.chatWindow.innerHTML = "";
+  }
+
   function addChatBubble(who, text) {
     if (!el.chatWindow) return;
-
     const isUser = who === "user";
     const div = document.createElement("div");
     div.className = `chat-bubble ${isUser ? "user" : "assistant"}`;
     div.innerHTML = escapeHtml(text);
-
     el.chatWindow.appendChild(div);
     el.chatWindow.scrollTop = el.chatWindow.scrollHeight;
   }
@@ -300,46 +293,66 @@
     if (!code) return setLoginError("Please enter access code.");
     if (!campus) return setLoginError("Please select a campus.");
 
-    // try staff then parent
+    // Try staff first
     try {
       const staffRes = await apiFetch("/auth/staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
       });
+
       state.token = staffRes.token;
       state.role = "staff";
       state.campus = campus;
       saveSession();
+
       showChatUI();
       addSystemNote(`Signed in as Staff. Campus: ${state.campus}`);
       return;
-    } catch {
-      // continue
+    } catch (e1) {
+      // If API not reachable -> show real message
+      if (e1.status === 0 || e1.status === 404) {
+        setLoginError(`API error: ${e1.message}`);
+        return;
+      }
+      // else continue to try parent
     }
 
+    // Try parent
     try {
       const parentRes = await apiFetch("/auth/parent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
       });
+
       state.token = parentRes.token;
       state.role = "parent";
       state.campus = campus;
       saveSession();
+
       showChatUI();
       addSystemNote(`Signed in as Parent. Campus: ${state.campus}`);
       return;
-    } catch {
-      setLoginError("Invalid access code.");
+    } catch (e2) {
+      if (e2.status === 0 || e2.status === 404) {
+        setLoginError(`API error: ${e2.message}`);
+        return;
+      }
+      // Real invalid code
+      setLoginError(e2.message || "Invalid access code.");
     }
   }
 
   async function loginAdminWithPin() {
     setLoginError("");
+
     const campus = getSelectedCampus();
-    if (!campus) return setLoginError("Please select a campus.");
+    if (!campus) {
+      setLoginError("Please select a campus.");
+      closeAdminModal();
+      return;
+    }
 
     const pin = (el.adminPin?.value || "").trim();
     if (!pin) return;
@@ -360,7 +373,7 @@
       showChatUI();
       addSystemNote(`Signed in as Admin. Campus: ${state.campus}`);
     } catch (err) {
-      setLoginError("Invalid admin PIN.");
+      alert(err.message || "Invalid admin PIN.");
     }
   }
 
@@ -370,7 +383,7 @@
   }
 
   // -------------------------
-  // Menu loaders
+  // Menus loaders
   // -------------------------
   async function openPolicies() {
     openMenuPanel("Policies", `<div class="muted">Loading policies…</div>`);
@@ -384,24 +397,29 @@
       }
 
       const html = `
-        <div class="menu-hint muted">Browse the list. Ask questions in chat.</div>
+        <div class="menu-hint muted">
+          Browse the list below. You can also ask questions in the chat about these policies.
+        </div>
         <ul class="menu-list">
           ${items.map((p, idx) => {
             const title = escapeHtml(p?.title || p?.name || `Policy ${idx + 1}`);
             const desc = escapeHtml(p?.summary || p?.description || "");
-            const link = p?.link ? `<a class="menu-link" href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Open</a>` : "";
+            const link = p?.link
+              ? `<a class="menu-link" href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Open</a>`
+              : "";
             return `
               <li class="menu-item">
                 <div class="menu-item-title">${title}</div>
                 ${desc ? `<div class="menu-item-desc muted">${desc}</div>` : ""}
                 ${link ? `<div class="menu-item-actions">${link}</div>` : ""}
-              </li>`;
+              </li>
+            `;
           }).join("")}
         </ul>
       `;
       openMenuPanel("Policies", html);
     } catch (err) {
-      openMenuPanel("Policies", `<div class="error-text">Failed: ${escapeHtml(err.message)}</div>`);
+      openMenuPanel("Policies", `<div class="error-text">Failed to load policies: ${escapeHtml(err.message)}</div>`);
     }
   }
 
@@ -417,24 +435,29 @@
       }
 
       const html = `
-        <div class="menu-hint muted">Browse the list. Ask questions in chat.</div>
+        <div class="menu-hint muted">
+          Browse the list below. You can also ask questions in the chat about these protocols.
+        </div>
         <ul class="menu-list">
           ${items.map((p, idx) => {
             const title = escapeHtml(p?.title || p?.name || `Protocol ${idx + 1}`);
             const desc = escapeHtml(p?.summary || p?.description || "");
-            const link = p?.link ? `<a class="menu-link" href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Open</a>` : "";
+            const link = p?.link
+              ? `<a class="menu-link" href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Open</a>`
+              : "";
             return `
               <li class="menu-item">
                 <div class="menu-item-title">${title}</div>
                 ${desc ? `<div class="menu-item-desc muted">${desc}</div>` : ""}
                 ${link ? `<div class="menu-item-actions">${link}</div>` : ""}
-              </li>`;
+              </li>
+            `;
           }).join("")}
         </ul>
       `;
       openMenuPanel("Protocols", html);
     } catch (err) {
-      openMenuPanel("Protocols", `<div class="error-text">Failed: ${escapeHtml(err.message)}</div>`);
+      openMenuPanel("Protocols", `<div class="error-text">Failed to load protocols: ${escapeHtml(err.message)}</div>`);
     }
   }
 
@@ -452,31 +475,39 @@
       const handbooks = Array.isArray(list?.handbooks) ? list.handbooks : [];
 
       if (!handbooks.length) {
-        openMenuPanel("Parent Handbook", `<div class="muted">No handbook found for ${escapeHtml(campus)}.</div>`);
+        openMenuPanel("Parent Handbook", `<div class="muted">No handbook found for campus ${escapeHtml(campus)}.</div>`);
         return;
       }
 
       const html = `
-        <div class="menu-hint muted">Select a section to view. Ask questions in chat.</div>
+        <div class="menu-hint muted">
+          Select a section to view. You can also ask questions in chat about any section.
+        </div>
         <div class="handbook-list">
           ${handbooks.map((hb) => {
             const hbTitle = escapeHtml(hb?.title || "Parent Handbook");
             const hbId = escapeHtml(hb?.id || "");
             const program = hb?.program ? `<div class="muted">Program: ${escapeHtml(hb.program)}</div>` : "";
-            const link = hb?.link ? `<a class="menu-link" href="${escapeHtml(hb.link)}" target="_blank" rel="noopener">Open file</a>` : "";
+            const link = hb?.link
+              ? `<a class="menu-link" href="${escapeHtml(hb.link)}" target="_blank" rel="noopener">Open file</a>`
+              : "";
 
             const sections = Array.isArray(hb?.sections) ? hb.sections : [];
-            const secHtml = sections.length ? `
-              <ul class="menu-list">
-                ${sections.map((s) => {
-                  const key = escapeHtml(s?.key || "");
-                  const title = escapeHtml(s?.title || key || "Section");
-                  return `
-                    <li class="menu-item">
-                      <button class="menu-action" data-hb-id="${hbId}" data-sec-key="${key}" type="button">${title}</button>
-                    </li>`;
-                }).join("")}
-              </ul>` : `<div class="muted">No sections listed.</div>`;
+            const secHtml = sections.length
+              ? `<ul class="menu-list">
+                   ${sections.map((s) => {
+                     const key = escapeHtml(s?.key || "");
+                     const title = escapeHtml(s?.title || key || "Section");
+                     return `
+                       <li class="menu-item">
+                         <button class="menu-action" data-hb-id="${hbId}" data-sec-key="${key}" type="button">
+                           ${title}
+                         </button>
+                       </li>
+                     `;
+                   }).join("")}
+                 </ul>`
+              : `<div class="muted">No sections listed.</div>`;
 
             return `
               <div class="handbook-card">
@@ -484,24 +515,25 @@
                 ${program}
                 ${link ? `<div class="menu-item-actions">${link}</div>` : ""}
                 <div class="handbook-sections">${secHtml}</div>
-              </div>`;
+              </div>
+            `;
           }).join("")}
         </div>
       `;
 
       openMenuPanel("Parent Handbook", html);
 
-      if (el.menuPanelBody) {
-        el.menuPanelBody.querySelectorAll("button.menu-action[data-hb-id][data-sec-key]").forEach((btn) => {
+      el.menuPanelBody?.querySelectorAll("button.menu-action[data-hb-id][data-sec-key]")
+        .forEach((btn) => {
           btn.addEventListener("click", async () => {
             const hbId = btn.getAttribute("data-hb-id") || "";
             const secKey = btn.getAttribute("data-sec-key") || "";
             await openHandbookSection(campus, hbId, secKey);
           });
         });
-      }
+
     } catch (err) {
-      openMenuPanel("Parent Handbook", `<div class="error-text">Failed: ${escapeHtml(err.message)}</div>`);
+      openMenuPanel("Parent Handbook", `<div class="error-text">Failed to load handbook: ${escapeHtml(err.message)}</div>`);
     }
   }
 
@@ -528,7 +560,7 @@
 
       openMenuPanel("Parent Handbook", html);
     } catch (err) {
-      openMenuPanel("Parent Handbook", `<div class="error-text">Failed: ${escapeHtml(err.message)}</div>`);
+      openMenuPanel("Parent Handbook", `<div class="error-text">Failed to load section: ${escapeHtml(err.message)}</div>`);
     }
   }
 
@@ -553,8 +585,7 @@
 
       addChatBubble("assistant", res?.answer || "—");
 
-      const src = res?.source;
-      if (src?.title) addSystemNote(`Source: ${src.title}`);
+      if (res?.source?.title) addSystemNote(`Source: ${res.source.title}`);
     } catch (err) {
       addChatBubble("assistant", `Error: ${err.message}`);
     }
@@ -564,60 +595,51 @@
   // Wire events
   // -------------------------
   function wireUI() {
-    if (el.loginForm) {
-      el.loginForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-        loginStaffOrParent();
-      });
-    }
+    el.loginForm?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      loginStaffOrParent();
+    });
 
-    if (el.logoutBtn) el.logoutBtn.addEventListener("click", logout);
+    el.logoutBtn?.addEventListener("click", logout);
 
-    if (el.campusSwitch) {
-      el.campusSwitch.addEventListener("change", () => {
-        state.campus = (el.campusSwitch.value || "").toUpperCase();
-        saveSession();
-      });
-    }
+    el.campusSwitch?.addEventListener("change", () => {
+      state.campus = (el.campusSwitch.value || "").toUpperCase();
+      saveSession();
+    });
 
-    if (el.menuOverlay) el.menuOverlay.addEventListener("click", closeMenuPanel);
-    if (el.menuPanelClose) el.menuPanelClose.addEventListener("click", closeMenuPanel);
+    el.menuOverlay?.addEventListener("click", closeMenuPanel);
+    el.menuPanelClose?.addEventListener("click", closeMenuPanel);
 
-    if (el.topMenuBar) {
-      el.topMenuBar.addEventListener("click", async (e) => {
-        const btn = e.target.closest(".menu-pill[data-menu]");
-        if (!btn) return;
-        const key = btn.getAttribute("data-menu");
-        if (!isMenuAllowedForRole(key, state.role)) return;
+    el.topMenuBar?.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".menu-pill[data-menu]");
+      if (!btn) return;
 
-        if (key === "policies") return openPolicies();
-        if (key === "protocols") return openProtocols();
-        if (key === "handbook") return openHandbook();
-      });
-    }
+      const key = btn.getAttribute("data-menu");
+      if (!isMenuAllowedForRole(key, state.role)) return;
 
-    if (el.adminModeBtn) el.adminModeBtn.addEventListener("click", openAdminModal);
-    if (el.adminLoginBtn) el.adminLoginBtn.addEventListener("click", openAdminModal);
+      if (key === "policies") return openPolicies();
+      if (key === "protocols") return openProtocols();
+      if (key === "handbook") return openHandbook();
+    });
 
-    if (el.adminPinCancel) el.adminPinCancel.addEventListener("click", closeAdminModal);
-    if (el.adminPinSubmit) el.adminPinSubmit.addEventListener("click", loginAdminWithPin);
+    el.adminModeBtn?.addEventListener("click", openAdminModal);
+    el.adminLoginBtn?.addEventListener("click", openAdminModal);
 
-    if (el.adminPin) {
-      el.adminPin.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") loginAdminWithPin();
-        if (e.key === "Escape") closeAdminModal();
-      });
-    }
+    el.adminPinCancel?.addEventListener("click", closeAdminModal);
+    el.adminPinSubmit?.addEventListener("click", loginAdminWithPin);
 
-    if (el.chatForm) {
-      el.chatForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const q = (el.userInput?.value || "").trim();
-        if (!q) return;
-        el.userInput.value = "";
-        sendChat(q);
-      });
-    }
+    el.adminPin?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") loginAdminWithPin();
+      if (e.key === "Escape") closeAdminModal();
+    });
+
+    el.chatForm?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = (el.userInput?.value || "").trim();
+      if (!q) return;
+      el.userInput.value = "";
+      sendChat(q);
+    });
   }
 
   // -------------------------
@@ -627,11 +649,14 @@
     wireUI();
     showLoginUI();
 
-    const ok = loadSession(); // ✅ FIX: تعریف ok
+    const ok = loadSession(); // ✅ FIX: was missing in your code
     if (ok) {
       if (!state.campus) state.campus = getSelectedCampus();
       showChatUI();
       addSystemNote(`Welcome back. Signed in as ${state.role}. Campus: ${state.campus || "—"}`);
+    } else {
+      // helpful dev note:
+      if (!API_BASE) setLoginError("Developer: Set meta cms-api-base to your Worker URL.");
     }
   }
 
