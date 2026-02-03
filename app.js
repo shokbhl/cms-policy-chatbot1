@@ -26,18 +26,19 @@ const LS = {
 };
 
 // Parent Portal keys (must match Worker whitelist + KV keys)
-const PARENT_PORTAL_KEYS = [
-  "announcements",
-  "eca",
-  "calendar",
-  "parent_interview",
-  "tuition",
-  "uniform",
-  "daily_schedule",
-  "age_info",
-  "forms",
-  "support"
-];
+//const PARENT_PORTAL_KEYS = [
+// "announcements",
+ // "eca",
+ // "calendar",
+ // "parent_interview",
+ // "tuition",
+ // "uniform",
+ // "daily_schedule",
+ // "age_info",
+ // "forms",
+ // "support"
+//];
+const PARENT_PORTAL_KEYS = [ ];
 
 // ============================
 // DOM
