@@ -2,263 +2,160 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>CMS Assistant</title>
-
-  <!-- Your UI stylesheet -->
-  <link rel="stylesheet" href="style.css" />
-
-  <!-- Optional: icons / PWA (keep your existing ones if you want) -->
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/cms-180.png">
-  <link rel="icon" href="/favicon.ico">
-  <link rel="manifest" href="/site.webmanifest">
-  <meta name="theme-color" content="#0b3a7a">
+  <link rel="stylesheet" href="./style.css" />
 </head>
-
 <body>
-  <!-- ===== Top Bar ===== -->
-  <header class="topbar">
-    <div class="topbar-inner">
+  <div class="app">
+    <header class="topbar">
       <div class="brand">
-        <img src="cms-logo.png" alt="CMS" />
+        <img class="logo" src="./cms-logo.png" alt="CMS" onerror="this.style.display='none'"/>
         <div>
-          <div class="brand-title">CMS Assistant</div>
-          <div class="brand-sub">Policy • Protocol • Parent Handbook assistant</div>
+          <div class="title">CMS Assistant</div>
+          <div class="subtitle">Policy • Protocol • Parent Handbook assistant</div>
         </div>
       </div>
 
-      <div class="status-pills">
-        <div class="pill"><span class="label">Role:</span> <span id="currentRole">—</span></div>
-        <div class="pill"><span class="label">Campus:</span> <span id="currentCampus">—</span></div>
-        <button id="btnLogout" class="btn danger" type="button">Logout</button>
+      <div class="status">
+        <span class="pill" id="rolePill">Role: —</span>
+        <span class="pill" id="campusPill">Campus: —</span>
+        <button class="btn ghost" id="logoutBtn">Logout</button>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <!-- ===== Nav Menu ===== -->
-  <nav class="nav">
-    <div class="nav-inner">
-      <button id="navHandbook" class="nav-btn active" type="button">Parent Handbook</button>
-      <button id="navChat" class="nav-btn" type="button">Ask Assistant</button>
-      <button id="navAdmin" class="nav-btn" type="button">Admin</button>
+    <nav class="tabs">
+      <button class="tab active" data-tab="welcome">Welcome</button>
+      <button class="tab" data-tab="handbook">Parent Handbook</button>
+      <button class="tab" data-tab="ask">Ask Assistant</button>
+      <button class="tab" data-tab="admin">Admin</button>
 
-      <div class="nav-spacer"></div>
+      <div class="rightTools">
+        <select id="campusSelect" class="select">
+          <option value="">Select campus…</option>
+          <option value="WC">WC</option>
+          <option value="MC">MC</option>
+          <option value="TC">TC</option>
+          <option value="YC">YC</option>
+          <option value="SC">SC</option>
+        </select>
+      </div>
+    </nav>
 
-      <select id="campusSelect" class="select" aria-label="Campus">
-        <option value="YC">YC</option>
-        <option value="MC">MC</option>
-        <option value="SC">SC</option>
-        <option value="TC">TC</option>
-        <option value="WC">WC</option>
-      </select>
-
-      <button id="btnQuickHelp" class="btn ghost" type="button" title="Tips">Tips</button>
-    </div>
-  </nav>
-
-  <main class="container">
-    <!-- ===== Login Panel ===== -->
-    <section id="loginPanel" class="grid">
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">
-            Welcome
-            <small>Login as Parent, Staff, or Admin</small>
+    <main class="content">
+      <!-- WELCOME -->
+      <section class="panel show" id="tab-welcome">
+        <!-- ✅ همون Welcome قبلی: تغییرش ندادم (فقط داخل کارت خوشگل‌تر) -->
+        <div class="card">
+          <div class="cardHead">
+            <h2>Welcome</h2>
+            <div class="muted">Login as Parent, Staff, or Admin</div>
           </div>
-          <div class="muted strong">
-            Campus is required for handbook matching
-          </div>
-        </div>
 
-        <div class="card-body">
-          <div class="login-wrap">
-            <div class="login-box">
+          <div class="grid3">
+            <div class="box">
               <h3>Parent</h3>
-              <p>Parents can ask questions from the <b>Parent Handbook only</b>.</p>
-              <input id="parentCode" class="input" type="password" placeholder="Parent access code" autocomplete="off" />
-              <div class="sp10"></div>
-              <button id="btnLoginParent" class="btn" type="button">Login as Parent</button>
+              <p class="muted">Parents can ask questions from the <b>Parent Handbook only.</b></p>
+              <input id="parentCode" class="input" placeholder="Parent access code" />
+              <button id="parentLoginBtn" class="btn primary">Login as Parent</button>
             </div>
 
-            <div class="login-box">
+            <div class="box">
               <h3>Staff</h3>
-              <p>Staff can ask from <b>Policies + Protocols + Handbook</b>.</p>
-              <input id="staffCode" class="input" type="password" placeholder="Staff access code" autocomplete="off" />
-              <div class="sp10"></div>
-              <button id="btnLoginStaff" class="btn" type="button">Login as Staff</button>
+              <p class="muted">Staff can ask from <b>Policies + Protocols + Handbook</b>.</p>
+              <input id="staffCode" class="input" placeholder="Staff access code" />
+              <button id="staffLoginBtn" class="btn primary">Login as Staff</button>
             </div>
 
-            <div class="login-box">
+            <div class="box">
               <h3>Admin</h3>
-              <p>Admin can view logs/stats and also test the assistant.</p>
-              <input id="adminPin" class="input" type="password" placeholder="Admin PIN" autocomplete="off" />
-              <div class="sp10"></div>
-              <button id="btnLoginAdmin" class="btn" type="button">Login as Admin</button>
+              <p class="muted">Admin can view logs/stats and also test the assistant.</p>
+              <input id="adminPin" class="input" placeholder="Admin PIN" />
+              <button id="adminLoginBtn" class="btn primary">Login as Admin</button>
             </div>
           </div>
 
-          <div class="muted mt14">
-            Tip: Choose campus from top menu before logging in.
+          <div class="hint">
+            Campus is required for handbook matching. Choose campus from top menu before logging in.
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- ===== App Panel ===== -->
-    <section id="appPanel" class="grid" style="display:none;">
-      <!-- Handbook Panel -->
-      <div id="handbookPanel" class="card">
-        <div class="card-head">
-          <div class="card-title">
-            Parent Handbook
-            <small>Browse sections and confirm exact wording</small>
+        <div class="toast" id="toast" aria-live="polite"></div>
+      </section>
+
+      <!-- HANDBOOK -->
+      <section class="panel" id="tab-handbook">
+        <div class="card">
+          <div class="cardHead">
+            <h2>Parent Handbook</h2>
+            <div class="muted">Browse handbook sections (requires login)</div>
           </div>
-          <div class="muted strong">Campus-based</div>
-        </div>
 
-        <div class="card-body">
-          <div class="hb-layout">
-            <div class="hb-list">
-              <div class="hb-list-head">Handbooks</div>
-              <div id="handbookList" class="hb-list-body">
-                <div class="muted">Login to load handbooks…</div>
-              </div>
+          <div class="row">
+            <button id="loadHandbooksBtn" class="btn">Load Handbooks</button>
+            <select id="handbookSelect" class="select grow">
+              <option value="">Select handbook…</option>
+            </select>
+            <select id="sectionSelect" class="select grow">
+              <option value="">Select section…</option>
+            </select>
+            <button id="loadSectionBtn" class="btn">Load Section</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div id="handbookOutput" class="output"></div>
+        </div>
+      </section>
+
+      <!-- ASK -->
+      <section class="panel" id="tab-ask">
+        <div class="card">
+          <div class="cardHead">
+            <h2>Ask Assistant</h2>
+            <div class="muted">Ask anything related to your access level</div>
+          </div>
+
+          <div class="row">
+            <input id="questionInput" class="input grow" placeholder='Ask a question (example: "What is the late pickup fee?")' />
+            <button id="askBtn" class="btn primary">Ask</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div id="answerBox" class="output"></div>
+          <div class="muted small" id="accessHint"></div>
+        </div>
+      </section>
+
+      <!-- ADMIN -->
+      <section class="panel" id="tab-admin">
+        <div class="card">
+          <div class="cardHead">
+            <h2>Admin Panel</h2>
+            <div class="muted">Logs & health stats (admin login required)</div>
+          </div>
+
+          <div class="row">
+            <button id="loadStatsBtn" class="btn">Load Stats</button>
+            <button id="loadLogsBtn" class="btn primary">Load Logs</button>
+          </div>
+
+          <div class="grid2">
+            <div class="box">
+              <h3>Stats</h3>
+              <pre id="statsBox" class="pre"></pre>
             </div>
-
-            <div class="hb-content">
-              <div id="handbookContent" class="muted">
-                Select a handbook to view sections.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Chat Panel -->
-      <div id="chatPanel" class="card" style="display:none;">
-        <div class="card-head">
-          <div class="card-title">
-            Ask Assistant
-            <small>Ask anything related to your access level</small>
-          </div>
-          <div class="muted strong">Role-based access</div>
-        </div>
-
-        <div class="card-body">
-          <div class="chat-wrap">
-            <div class="chat-head">
-              <div class="hint">Ask a question (example: “What is the late pickup fee?”)</div>
-              <div class="pill flat">
-                <span class="label">Campus:</span> <span id="chatCampusMirror">—</span>
-              </div>
-            </div>
-
-            <div class="chat-body">
-              <div id="chatAnswer" class="chat-answer muted">
-                Your answer will appear here…
-              </div>
-
-              <div class="chat-form">
-                <input id="chatInput" class="input" type="text" placeholder="Type your question…" autocomplete="off" />
-                <button id="btnSendChat" class="btn" type="button">Ask</button>
-              </div>
-
-              <div class="muted mt10 strong2">
-                Parent users will only receive answers from Parent Handbook.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Admin Panel -->
-      <div id="adminPanel" class="card" style="display:none;">
-        <div class="card-head">
-          <div class="card-title">
-            Admin Panel
-            <small>Logs & health stats</small>
-          </div>
-          <div class="row right">
-            <button id="btnLoadStats" class="btn ghost" type="button">Load Stats</button>
-            <button id="btnLoadLogs" class="btn" type="button">Load Logs</button>
-          </div>
-        </div>
-
-        <div class="card-body">
-          <div class="admin-grid">
-            <div class="mini-card">
-              <div class="mini-head">
-                <div class="mini-title">Stats <small>Quick overview</small></div>
-              </div>
-              <div class="mini-body" id="adminStats">
-                <span class="muted">Click “Load Stats”</span>
-              </div>
-            </div>
-
-            <div class="mini-card">
-              <div class="mini-head">
-                <div class="mini-title">Logs <small>Latest queries</small></div>
-              </div>
-              <div class="mini-body" id="adminOutput">
-                <span class="muted">Click “Load Logs”</span>
-              </div>
+            <div class="box">
+              <h3>Logs</h3>
+              <div id="logsBox" class="logs"></div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
+    </main>
+  </div>
 
-    </section>
-  </main>
-
-  <!-- Toast -->
-  <div id="toast" data-type="info"></div>
-
-  <!-- Your existing app logic -->
-  <script src="app.js"></script>
-
-  <!-- UI-only menu switching -->
-  <script>
-    const navHandbook = document.getElementById("navHandbook");
-    const navChat = document.getElementById("navChat");
-    const navAdmin = document.getElementById("navAdmin");
-
-    const handbookPanel = document.getElementById("handbookPanel");
-    const chatPanel = document.getElementById("chatPanel");
-    const adminPanel = document.getElementById("adminPanel");
-
-    const campusSelect = document.getElementById("campusSelect");
-    const chatCampusMirror = document.getElementById("chatCampusMirror");
-
-    function setActive(btn){
-      [navHandbook, navChat, navAdmin].forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-    }
-    function showOnly(which){
-      if (handbookPanel) handbookPanel.style.display = which === "handbook" ? "" : "none";
-      if (chatPanel) chatPanel.style.display = which === "chat" ? "" : "none";
-      if (adminPanel) adminPanel.style.display = which === "admin" ? "" : "none";
-    }
-
-    navHandbook?.addEventListener("click", () => { setActive(navHandbook); showOnly("handbook"); });
-    navChat?.addEventListener("click", () => { setActive(navChat); showOnly("chat"); });
-    navAdmin?.addEventListener("click", () => { setActive(navAdmin); showOnly("admin"); });
-
-    function updateCampusMirror(){
-      if (!chatCampusMirror) return;
-      chatCampusMirror.textContent = campusSelect?.value || "—";
-    }
-    campusSelect?.addEventListener("change", updateCampusMirror);
-    updateCampusMirror();
-
-    document.getElementById("btnQuickHelp")?.addEventListener("click", () => {
-      alert(
-        "Tips:\n" +
-        "• Choose the campus first.\n" +
-        "• Parent role answers only from Parent Handbook.\n" +
-        "• Staff role answers from Policies/Protocols/Handbook.\n" +
-        "• Admin can view logs/stats."
-      );
-    });
-  </script>
+  <script src="./app.js"></script>
 </body>
 </html>
