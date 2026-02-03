@@ -1,7 +1,7 @@
 // =====================
 // CONFIG
 // =====================
-const API_BASE = "https://cms-policy-worker.YOUR_SUBDOMAIN.workers.dev"; 
+const API_BASE = "cms-policy-worker.shokbhl.workers.dev"; 
 // 🔴 اینو با URL Worker خودت عوض کن
 
 // =====================
