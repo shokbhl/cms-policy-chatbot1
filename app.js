@@ -10,7 +10,7 @@
   // -------------------------
   // Config
   // -------------------------
-  const API_BASE = ""; // same origin (Cloudflare Pages -> Worker route)
+  const API_BASE = ""; // same origin
   const STORAGE_KEY = "cms_chat_session_v3";
 
   // -------------------------
@@ -38,7 +38,7 @@
     accessCode: $("access-code"),
     campusSelect: $("campus-select"),
     loginError: $("login-error"),
-    adminLoginBtn: $("admin-mode-btn-login"), // from login screen
+    adminLoginBtn: $("admin-mode-btn-login"), // login screen admin button
 
     // admin modal
     adminModal: $("admin-modal"),
@@ -154,6 +154,11 @@
     el.modeBadge.textContent = String(role || "").toUpperCase();
   }
 
+  function clearChatWindow() {
+    if (!el.chatWindow) return;
+    el.chatWindow.innerHTML = "";
+  }
+
   function showLoginUI() {
     setHidden(el.loginScreen, false);
     setHidden(el.chatScreen, true);
@@ -162,6 +167,7 @@
     setHidden(el.adminLinks, true);
     closeMenuPanel();
     clearChatWindow();
+    setLoginError("");
   }
 
   function showChatUI() {
@@ -169,23 +175,21 @@
     setHidden(el.chatScreen, false);
     setHidden(el.headerActions, false);
     setHidden(el.topMenuBar, false);
+
     // admin links only for admin
     setHidden(el.adminLinks, state.role !== "admin");
 
-    // campus selects
     if (el.campusSwitch) el.campusSwitch.value = state.campus || "";
     if (el.campusSelect) el.campusSelect.value = state.campus || "";
 
-    // role badge
     setModeBadge(state.role);
-
-    // Update which menu buttons are visible based on role
     applyRoleMenuVisibility();
   }
 
   function applyRoleMenuVisibility() {
     const menuBar = el.topMenuBar;
     if (!menuBar) return;
+
     const buttons = menuBar.querySelectorAll(".menu-pill[data-menu]");
     buttons.forEach((btn) => {
       const key = btn.getAttribute("data-menu");
@@ -194,13 +198,12 @@
       btn.setAttribute("aria-hidden", allowed ? "false" : "true");
     });
 
-    // Also hide admin links if not admin
     setHidden(el.adminLinks, state.role !== "admin");
   }
 
   function isMenuAllowedForRole(menuKey, role) {
-    // Parent portal menus are disabled entirely.
-    const disabledParentPortal = new Set([
+    // Parent portal menus disabled entirely
+    const disabled = new Set([
       "announcements",
       "eca",
       "calendar",
@@ -212,47 +215,33 @@
       "forms",
       "support",
     ]);
-    if (disabledParentPortal.has(menuKey)) return false;
+    if (disabled.has(menuKey)) return false;
 
-    // role rules
-    if (role === "parent") {
-      return menuKey === "handbook";
-    }
-    if (role === "staff") {
-      return menuKey === "policies" || menuKey === "protocols" || menuKey === "handbook";
-    }
-    if (role === "admin") {
-      return menuKey === "policies" || menuKey === "protocols" || menuKey === "handbook";
-    }
+    if (role === "parent") return menuKey === "handbook";
+    if (role === "staff") return ["policies", "protocols", "handbook"].includes(menuKey);
+    if (role === "admin") return ["policies", "protocols", "handbook"].includes(menuKey);
     return false;
   }
 
   // -------------------------
-  // Menu Panel (modal)
+  // Menu Panel
   // -------------------------
   function openMenuPanel(title, html) {
     if (el.menuPanelTitle) el.menuPanelTitle.textContent = title || "Menu";
     if (el.menuPanelBody) el.menuPanelBody.innerHTML = html || "";
     setHidden(el.menuOverlay, false);
     setHidden(el.menuPanel, false);
-    if (el.menuPanel) el.menuPanel.setAttribute("aria-hidden", "false");
   }
 
   function closeMenuPanel() {
     setHidden(el.menuOverlay, true);
     setHidden(el.menuPanel, true);
-    if (el.menuPanel) el.menuPanel.setAttribute("aria-hidden", "true");
     if (el.menuPanelBody) el.menuPanelBody.innerHTML = "";
   }
 
   // -------------------------
-  // Chat UI
+  // Chat UI helpers
   // -------------------------
-  function clearChatWindow() {
-    if (!el.chatWindow) return;
-    el.chatWindow.innerHTML = "";
-  }
-
   function addChatBubble(who, text) {
     if (!el.chatWindow) return;
 
@@ -311,7 +300,7 @@
     if (!code) return setLoginError("Please enter access code.");
     if (!campus) return setLoginError("Please select a campus.");
 
-    // try staff then parent (simple)
+    // try staff then parent
     try {
       const staffRes = await apiFetch("/auth/staff", {
         method: "POST",
@@ -325,8 +314,8 @@
       showChatUI();
       addSystemNote(`Signed in as Staff. Campus: ${state.campus}`);
       return;
-    } catch (e1) {
-      // continue to parent
+    } catch {
+      // continue
     }
 
     try {
@@ -342,22 +331,18 @@
       showChatUI();
       addSystemNote(`Signed in as Parent. Campus: ${state.campus}`);
       return;
-    } catch (e2) {
+    } catch {
       setLoginError("Invalid access code.");
     }
   }
 
   async function loginAdminWithPin() {
+    setLoginError("");
     const campus = getSelectedCampus();
-    if (!campus) {
-      // admin still needs campus (for handbook)
-      setLoginError("Please select a campus.");
-      closeAdminModal();
-      return;
-    }
+    if (!campus) return setLoginError("Please select a campus.");
 
     const pin = (el.adminPin?.value || "").trim();
-    if (!pin) return; // keep modal open
+    if (!pin) return;
 
     try {
       const res = await apiFetch("/auth/admin", {
@@ -375,8 +360,7 @@
       showChatUI();
       addSystemNote(`Signed in as Admin. Campus: ${state.campus}`);
     } catch (err) {
-      // show error inside modal simply by shaking? for now:
-      alert("Invalid admin PIN.");
+      setLoginError("Invalid admin PIN.");
     }
   }
 
@@ -386,45 +370,38 @@
   }
 
   // -------------------------
-  // Menus content loaders
+  // Menu loaders
   // -------------------------
   async function openPolicies() {
     openMenuPanel("Policies", `<div class="muted">Loading policies…</div>`);
     try {
       const data = await apiFetch("/policies", { method: "GET" });
       const items = Array.isArray(data?.policies) ? data.policies : Array.isArray(data) ? data : [];
+
       if (!items.length) {
-        openMenuPanel(
-          "Policies",
-          `<div class="muted">No policies found. (Make sure Worker provides GET /policies)</div>`
-        );
+        openMenuPanel("Policies", `<div class="muted">No policies found.</div>`);
         return;
       }
 
       const html = `
-        <div class="menu-hint muted">
-          Browse the list below. You can also ask questions in the chat about any policy.
-        </div>
+        <div class="menu-hint muted">Browse the list. Ask questions in chat.</div>
         <ul class="menu-list">
-          ${items
-            .map((p, idx) => {
-              const title = escapeHtml(p?.title || p?.name || `Policy ${idx + 1}`);
-              const desc = escapeHtml(p?.summary || p?.description || "");
-              const link = p?.link ? `<a class="menu-link" href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Open</a>` : "";
-              return `
-                <li class="menu-item">
-                  <div class="menu-item-title">${title}</div>
-                  ${desc ? `<div class="menu-item-desc muted">${desc}</div>` : ""}
-                  ${link ? `<div class="menu-item-actions">${link}</div>` : ""}
-                </li>
-              `;
-            })
-            .join("")}
+          ${items.map((p, idx) => {
+            const title = escapeHtml(p?.title || p?.name || `Policy ${idx + 1}`);
+            const desc = escapeHtml(p?.summary || p?.description || "");
+            const link = p?.link ? `<a class="menu-link" href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Open</a>` : "";
+            return `
+              <li class="menu-item">
+                <div class="menu-item-title">${title}</div>
+                ${desc ? `<div class="menu-item-desc muted">${desc}</div>` : ""}
+                ${link ? `<div class="menu-item-actions">${link}</div>` : ""}
+              </li>`;
+          }).join("")}
         </ul>
       `;
       openMenuPanel("Policies", html);
     } catch (err) {
-      openMenuPanel("Policies", `<div class="error-text">Failed to load policies: ${escapeHtml(err.message)}</div>`);
+      openMenuPanel("Policies", `<div class="error-text">Failed: ${escapeHtml(err.message)}</div>`);
     }
   }
 
@@ -433,38 +410,31 @@
     try {
       const data = await apiFetch("/protocols", { method: "GET" });
       const items = Array.isArray(data?.protocols) ? data.protocols : Array.isArray(data) ? data : [];
+
       if (!items.length) {
-        openMenuPanel(
-          "Protocols",
-          `<div class="muted">No protocols found. (Make sure Worker provides GET /protocols)</div>`
-        );
+        openMenuPanel("Protocols", `<div class="muted">No protocols found.</div>`);
         return;
       }
 
       const html = `
-        <div class="menu-hint muted">
-          Browse the list below. You can also ask questions in the chat about any protocol.
-        </div>
+        <div class="menu-hint muted">Browse the list. Ask questions in chat.</div>
         <ul class="menu-list">
-          ${items
-            .map((p, idx) => {
-              const title = escapeHtml(p?.title || p?.name || `Protocol ${idx + 1}`);
-              const desc = escapeHtml(p?.summary || p?.description || "");
-              const link = p?.link ? `<a class="menu-link" href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Open</a>` : "";
-              return `
-                <li class="menu-item">
-                  <div class="menu-item-title">${title}</div>
-                  ${desc ? `<div class="menu-item-desc muted">${desc}</div>` : ""}
-                  ${link ? `<div class="menu-item-actions">${link}</div>` : ""}
-                </li>
-              `;
-            })
-            .join("")}
+          ${items.map((p, idx) => {
+            const title = escapeHtml(p?.title || p?.name || `Protocol ${idx + 1}`);
+            const desc = escapeHtml(p?.summary || p?.description || "");
+            const link = p?.link ? `<a class="menu-link" href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Open</a>` : "";
+            return `
+              <li class="menu-item">
+                <div class="menu-item-title">${title}</div>
+                ${desc ? `<div class="menu-item-desc muted">${desc}</div>` : ""}
+                ${link ? `<div class="menu-item-actions">${link}</div>` : ""}
+              </li>`;
+          }).join("")}
         </ul>
       `;
       openMenuPanel("Protocols", html);
     } catch (err) {
-      openMenuPanel("Protocols", `<div class="error-text">Failed to load protocols: ${escapeHtml(err.message)}</div>`);
+      openMenuPanel("Protocols", `<div class="error-text">Failed: ${escapeHtml(err.message)}</div>`);
     }
   }
 
@@ -482,64 +452,45 @@
       const handbooks = Array.isArray(list?.handbooks) ? list.handbooks : [];
 
       if (!handbooks.length) {
-        openMenuPanel(
-          "Parent Handbook",
-          `<div class="muted">No handbook found for campus ${escapeHtml(campus)}.</div>`
-        );
+        openMenuPanel("Parent Handbook", `<div class="muted">No handbook found for ${escapeHtml(campus)}.</div>`);
         return;
       }
 
-      // Build list with sections
       const html = `
-        <div class="menu-hint muted">
-          Select a handbook/section to view. You can also ask questions in chat about any section.
-        </div>
-
+        <div class="menu-hint muted">Select a section to view. Ask questions in chat.</div>
         <div class="handbook-list">
-          ${handbooks
-            .map((hb) => {
-              const hbTitle = escapeHtml(hb?.title || "Parent Handbook");
-              const hbId = escapeHtml(hb?.id || "");
-              const program = hb?.program ? `<div class="muted">Program: ${escapeHtml(hb.program)}</div>` : "";
-              const link = hb?.link ? `<a class="menu-link" href="${escapeHtml(hb.link)}" target="_blank" rel="noopener">Open file</a>` : "";
+          ${handbooks.map((hb) => {
+            const hbTitle = escapeHtml(hb?.title || "Parent Handbook");
+            const hbId = escapeHtml(hb?.id || "");
+            const program = hb?.program ? `<div class="muted">Program: ${escapeHtml(hb.program)}</div>` : "";
+            const link = hb?.link ? `<a class="menu-link" href="${escapeHtml(hb.link)}" target="_blank" rel="noopener">Open file</a>` : "";
 
-              const sections = Array.isArray(hb?.sections) ? hb.sections : [];
-              const secHtml = sections.length
-                ? `
-                  <ul class="menu-list">
-                    ${sections
-                      .map((s) => {
-                        const key = escapeHtml(s?.key || "");
-                        const title = escapeHtml(s?.title || key || "Section");
-                        return `
-                          <li class="menu-item">
-                            <button class="menu-action" data-hb-id="${hbId}" data-sec-key="${key}" type="button">
-                              ${title}
-                            </button>
-                          </li>
-                        `;
-                      })
-                      .join("")}
-                  </ul>
-                `
-                : `<div class="muted">No sections listed.</div>`;
+            const sections = Array.isArray(hb?.sections) ? hb.sections : [];
+            const secHtml = sections.length ? `
+              <ul class="menu-list">
+                ${sections.map((s) => {
+                  const key = escapeHtml(s?.key || "");
+                  const title = escapeHtml(s?.title || key || "Section");
+                  return `
+                    <li class="menu-item">
+                      <button class="menu-action" data-hb-id="${hbId}" data-sec-key="${key}" type="button">${title}</button>
+                    </li>`;
+                }).join("")}
+              </ul>` : `<div class="muted">No sections listed.</div>`;
 
-              return `
-                <div class="handbook-card">
-                  <div class="menu-item-title">${hbTitle}</div>
-                  ${program}
-                  ${link ? `<div class="menu-item-actions">${link}</div>` : ""}
-                  <div class="handbook-sections">${secHtml}</div>
-                </div>
-              `;
-            })
-            .join("")}
+            return `
+              <div class="handbook-card">
+                <div class="menu-item-title">${hbTitle}</div>
+                ${program}
+                ${link ? `<div class="menu-item-actions">${link}</div>` : ""}
+                <div class="handbook-sections">${secHtml}</div>
+              </div>`;
+          }).join("")}
         </div>
       `;
 
       openMenuPanel("Parent Handbook", html);
 
-      // wire section click
       if (el.menuPanelBody) {
         el.menuPanelBody.querySelectorAll("button.menu-action[data-hb-id][data-sec-key]").forEach((btn) => {
           btn.addEventListener("click", async () => {
@@ -550,7 +501,7 @@
         });
       }
     } catch (err) {
-      openMenuPanel("Parent Handbook", `<div class="error-text">Failed to load handbook: ${escapeHtml(err.message)}</div>`);
+      openMenuPanel("Parent Handbook", `<div class="error-text">Failed: ${escapeHtml(err.message)}</div>`);
     }
   }
 
@@ -577,7 +528,7 @@
 
       openMenuPanel("Parent Handbook", html);
     } catch (err) {
-      openMenuPanel("Parent Handbook", `<div class="error-text">Failed to load section: ${escapeHtml(err.message)}</div>`);
+      openMenuPanel("Parent Handbook", `<div class="error-text">Failed: ${escapeHtml(err.message)}</div>`);
     }
   }
 
@@ -600,14 +551,10 @@
         body: JSON.stringify({ query, campus }),
       });
 
-      const answer = res?.answer || "—";
-      addChatBubble("assistant", answer);
+      addChatBubble("assistant", res?.answer || "—");
 
-      // Optional: show a tiny source hint
       const src = res?.source;
-      if (src?.title) {
-        addSystemNote(`Source: ${src.title}`);
-      }
+      if (src?.title) addSystemNote(`Source: ${src.title}`);
     } catch (err) {
       addChatBubble("assistant", `Error: ${err.message}`);
     }
@@ -617,7 +564,6 @@
   // Wire events
   // -------------------------
   function wireUI() {
-    // login
     if (el.loginForm) {
       el.loginForm.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -625,10 +571,8 @@
       });
     }
 
-    // logout
     if (el.logoutBtn) el.logoutBtn.addEventListener("click", logout);
 
-    // campus switch after login
     if (el.campusSwitch) {
       el.campusSwitch.addEventListener("change", () => {
         state.campus = (el.campusSwitch.value || "").toUpperCase();
@@ -636,11 +580,9 @@
       });
     }
 
-    // menu panel close
     if (el.menuOverlay) el.menuOverlay.addEventListener("click", closeMenuPanel);
     if (el.menuPanelClose) el.menuPanelClose.addEventListener("click", closeMenuPanel);
 
-    // top menu click
     if (el.topMenuBar) {
       el.topMenuBar.addEventListener("click", async (e) => {
         const btn = e.target.closest(".menu-pill[data-menu]");
@@ -651,32 +593,15 @@
         if (key === "policies") return openPolicies();
         if (key === "protocols") return openProtocols();
         if (key === "handbook") return openHandbook();
-
-        // anything else is disabled
       });
     }
 
-    // admin modal open (header)
-    if (el.adminModeBtn) {
-      el.adminModeBtn.addEventListener("click", () => {
-        // header admin button = "enter admin pin and switch role to admin" only if already logged in?
-        // we allow it to open modal anyway
-        openAdminModal();
-      });
-    }
+    if (el.adminModeBtn) el.adminModeBtn.addEventListener("click", openAdminModal);
+    if (el.adminLoginBtn) el.adminLoginBtn.addEventListener("click", openAdminModal);
 
-    // admin modal open (login screen)
-    if (el.adminLoginBtn) {
-      el.adminLoginBtn.addEventListener("click", () => {
-        openAdminModal();
-      });
-    }
-
-    // admin modal actions
     if (el.adminPinCancel) el.adminPinCancel.addEventListener("click", closeAdminModal);
     if (el.adminPinSubmit) el.adminPinSubmit.addEventListener("click", loginAdminWithPin);
 
-    // submit pin on Enter
     if (el.adminPin) {
       el.adminPin.addEventListener("keydown", (e) => {
         if (e.key === "Enter") loginAdminWithPin();
@@ -684,7 +609,6 @@
       });
     }
 
-    // chat form
     if (el.chatForm) {
       el.chatForm.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -701,14 +625,10 @@
   // -------------------------
   function init() {
     wireUI();
-
-    // default UI
     showLoginUI();
 
-    // restore session if exists
-    const ok = loadSession();
+    const ok = loadSession(); // ✅ FIX: تعریف ok
     if (ok) {
-      // if campus missing, try from UI select
       if (!state.campus) state.campus = getSelectedCampus();
       showChatUI();
       addSystemNote(`Welcome back. Signed in as ${state.role}. Campus: ${state.campus || "—"}`);
