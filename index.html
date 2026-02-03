@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CMS Support Chatbot</title>
+
+  <title>CMS Chatbot</title>
 
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/cms-180.png">
   <link rel="icon" href="/favicon.ico">
@@ -24,8 +25,8 @@
       <div class="brand">
         <img class="brand-logo" src="cms-logo.png" alt="CMS" />
         <div class="brand-text">
-          <div class="brand-title">CMS Policy Chatbot</div>
-          <div class="brand-subtitle">Internal staff &amp; parent assistant</div>
+          <div class="brand-title">CMS Chatbot</div>
+          <div class="brand-subtitle">Staff &amp; Parent assistant</div>
         </div>
       </div>
 
@@ -49,25 +50,14 @@
   </header>
 
   <!-- ================= TOP MENU (ONLY after login) ================= -->
-  <!-- IMPORTANT: stays hidden until app.js calls showChatUI() -->
   <nav id="top-menu-bar" class="top-menu-bar hidden" aria-hidden="true">
     <div class="top-menu-inner">
-      <!-- Staff -->
+      <!-- Staff / Admin -->
       <button class="menu-pill" data-menu="policies" type="button">Policies</button>
       <button class="menu-pill" data-menu="protocols" type="button">Protocols</button>
 
-      <!-- Parent -->
+      <!-- Everyone -->
       <button class="menu-pill" data-menu="handbook" type="button">Parent Handbook</button>
-      <button class="menu-pill" data-menu="announcements" type="button">Announcements</button>
-      <button class="menu-pill" data-menu="eca" type="button">ECA</button>
-      <button class="menu-pill" data-menu="calendar" type="button">Calendar</button>
-      <button class="menu-pill" data-menu="parent_interview" type="button">Parent Interview</button>
-      <button class="menu-pill" data-menu="tuition" type="button">Tuition</button>
-      <button class="menu-pill" data-menu="uniform" type="button">Uniform</button>
-      <button class="menu-pill" data-menu="daily_schedule" type="button">Daily Schedule</button>
-      <button class="menu-pill" data-menu="age_info" type="button">Age Info</button>
-      <button class="menu-pill" data-menu="forms" type="button">Forms</button>
-      <button class="menu-pill" data-menu="support" type="button">Support</button>
 
       <!-- Admin quick links (shown only if admin token active) -->
       <div id="admin-links" class="admin-links hidden">
@@ -86,7 +76,7 @@
         <p class="card-hint">
           Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.
           <br />
-          <span class="muted">Tip: Campus is required so the handbook matches your campus.</span>
+          <span class="muted">Tip: Campus is required so content matches your campus.</span>
         </p>
 
         <form id="login-form" class="login-form" autocomplete="off">
@@ -112,8 +102,7 @@
           </div>
 
           <div class="login-row">
-            <!-- IMPORTANT: give this the same id app.js expects for admin -->
-            <!-- So admin PIN modal works from login screen too -->
+            <!-- Admin Login on Login Screen -->
             <button id="admin-mode-btn-login" class="secondary-btn" type="button">
               Admin Login
             </button>
@@ -152,7 +141,7 @@
         </form>
       </div>
 
-      <div class="footer-note">© CMS – Staff internal tool</div>
+      <div class="footer-note">© CMS – Internal use only</div>
     </section>
   </main>
 
@@ -195,21 +184,6 @@
       const update = () => { pill.textContent = sel.value ? sel.value : "—"; };
       sel.addEventListener("change", update);
       update();
-    })();
-
-    // Make Admin Login button on login screen trigger the same admin modal
-    // app.js listens to #admin-mode-btn (header). This bridges login-screen button to it.
-    (function () {
-      const loginAdminBtn = document.getElementById("admin-mode-btn-login");
-      if (!loginAdminBtn) return;
-
-      loginAdminBtn.addEventListener("click", () => {
-        // If app.js already wired admin modal on #admin-mode-btn, we can just open modal directly.
-        const modal = document.getElementById("admin-modal");
-        const pin = document.getElementById("admin-pin");
-        if (modal) modal.classList.remove("hidden");
-        if (pin) pin.focus();
-      });
     })();
   </script>
 </body>
