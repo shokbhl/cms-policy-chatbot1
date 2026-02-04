@@ -2,191 +2,546 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CMS Policy Chatbot</title>
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/cms-180.png">
-  <!-- Favicon -->
-  <link rel="icon" href="/favicon.ico">
-  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CMS Admin Logs</title>
 
-  <!-- Apple (iPhone / iPad) -->
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <style>
+    :root{
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --border:#e5e7eb;
+      --shadow:0 10px 30px rgba(2,6,23,.08);
+      --btn:#0b1f3a;
+      --btnText:#fff;
+      --danger:#b91c1c;
+      --ok:#065f46;
+      --warn:#92400e;
+      --chip:#eef2ff;
+    }
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background:var(--bg);
+      color:var(--text);
+    }
+    a{color:inherit}
+    .topbar{
+      position:sticky; top:0; z-index:10;
+      background:rgba(255,255,255,.9);
+      backdrop-filter:saturate(180%) blur(10px);
+      border-bottom:1px solid var(--border);
+    }
+    .topbar-inner{
+      max-width:1100px;
+      margin:0 auto;
+      padding:14px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px;
+      font-weight:700;
+    }
+    .brand small{display:block; font-weight:500; color:var(--muted); margin-top:2px}
+    .nav{
+      display:flex; gap:10px; align-items:center;
+      font-size:14px;
+    }
+    .nav a{
+      text-decoration:none;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid transparent;
+      color:var(--muted);
+    }
+    .nav a.active{
+      color:var(--text);
+      border-color:var(--border);
+      background:#fff;
+      box-shadow:0 1px 0 rgba(2,6,23,.03);
+    }
 
-  <!-- PWA -->
-  <link rel="manifest" href="/site.webmanifest">
-  <meta name="theme-color" content="#1e3a8a">
- 
-  <link rel="stylesheet" href="style.css" />
+    .wrap{
+      max-width:1100px;
+      margin:18px auto;
+      padding:0 16px 40px;
+    }
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .card-head{
+      padding:14px 16px;
+      border-bottom:1px solid var(--border);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .title{
+      font-weight:800;
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+    .subtitle{
+      color:var(--muted);
+      font-weight:500;
+      font-size:13px;
+    }
+
+    .filters{
+      padding:12px 16px;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      border-bottom:1px solid var(--border);
+      background:#fbfdff;
+    }
+    .filters input[type="text"]{
+      padding:10px 12px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      min-width:220px;
+      outline:none;
+      background:#fff;
+    }
+    .filters select{
+      padding:10px 12px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:#fff;
+      outline:none;
+    }
+    .filters label{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:var(--muted);
+      font-size:14px;
+      user-select:none;
+    }
+    .btn{
+      background:var(--btn);
+      color:var(--btnText);
+      border:0;
+      padding:10px 14px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:700;
+    }
+    .btn:disabled{opacity:.6; cursor:not-allowed}
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 10px;
+      border-radius:999px;
+      background:var(--chip);
+      border:1px solid rgba(99,102,241,.18);
+      color:#3730a3;
+      font-size:12px;
+      font-weight:700;
+    }
+
+    .table-wrap{overflow:auto}
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      font-size:14px;
+    }
+    thead th{
+      text-align:left;
+      font-size:12px;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+      color:var(--muted);
+      padding:12px 14px;
+      border-bottom:1px solid var(--border);
+      white-space:nowrap;
+    }
+    tbody td{
+      padding:12px 14px;
+      border-bottom:1px solid var(--border);
+      vertical-align:top;
+    }
+    tbody tr:hover{background:#fafcff}
+    .muted{color:var(--muted)}
+    .ok{color:var(--ok); font-weight:800}
+    .bad{color:var(--danger); font-weight:800}
+    .role-chip{
+      display:inline-block;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:#fff;
+      font-size:12px;
+      color:var(--muted);
+      font-weight:700;
+      text-transform:lowercase;
+    }
+    .src-chip{
+      display:inline-block;
+      padding:4px 8px;
+      border-radius:999px;
+      background:#fff;
+      border:1px solid var(--border);
+      font-size:12px;
+      font-weight:800;
+      color:#111827;
+    }
+    .src-policy{background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8}
+    .src-protocol{background:#ecfeff; border-color:#a5f3fc; color:#0e7490}
+    .src-handbook{background:#f0fdf4; border-color:#bbf7d0; color:#166534}
+
+    .q{
+      max-width:520px;
+      white-space:normal;
+      line-height:1.35;
+    }
+    .small{font-size:12px}
+    .right{ text-align:right }
+    .error-box{
+      padding:14px 16px;
+      color:var(--danger);
+      background:#fff5f5;
+      border-top:1px solid #fecaca;
+    }
+  </style>
 </head>
 
 <body>
-  <!-- ================= HEADER ================= -->
-  <header class="app-header">
-    <div class="header-inner">
-      <!-- Left: Logo + Title -->
+  <div class="topbar">
+    <div class="topbar-inner">
       <div class="brand">
-        <img class="brand-logo" src="cms-logo.png" alt="CMS" />
-        <div class="brand-text">
-          <div class="brand-title">CMS Policy Chatbot</div>
-          <div class="brand-subtitle">Internal staff &amp; parent assistant</div>
+        <div>
+          CMS Admin Logs
+          <small>View latest questions & sources (staff / parent / admin)</small>
         </div>
       </div>
 
-      <!-- Right: Actions -->
-      <div id="header-actions" class="header-actions hidden">
-        <select id="campus-switch" class="campus-switch">
-          <option value="">Campus</option>
-          <option value="YC">YC</option>
-          <option value="MC">MC</option>
-          <option value="SC">SC</option>
-          <option value="TC">TC</option>
-          <option value="WC">WC</option>
-        </select>
-
-        <button id="admin-mode-btn" class="pill-btn" type="button">Admin</button>
-        <span id="mode-badge" class="mode-badge">STAFF</span>
-
-        <button id="logout-btn" class="pill-btn danger" type="button">Logout</button>
-      </div>
-    </div>
-  </header>
-
-  <!-- ================= TOP MENU ================= -->
-  <nav id="top-menu-bar" class="top-menu-bar hidden">
-    <div class="top-menu-inner">
-      <button class="menu-pill" data-menu="policies" type="button">Policies</button>
-      <button class="menu-pill" data-menu="protocols" type="button">Protocols</button>
-      <button class="menu-pill" data-menu="handbook" type="button">Parent Handbook</button>
-
-      <!-- Admin quick links (shown only if admin token active) -->
-      <div id="admin-links" class="admin-links hidden">
-        <a class="admin-link" href="dashboard.html">Dashboard</a>
-        <a class="admin-link" href="logs.html">Logs</a>
-      </div>
-    </div>
-  </nav>
-
-  <!-- ================= MAIN ================= -->
-  <main class="app-main">
-    <!-- ============ LOGIN SCREEN ============ -->
-    <section id="login-screen" class="screen">
-      <div class="card login-card">
-        <h2 class="card-title">Login</h2>
-        <p class="card-hint">
-          Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.
-          <br />
-          <span class="muted">Tip: Campus is required so the handbook matches your campus.</span>
-        </p>
-
-        <form id="login-form" class="login-form">
-          <div class="login-row">
-            <input
-              id="access-code"
-              class="text-input"
-              type="password"
-              placeholder="Access Code (Staff or Parent)"
-              autocomplete="off"
-            />
-
-            <select id="campus-select" class="campus-select">
-              <option value="">Select campus</option>
-              <option value="YC">YC</option>
-              <option value="MC">MC</option>
-              <option value="SC">SC</option>
-              <option value="TC">TC</option>
-              <option value="WC">WC</option>
-            </select>
-
-            <button class="primary-btn" type="submit">Login</button>
-          </div>
-
-          <div class="login-row">
-            <button id="login-admin-btn" class="secondary-btn" type="button">
-              Admin Login
-            </button>
-
-            <div class="campus-reminder">
-              You will login with campus:
-              <span class="campus-pill" id="campus-preview">—</span>
-            </div>
-          </div>
-
-          <div id="login-error" class="error-text"></div>
-        </form>
-
-        <div class="footer-note">© CMS – Internal use only</div>
-      </div>
-    </section>
-
-    <!-- ============ CHAT SCREEN ============ -->
-    <section id="chat-screen" class="screen hidden">
-      <div class="chat-shell">
-        <div class="chat-top-hint">
-          Ask any CMS policy, protocol, or parent handbook question (campus-based).
-        </div>
-
-        <div class="chat-window" id="chat-window"></div>
-
-        <form id="chat-form" class="chat-form">
-          <input
-            id="user-input"
-            class="text-input"
-            type="text"
-            placeholder="Ask a question..."
-            autocomplete="off"
-          />
-          <button class="primary-btn" type="submit">Ask</button>
-        </form>
-      </div>
-
-      <div class="footer-note">© CMS – Staff internal tool</div>
-    </section>
-  </main>
-
-  <!-- ================= MENU PANEL (Modal) ================= -->
-  <div id="menu-overlay" class="overlay hidden"></div>
-
-  <aside id="menu-panel" class="menu-panel hidden" aria-hidden="true">
-    <div class="menu-panel-header">
-      <div id="menu-panel-title" class="menu-panel-title">Menu</div>
-      <button id="menu-panel-close" class="icon-btn" type="button" aria-label="Close">×</button>
-    </div>
-    <div id="menu-panel-body" class="menu-panel-body"></div>
-  </aside>
-
-  <!-- ================= ADMIN PIN MODAL ================= -->
-  <div id="admin-modal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card">
-      <div class="modal-title">Admin Login</div>
-      <div class="modal-hint">Enter Admin PIN</div>
-
-      <input id="admin-pin" class="text-input" type="password" placeholder="PIN" autocomplete="off" />
-
-      <div class="modal-actions">
-        <button id="admin-pin-cancel" class="secondary-btn" type="button">Cancel</button>
-        <button id="admin-pin-submit" class="primary-btn" type="button">Submit</button>
+      <div class="nav">
+        <a href="index.html">Main App</a>
+        <a href="dashboard.html">Dashboard</a>
+        <a class="active" href="logs.html">Logs</a>
       </div>
     </div>
   </div>
 
-  <!-- ================= SCRIPT ================= -->
-  <script src="app.js"></script>
+  <div class="wrap">
+    <div class="card">
+      <div class="card-head">
+        <div class="title">
+          Logs
+          <div class="subtitle" id="statusText">Loading…</div>
+        </div>
 
-  <!-- Campus preview helper (no dependency on app.js) -->
+        <div class="pill" id="countPill">0 logs</div>
+      </div>
+
+      <div class="filters">
+        <input id="searchInput" type="text" placeholder="Search in questions…" />
+
+        <select id="campusSelect">
+          <option value="">All campuses</option>
+        </select>
+
+        <select id="roleSelect">
+          <option value="">All roles</option>
+          <!-- roles added dynamically -->
+        </select>
+
+        <label>
+          <input id="onlyErrors" type="checkbox" />
+          Only errors
+        </label>
+
+        <button id="refreshBtn" class="btn">Refresh</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Campus</th>
+              <th>Role</th>
+              <th>OK</th>
+              <th>MS</th>
+              <th>Source</th>
+              <th>Title</th>
+              <th>Section</th>
+              <th>Question</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <!-- rows -->
+          </tbody>
+        </table>
+      </div>
+
+      <div id="errorBox" class="error-box" style="display:none;"></div>
+    </div>
+  </div>
+
   <script>
-    (function () {
-      const sel = document.getElementById("campus-select");
-      const pill = document.getElementById("campus-preview");
-      if (!sel || !pill) return;
+    // ===== CONFIG =====
+    const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
+    const LOGS_URL = `${WORKER_BASE}/admin/logs?limit=200`;
 
-      const update = () => {
-        pill.textContent = sel.value ? sel.value : "—";
-      };
+    const LS = {
+      adminToken: "cms_admin_token",
+      adminUntil: "cms_admin_until"
+    };
 
-      sel.addEventListener("change", update);
-      update();
-    })();
+    // ===== DOM =====
+    const tbody = document.getElementById("tbody");
+    const statusText = document.getElementById("statusText");
+    const countPill = document.getElementById("countPill");
+    const errorBox = document.getElementById("errorBox");
+
+    const searchInput = document.getElementById("searchInput");
+    const campusSelect = document.getElementById("campusSelect");
+    const roleSelect = document.getElementById("roleSelect");
+    const onlyErrors = document.getElementById("onlyErrors");
+    const refreshBtn = document.getElementById("refreshBtn");
+
+    // ===== STATE =====
+    let allLogs = [];
+
+    // ===== HELPERS =====
+    function isAdminActive() {
+      const token = localStorage.getItem(LS.adminToken);
+      const until = Number(localStorage.getItem(LS.adminUntil) || "0");
+      return !!token && Date.now() < until;
+    }
+
+    function getAdminToken() {
+      return localStorage.getItem(LS.adminToken) || "";
+    }
+
+    function esc(s) {
+      return String(s ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+
+    function fmtTime(ts) {
+      const d = new Date(Number(ts || 0));
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleString();
+    }
+
+    function sourceChip(type) {
+      const t = (type || "unknown").toLowerCase();
+      const cls =
+        t === "policy" ? "src-chip src-policy" :
+        t === "protocol" ? "src-chip src-protocol" :
+        t === "handbook" ? "src-chip src-handbook" :
+        "src-chip";
+      return `<span class="${cls}">${esc(t)}</span>`;
+    }
+
+    function roleChip(role) {
+      const r = (role || "unknown").toLowerCase();
+      return `<span class="role-chip">${esc(r)}</span>`;
+    }
+
+    function showError(msg) {
+      errorBox.style.display = "block";
+      errorBox.textContent = msg || "Error";
+    }
+
+    function clearError() {
+      errorBox.style.display = "none";
+      errorBox.textContent = "";
+    }
+
+    function setStatus(msg) {
+      statusText.textContent = msg;
+    }
+
+    // Merge roles from data + ensure parent exists
+    function setRoleOptionsFromLogs(logs) {
+      const fixed = ["staff", "parent", "admin", "unknown"];
+      const found = new Set(
+        logs.map(l => String(l.user_role || l.role || "unknown").trim().toLowerCase()).filter(Boolean)
+      );
+      fixed.forEach(r => found.add(r));
+
+      // remember current selection
+      const current = roleSelect.value;
+
+      // rebuild
+      roleSelect.innerHTML = `
+        <option value="">All roles</option>
+        ${Array.from(found)
+          .sort((a,b) => a.localeCompare(b))
+          .map(r => `<option value="${esc(r)}">${esc(r)}</option>`)
+          .join("")}
+      `;
+
+      // restore selection if still exists
+      if (current && Array.from(found).includes(current)) roleSelect.value = current;
+    }
+
+    function setCampusOptionsFromLogs(logs) {
+      const found = new Set(logs.map(l => String(l.campus || "UNKNOWN").trim().toUpperCase()).filter(Boolean));
+      const current = campusSelect.value;
+
+      campusSelect.innerHTML = `
+        <option value="">All campuses</option>
+        ${Array.from(found).sort().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}
+      `;
+
+      if (current && Array.from(found).includes(current)) campusSelect.value = current;
+    }
+
+    function normalizeRole(l) {
+      const r = (l.user_role || l.role || "").trim().toLowerCase();
+      return r || "unknown";
+    }
+
+    function normalizeSourceType(l) {
+      return (l.source_type || "").trim().toLowerCase() || "unknown";
+    }
+
+    function normalizeTitle(l) {
+      // prefer handbook title if exists, else source title if your worker sets it, else id
+      return (l.handbook_title || l.source_title || l.source_id || "").trim();
+    }
+
+    function normalizeSection(l) {
+      return (l.section_key || "").trim();
+    }
+
+    function normalizeQuestion(l) {
+      return (l.query || l.question || "").trim();
+    }
+
+    function render() {
+      const q = (searchInput.value || "").trim().toLowerCase();
+      const campus = (campusSelect.value || "").trim().toUpperCase();
+      const role = (roleSelect.value || "").trim().toLowerCase();
+      const onlyBad = !!onlyErrors.checked;
+
+      let rows = [...allLogs];
+
+      if (campus) rows = rows.filter(l => String(l.campus || "").toUpperCase() === campus);
+      if (role) rows = rows.filter(l => normalizeRole(l) === role);
+      if (onlyBad) rows = rows.filter(l => l.ok === false);
+
+      if (q) {
+        rows = rows.filter(l => {
+          const hay = [
+            normalizeQuestion(l),
+            normalizeTitle(l),
+            normalizeRole(l),
+            String(l.campus || ""),
+            String(l.source_id || ""),
+            String(l.source_type || ""),
+            String(l.section_key || "")
+          ].join(" ").toLowerCase();
+          return hay.includes(q);
+        });
+      }
+
+      countPill.textContent = `${rows.length} logs`;
+
+      tbody.innerHTML = rows.map(l => {
+        const ok = l.ok === true;
+        const okCell = ok ? `<span class="ok">OK</span>` : `<span class="bad">BAD</span>`;
+        const ms = Number(l.ms || 0);
+
+        const st = normalizeSourceType(l);
+        const title = normalizeTitle(l);
+        const section = normalizeSection(l);
+        const question = normalizeQuestion(l);
+
+        return `
+          <tr>
+            <td class="small muted">${esc(fmtTime(l.ts))}</td>
+            <td>${esc(String(l.campus || "UNKNOWN"))}</td>
+            <td>${roleChip(normalizeRole(l))}</td>
+            <td>${okCell}</td>
+            <td class="right">${esc(ms)}</td>
+            <td>${sourceChip(st)}</td>
+            <td class="small">${esc(title)}</td>
+            <td class="small muted">${esc(section)}</td>
+            <td class="q">${esc(question)}</td>
+          </tr>
+        `;
+      }).join("");
+
+      setStatus(`Showing ${rows.length} / ${allLogs.length} logs (latest first)`);
+    }
+
+    async function loadLogs() {
+      clearError();
+      refreshBtn.disabled = true;
+      setStatus("Loading…");
+
+      if (!isAdminActive()) {
+        setStatus("Admin token expired. Please enable Admin mode in the main app.");
+        showError("Admin session not found or expired. Go to Main App and enable Admin mode again.");
+        refreshBtn.disabled = false;
+        return;
+      }
+
+      try {
+        const res = await fetch(LOGS_URL, {
+          headers: { Authorization: `Bearer ${getAdminToken()}` }
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.ok) {
+          const msg = data?.error || "Failed to load logs";
+          showError(msg);
+          setStatus("Could not load logs.");
+          refreshBtn.disabled = false;
+          return;
+        }
+
+        allLogs = Array.isArray(data.logs) ? data.logs : [];
+
+        // Ensure sort latest first
+        allLogs.sort((a,b) => Number(b.ts||0) - Number(a.ts||0));
+
+        setCampusOptionsFromLogs(allLogs);
+        setRoleOptionsFromLogs(allLogs);
+
+        render();
+      } catch (e) {
+        showError(e?.message || "Network error");
+        setStatus("Network error.");
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    // ===== EVENTS =====
+    refreshBtn.addEventListener("click", loadLogs);
+    searchInput.addEventListener("input", render);
+    campusSelect.addEventListener("change", render);
+    roleSelect.addEventListener("change", render);
+    onlyErrors.addEventListener("change", render);
+
+    // ===== INIT =====
+    loadLogs();
   </script>
 </body>
 </html>
