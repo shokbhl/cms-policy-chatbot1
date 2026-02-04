@@ -1,19 +1,24 @@
 export async function onRequest(context) {
   const { request } = context;
 
-  // Worker base
   const WORKER_ORIGIN = "https://cms-policy-worker.shokbhl.workers.dev";
 
-  // This function handles ONLY /api
   const url = new URL(request.url);
-  const target = new URL(WORKER_ORIGIN + "/api");
 
-  // Forward request as-is
-  const res = await fetch(target.toString(), request);
+  // forward: /api/...  =>  WORKER_ORIGIN/api/...
+  const forwardPath = url.pathname.replace(/^\/api/, "/api");
+  const targetUrl = new URL(WORKER_ORIGIN + forwardPath);
 
-  // Return response (same-origin to browser)
+  // keep querystring
+  targetUrl.search = url.search;
+
+  // clone request with new URL
+  const newReq = new Request(targetUrl.toString(), request);
+
+  const res = await fetch(newReq);
+
   return new Response(res.body, {
     status: res.status,
-    headers: res.headers
+    headers: res.headers,
   });
 }
