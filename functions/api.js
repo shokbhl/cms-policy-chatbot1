@@ -1,26 +1,18 @@
-export async function onRequest(context) {
-  const { request } = context;
-
+export async function onRequest({ request }) {
   const WORKER_ORIGIN = "https://cms-policy-worker.shokbhl.workers.dev";
 
   const url = new URL(request.url);
 
-  // /api/...  ->  /...
+  // remove /api prefix
   const forwardPath = url.pathname.replace(/^\/api/, "") || "/";
 
-  const targetUrl = new URL(WORKER_ORIGIN + forwardPath);
+  const targetUrl = WORKER_ORIGIN + forwardPath + url.search;
 
-  // keep query string
-  targetUrl.search = url.search;
-
-  // forward original request (method/body/headers)
-  const newReq = new Request(targetUrl.toString(), request);
-
-  const res = await fetch(newReq);
-
-  // return response back to browser
-  return new Response(res.body, {
-    status: res.status,
-    headers: res.headers,
+  const newRequest = new Request(targetUrl, {
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
   });
+
+  return fetch(newRequest);
 }
