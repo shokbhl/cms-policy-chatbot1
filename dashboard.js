@@ -14,12 +14,12 @@ const ADMIN_AUTH_URL = `${WORKER_BASE}/auth/admin`;
 
 const LS = {
   adminToken: "cms_admin_token",
-  adminUntil: "cms_admin_until"
+  adminUntil: "cms_admin_until",
+  staffToken: "cms_staff_token"
 };
 
 const el = (id) => document.getElementById(id);
 
-// ---- DOM ----
 const badgeEl = el("badge");
 const lastRefreshEl = el("last-refresh");
 const statusLineEl = el("status-line");
@@ -74,7 +74,7 @@ async function ensureAdminTokenOrPrompt() {
     return false;
   }
 
-  const expiresIn = Number(data.expires_in || 28800); // 8h
+  const expiresIn = data.expires_in || 28800; // 8h
   localStorage.setItem(LS.adminToken, data.token);
   localStorage.setItem(LS.adminUntil, String(Date.now() + expiresIn * 1000));
   return true;
@@ -94,7 +94,6 @@ async function authedGet(url) {
 // UI helpers
 // -------------------------
 function setBadge(state) {
-  if (!badgeEl) return;
   const s = String(state || "OK").toUpperCase();
   badgeEl.textContent = s;
 
@@ -105,13 +104,12 @@ function setBadge(state) {
 }
 
 function setLastRefreshNow() {
-  if (!lastRefreshEl) return;
-  lastRefreshEl.textContent = new Date().toLocaleString();
+  const d = new Date();
+  lastRefreshEl.textContent = d.toLocaleString();
 }
 
 function setStatus(text) {
-  if (!statusLineEl) return;
-  statusLineEl.textContent = text || "";
+  statusLineEl.textContent = text;
 }
 
 // -------------------------
@@ -127,21 +125,21 @@ function okRate(ok, total) {
   return ok / total;
 }
 
-// Topic bucketing (keyword rules)
+// Very simple topic bucketing based on keywords in query text
 function bucketTopic(query) {
   const q = String(query || "").toLowerCase();
 
   const rules = [
-    ["Safe Arrival / Pickup", ["arrival","pickup","pick-up","drop off","drop-off","dismissal","late pickup","late pick-up"]],
-    ["Health / Illness", ["sick","fever","ill","vomit","diarrhea","symptom","medication"]],
-    ["Allergy / Anaphylaxis", ["allergy","anaphylaxis","epi","epipen"]],
-    ["Sleep / Nap", ["sleep","nap"]],
-    ["Behaviour", ["behaviour","behavior","discipline"]],
-    ["Emergency / Fire", ["emergency","fire","evacuation","lockdown"]],
-    ["Fees / Payments", ["fee","payment","tuition","nsf","withdrawal"]],
-    ["Uniform / Clothing", ["uniform","dress code"]],
-    ["Field Trips", ["field trip","off premises","off-premises"]],
-    ["Transparent Classroom", ["transparent classroom","tc website","progress report"]],
+    ["Safe Arrival / Pickup", ["arrival", "pickup", "pick-up", "drop off", "drop-off", "dismissal", "late pickup", "late pick-up"]],
+    ["Health / Illness", ["sick", "fever", "ill", "vomit", "diarrhea", "symptom", "medication"]],
+    ["Allergy / Anaphylaxis", ["allergy", "anaphylaxis", "epi", "epipen"]],
+    ["Sleep / Nap", ["sleep", "nap"]],
+    ["Behaviour", ["behaviour", "behavior", "discipline"]],
+    ["Emergency / Fire", ["emergency", "fire", "evacuation", "lockdown"]],
+    ["Fees / Payments", ["fee", "payment", "tuition", "nsf", "withdrawal"]],
+    ["Uniform / Clothing", ["uniform", "dress code"]],
+    ["Field Trips", ["field trip", "off premises", "off-premises"]],
+    ["Transparent Classroom", ["transparent classroom", "tc website", "progress report"]],
   ];
 
   for (const [name, keys] of rules) {
@@ -152,13 +150,14 @@ function bucketTopic(query) {
 
 function buildHandbookKey(log) {
   const campus = log.campus || "UNKNOWN";
-  const handbook = log.handbook_id || log.doc_id || "—";
+  const hb = log.handbook_id || log.doc_id || "—";
   const section = log.section_key || "—";
-  return { campus, handbook, section };
+  return { campus, hb, section };
 }
 
 // Predictive: compare recent error rate vs earlier
 function computePredictive(logsSortedAsc) {
+  // take last 60 logs (recent) and previous 60
   const n = logsSortedAsc.length;
   const recent = logsSortedAsc.slice(Math.max(0, n - 60));
   const prev = logsSortedAsc.slice(Math.max(0, n - 120), Math.max(0, n - 60));
@@ -172,7 +171,7 @@ function computePredictive(logsSortedAsc) {
   const recentRate = recentTotal ? recentBad / recentTotal : 0;
   const prevRate = prevTotal ? prevBad / prevTotal : 0;
 
-  const delta = recentRate - prevRate;
+  const delta = recentRate - prevRate; // positive means worse
   return { recentRate, prevRate, delta, recentTotal, prevTotal };
 }
 
@@ -191,8 +190,131 @@ function buildRollingSeries(logsAsc, window = 20) {
 }
 
 // -------------------------
-// Tooltip for canvas charts
+// Charts (simple canvas) + tooltip
 // -------------------------
+function drawBarChart(canvas, labels, values, options = {}) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  const pad = 40;
+  const maxV = Math.max(1, ...values);
+
+  // axes
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "#cbd5e1";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, 10);
+  ctx.lineTo(pad, H - pad);
+  ctx.lineTo(W - 10, H - pad);
+  ctx.stroke();
+
+  const barCount = values.length;
+  const gap = 10;
+  const barW = Math.max(12, (W - pad - 20 - gap * (barCount - 1)) / barCount);
+
+  const bars = [];
+
+  for (let i = 0; i < barCount; i++) {
+    const v = values[i];
+    const x = pad + i * (barW + gap);
+    const h = (H - pad - 20) * (v / maxV);
+    const y = (H - pad) - h;
+
+    // bar
+    ctx.fillStyle = "#003b8e";
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(x, y, barW, h);
+
+    // label
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#334155";
+    ctx.font = "12px system-ui";
+    ctx.fillText(String(labels[i]), x, H - 18);
+
+    bars.push({ x, y, w: barW, h, label: labels[i], value: v });
+  }
+
+  attachTooltip(canvas, (mx, my) => {
+    for (const b of bars) {
+      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+        return `${b.label}: ${b.value}`;
+      }
+    }
+    return "";
+  });
+}
+
+function drawLineChart(canvas, points, options = {}) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  const pad = 40;
+  const maxY = 1; // rate 0..1
+
+  // axes
+  ctx.strokeStyle = "#cbd5e1";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, 10);
+  ctx.lineTo(pad, H - pad);
+  ctx.lineTo(W - 10, H - pad);
+  ctx.stroke();
+
+  if (points.length < 2) return;
+
+  // draw line
+  ctx.strokeStyle = "#ef4444";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  const stepX = (W - pad - 20) / Math.max(1, points.length - 1);
+
+  const toXY = (i, y) => {
+    const x = pad + i * stepX;
+    const yy = (H - pad) - (H - pad - 20) * (y / maxY);
+    return { x, y: yy };
+  };
+
+  const dots = [];
+
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const xy = toXY(i, p.y);
+    if (i === 0) ctx.moveTo(xy.x, xy.y);
+    else ctx.lineTo(xy.x, xy.y);
+
+    dots.push({ x: xy.x, y: xy.y, rate: p.y });
+  }
+  ctx.stroke();
+
+  // dots
+  ctx.fillStyle = "#ef4444";
+  for (const d of dots) {
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  attachTooltip(canvas, (mx, my) => {
+    // nearest dot
+    let best = null;
+    for (const d of dots) {
+      const dx = mx - d.x;
+      const dy = my - d.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 8 && (!best || dist < best.dist)) best = { ...d, dist };
+    }
+    if (!best) return "";
+    return `Error rate: ${(best.rate * 100).toFixed(1)}%`;
+  });
+}
+
+// Tooltip: creates a floating div on body
 let tooltipDiv = null;
 function ensureTooltipDiv() {
   if (tooltipDiv) return tooltipDiv;
@@ -214,6 +336,7 @@ function ensureTooltipDiv() {
 
 function attachTooltip(canvas, resolver) {
   const tip = ensureTooltipDiv();
+
   canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
     const mx = ((e.clientX - rect.left) / rect.width) * canvas.width;
@@ -229,133 +352,18 @@ function attachTooltip(canvas, resolver) {
     tip.style.left = `${e.clientX + 12}px`;
     tip.style.top = `${e.clientY + 12}px`;
   };
-  canvas.onmouseleave = () => { tip.style.display = "none"; };
-}
 
-// -------------------------
-// Charts (simple canvas)
-// -------------------------
-function drawBarChart(canvas, labels, values) {
-  const ctx = canvas.getContext("2d");
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  const pad = 40;
-  const maxV = Math.max(1, ...values);
-
-  // axes
-  ctx.strokeStyle = "#cbd5e1";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(pad, 10);
-  ctx.lineTo(pad, H - pad);
-  ctx.lineTo(W - 10, H - pad);
-  ctx.stroke();
-
-  const barCount = values.length;
-  const gap = 10;
-  const barW = Math.max(12, (W - pad - 20 - gap * (barCount - 1)) / Math.max(1, barCount));
-
-  const bars = [];
-
-  for (let i = 0; i < barCount; i++) {
-    const v = values[i];
-    const x = pad + i * (barW + gap);
-    const h = (H - pad - 20) * (v / maxV);
-    const y = (H - pad) - h;
-
-    ctx.fillStyle = "#003b8e";
-    ctx.globalAlpha = 0.85;
-    ctx.fillRect(x, y, barW, h);
-
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#334155";
-    ctx.font = "12px system-ui";
-    ctx.fillText(String(labels[i]), x, H - 18);
-
-    bars.push({ x, y, w: barW, h, label: labels[i], value: v });
-  }
-
-  attachTooltip(canvas, (mx, my) => {
-    for (const b of bars) {
-      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
-        return `${b.label}: ${b.value}`;
-      }
-    }
-    return "";
-  });
-}
-
-function drawLineChart(canvas, points) {
-  const ctx = canvas.getContext("2d");
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  const pad = 40;
-  const maxY = 1;
-
-  // axes
-  ctx.strokeStyle = "#cbd5e1";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(pad, 10);
-  ctx.lineTo(pad, H - pad);
-  ctx.lineTo(W - 10, H - pad);
-  ctx.stroke();
-
-  if (points.length < 2) return;
-
-  const stepX = (W - pad - 20) / Math.max(1, points.length - 1);
-
-  const toXY = (i, y) => {
-    const x = pad + i * stepX;
-    const yy = (H - pad) - (H - pad - 20) * (y / maxY);
-    return { x, y: yy };
+  canvas.onmouseleave = () => {
+    tip.style.display = "none";
   };
-
-  ctx.strokeStyle = "#ef4444";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-
-  const dots = [];
-
-  for (let i = 0; i < points.length; i++) {
-    const xy = toXY(i, points[i].y);
-    if (i === 0) ctx.moveTo(xy.x, xy.y);
-    else ctx.lineTo(xy.x, xy.y);
-    dots.push({ x: xy.x, y: xy.y, rate: points[i].y });
-  }
-  ctx.stroke();
-
-  ctx.fillStyle = "#ef4444";
-  for (const d of dots) {
-    ctx.beginPath();
-    ctx.arc(d.x, d.y, 3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  attachTooltip(canvas, (mx, my) => {
-    let best = null;
-    for (const d of dots) {
-      const dx = mx - d.x;
-      const dy = my - d.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 8 && (!best || dist < best.dist)) best = { ...d, dist };
-    }
-    if (!best) return "";
-    return `Error rate: ${(best.rate * 100).toFixed(1)}%`;
-  });
 }
 
 // -------------------------
 // Render tables
 // -------------------------
 function renderCampusTable(byCampus) {
-  if (!campusBody) return;
   campusBody.innerHTML = "";
-
-  const entries = Object.entries(byCampus || {})
-    .sort((a, b) => (safeNum(b[1]?.total) - safeNum(a[1]?.total)));
+  const entries = Object.entries(byCampus || {}).sort((a, b) => (b[1].total || 0) - (a[1].total || 0));
 
   for (const [campus, obj] of entries) {
     const total = safeNum(obj.total);
@@ -376,12 +384,8 @@ function renderCampusTable(byCampus) {
 }
 
 function renderTopics(topicsMap, total) {
-  if (!topicsBody) return;
   topicsBody.innerHTML = "";
-
-  const entries = Object.entries(topicsMap || {})
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10);
+  const entries = Object.entries(topicsMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
   for (const [topic, count] of entries) {
     const share = total ? (count / total) : 0;
@@ -401,17 +405,7 @@ function renderTopics(topicsMap, total) {
   }
 }
 
-function escapeHtml(s) {
-  return String(s ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 function renderHandbooks(rows) {
-  if (!handbooksBody) return;
   handbooksBody.innerHTML = "";
 
   if (!rows.length) {
@@ -421,6 +415,7 @@ function renderHandbooks(rows) {
     return;
   }
 
+  // sort by count desc
   rows.sort((a, b) => b.count - a.count);
 
   for (const r of rows.slice(0, 20)) {
@@ -439,8 +434,7 @@ function renderHandbooks(rows) {
 // Predictive badge / notice
 // -------------------------
 function renderPredictive(p) {
-  if (!predictiveText || !predictiveBox) return;
-
+  // thresholds (you can tweak)
   const recentPct = p.recentRate * 100;
   const prevPct = p.prevRate * 100;
   const deltaPct = p.delta * 100;
@@ -448,6 +442,7 @@ function renderPredictive(p) {
   let state = "OK";
   let text = `Stable. Recent error rate ${recentPct.toFixed(1)}% (previous ${prevPct.toFixed(1)}%).`;
 
+  // if recent is high OR increasing fast -> warn/bad
   if (p.recentRate >= 0.15 || p.delta >= 0.08) {
     state = "WARN";
     text = `Heads-up: error rate is rising. Recent ${recentPct.toFixed(1)}% vs previous ${prevPct.toFixed(1)}% (Δ ${deltaPct.toFixed(1)}%).`;
@@ -477,54 +472,51 @@ async function refreshAll() {
 
   // 1) Stats
   const { res: sRes, data: sData } = await authedGet(STATS_URL);
-
   if (sRes.status === 401) {
     setStatus("Admin token expired. Refresh and enter PIN again.");
     return;
   }
-  if (!sRes.ok || !sData.ok) {
+  if (!sRes.ok) {
     setStatus(`Stats error: ${sData.error || sRes.status}`);
     return;
   }
 
   setBadge(sData.badge || "OK");
-  kpiTotal && (kpiTotal.textContent = String(safeNum(sData.total, 0)));
-  kpiOk && (kpiOk.textContent = String(safeNum(sData.ok, 0)));
-  kpiBad && (kpiBad.textContent = String(safeNum(sData.bad, 0)));
-  kpiAvgMs && (kpiAvgMs.textContent = String(safeNum(sData.avg_ms, 0)));
+  kpiTotal.textContent = safeNum(sData.total, 0);
+  kpiOk.textContent = safeNum(sData.ok, 0);
+  kpiBad.textContent = safeNum(sData.bad, 0);
+  kpiAvgMs.textContent = safeNum(sData.avg_ms, 0);
 
   renderCampusTable(sData.byCampus || {});
   setLastRefreshNow();
 
   // 2) Logs for charts / topics / predictive
   const { res: lRes, data: lData } = await authedGet(LOGS_URL);
-  if (!lRes.ok || !lData.ok) {
+  if (!lRes.ok) {
     setStatus(`Logs error: ${lData.error || lRes.status}`);
     return;
   }
 
   const logs = Array.isArray(lData.logs) ? lData.logs : [];
 
-  // sort logs ascending
-  const logsAsc = logs.slice().sort((a, b) => safeNum(a.ts) - safeNum(b.ts));
+  // sort logs ascending by ts
+  const logsAsc = logs
+    .slice()
+    .sort((a, b) => safeNum(a.ts) - safeNum(b.ts));
 
   // Campus chart
-  if (campusCanvas) {
-    const campusCount = {};
-    for (const r of logs) {
-      const c = r.campus || "UNKNOWN";
-      campusCount[c] = (campusCount[c] || 0) + 1;
-    }
-    const campusLabels = Object.keys(campusCount);
-    const campusValues = campusLabels.map((k) => campusCount[k]);
-    drawBarChart(campusCanvas, campusLabels, campusValues);
+  const campusCount = {};
+  for (const r of logs) {
+    const c = r.campus || "UNKNOWN";
+    campusCount[c] = (campusCount[c] || 0) + 1;
   }
+  const campusLabels = Object.keys(campusCount);
+  const campusValues = campusLabels.map((k) => campusCount[k]);
+  drawBarChart(campusCanvas, campusLabels, campusValues);
 
-  // Rolling trend chart
-  if (trendCanvas) {
-    const series = buildRollingSeries(logsAsc, 20);
-    drawLineChart(trendCanvas, series);
-  }
+  // Rolling trend chart (error rate)
+  const series = buildRollingSeries(logsAsc, 20);
+  drawLineChart(trendCanvas, series);
 
   // Topics
   const topics = {};
@@ -534,14 +526,14 @@ async function refreshAll() {
   }
   renderTopics(topics, logs.length);
 
-  // Handbook breakdown
+  // Handbook breakdown (if fields exist)
   const hbMap = new Map();
   for (const r of logs) {
-    const hasHb = r.handbook_id || r.section_key || (r.source_type === "handbook");
+    const hasHb = r.handbook_id || r.section_key || (r.doc_type === "handbook");
     if (!hasHb) continue;
 
-    const { campus, handbook, section } = buildHandbookKey(r);
-    const key = `${campus}||${handbook}||${section}`;
+    const { campus, hb, section } = buildHandbookKey(r);
+    const key = `${campus}||${hb}||${section}`;
     hbMap.set(key, (hbMap.get(key) || 0) + 1);
   }
 
@@ -569,17 +561,15 @@ function startAutoRefresh() {
 
   refreshTimer = setInterval(() => {
     if (document.visibilityState === "visible") {
-      autoRefreshStateEl && (autoRefreshStateEl.textContent = "ON");
       refreshAll();
+      autoRefreshStateEl.textContent = "ON";
     } else {
-      autoRefreshStateEl && (autoRefreshStateEl.textContent = "PAUSED");
+      autoRefreshStateEl.textContent = "PAUSED";
     }
   }, intervalMs);
 
   document.addEventListener("visibilitychange", () => {
-    autoRefreshStateEl && (autoRefreshStateEl.textContent =
-      document.visibilityState === "visible" ? "ON" : "PAUSED"
-    );
+    autoRefreshStateEl.textContent = document.visibilityState === "visible" ? "ON" : "PAUSED";
   });
 }
 
@@ -589,14 +579,15 @@ function stopAutoRefresh() {
 }
 
 // -------------------------
-// Events + Init
+// Events
 // -------------------------
 refreshBtn?.addEventListener("click", () => refreshAll());
 
+// -------------------------
+// Init
+// -------------------------
 (async function init() {
-  autoRefreshStateEl && (autoRefreshStateEl.textContent =
-    document.visibilityState === "visible" ? "ON" : "PAUSED"
-  );
+  autoRefreshStateEl.textContent = document.visibilityState === "visible" ? "ON" : "PAUSED";
   await refreshAll();
   startAutoRefresh();
 })();

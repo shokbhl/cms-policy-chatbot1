@@ -15,16 +15,11 @@
       --shadow:0 10px 30px rgba(2,6,23,.08);
       --btn:#0b1f3a;
       --btnText:#fff;
-
       --danger:#b91c1c;
       --ok:#065f46;
       --warn:#92400e;
-
       --chip:#eef2ff;
-      --chipBorder: rgba(99,102,241,.18);
-      --chipText:#3730a3;
     }
-
     html,body{height:100%}
     body{
       margin:0;
@@ -33,7 +28,6 @@
       color:var(--text);
     }
     a{color:inherit}
-
     .topbar{
       position:sticky; top:0; z-index:10;
       background:rgba(255,255,255,.9);
@@ -48,17 +42,15 @@
       align-items:center;
       justify-content:space-between;
       gap:12px;
-      flex-wrap:wrap;
     }
     .brand{
       display:flex; align-items:center; gap:10px;
-      font-weight:900;
+      font-weight:800;
     }
-    .brand small{display:block; font-weight:600; color:var(--muted); margin-top:2px}
+    .brand small{display:block; font-weight:500; color:var(--muted); margin-top:2px}
     .nav{
       display:flex; gap:10px; align-items:center;
       font-size:14px;
-      flex-wrap:wrap;
     }
     .nav a{
       text-decoration:none;
@@ -66,7 +58,6 @@
       border-radius:10px;
       border:1px solid transparent;
       color:var(--muted);
-      background:transparent;
     }
     .nav a.active{
       color:var(--text);
@@ -94,7 +85,6 @@
       box-shadow:var(--shadow);
       overflow:hidden;
     }
-
     .card-head{
       padding:14px 16px;
       border-bottom:1px solid var(--border);
@@ -113,7 +103,7 @@
     }
     .subtitle{
       color:var(--muted);
-      font-weight:600;
+      font-weight:500;
       font-size:13px;
     }
 
@@ -124,44 +114,9 @@
       padding:10px 14px;
       border-radius:12px;
       cursor:pointer;
-      font-weight:900;
+      font-weight:800;
     }
     .btn:disabled{opacity:.6; cursor:not-allowed}
-
-    .row{
-      display:flex;
-      gap:10px;
-      align-items:center;
-      flex-wrap:wrap;
-    }
-
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding:6px 10px;
-      border-radius:999px;
-      border:1px solid var(--border);
-      background:#fff;
-      font-weight:900;
-      font-size:12px;
-    }
-    .pill small{font-weight:800; color:var(--muted)}
-    .badge{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      padding:6px 10px;
-      border-radius:999px;
-      font-weight:1000;
-      font-size:12px;
-      border:1px solid var(--border);
-      background:#fff;
-      min-width:64px;
-    }
-    .badge.ok{color:var(--ok); background:#f0fdf4; border-color:#bbf7d0}
-    .badge.warn{color:var(--warn); background:#fffbeb; border-color:#fde68a}
-    .badge.bad{color:var(--danger); background:#fff5f5; border-color:#fecaca}
 
     .kpi{
       padding:14px 16px;
@@ -169,9 +124,24 @@
       flex-direction:column;
       gap:6px;
     }
-    .kpi .label{color:var(--muted); font-size:12px; letter-spacing:.04em; text-transform:uppercase; font-weight:900}
-    .kpi .value{font-size:26px; font-weight:1000}
-    .kpi .hint{color:var(--muted); font-size:12px; font-weight:700}
+    .kpi .label{color:var(--muted); font-size:12px; letter-spacing:.04em; text-transform:uppercase}
+    .kpi .value{font-size:24px; font-weight:900}
+    .kpi .hint{color:var(--muted); font-size:12px}
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 10px;
+      border-radius:999px;
+      font-weight:900;
+      font-size:12px;
+      border:1px solid var(--border);
+      background:#fff;
+    }
+    .badge.ok{color:var(--ok); background:#f0fdf4; border-color:#bbf7d0}
+    .badge.warn{color:var(--warn); background:#fffbeb; border-color:#fde68a}
+    .badge.bad{color:var(--danger); background:#fff5f5; border-color:#fecaca}
 
     .table-wrap{overflow:auto}
     table{width:100%; border-collapse:separate; border-spacing:0; font-size:14px}
@@ -184,73 +154,50 @@
       padding:12px 14px;
       border-bottom:1px solid var(--border);
       white-space:nowrap;
-      font-weight:900;
     }
     tbody td{
       padding:12px 14px;
       border-bottom:1px solid var(--border);
       vertical-align:top;
-      font-weight:700;
     }
     tbody tr:hover{background:#fafcff}
-    .muted{color:var(--muted); font-weight:700}
+    .muted{color:var(--muted)}
     .right{text-align:right}
-    .small{font-size:12px}
+
+    .error-box{
+      margin-top:12px;
+      padding:14px 16px;
+      color:var(--danger);
+      background:#fff5f5;
+      border:1px solid #fecaca;
+      border-radius:16px;
+    }
+
+    .span-3{grid-column: span 3}
+    .span-4{grid-column: span 4}
+    .span-6{grid-column: span 6}
+    .span-12{grid-column: span 12}
+
+    @media (max-width: 980px){
+      .span-3,.span-4,.span-6{grid-column: span 12}
+    }
+
+    .mini{
+      font-size:12px;
+      color:var(--muted);
+    }
 
     .chip{
       display:inline-flex;
       align-items:center;
       padding:4px 8px;
       border-radius:999px;
-      background:var(--chip);
-      border:1px solid var(--chipBorder);
-      color:var(--chipText);
-      font-size:12px;
-      font-weight:900;
-      text-transform:lowercase;
-    }
-
-    .canvas-wrap{
-      padding:14px 16px;
-    }
-    canvas{
-      width:100%;
-      height:auto;
       border:1px solid var(--border);
-      border-radius:14px;
       background:#fff;
-    }
-
-    .notice{
-      padding:12px 16px;
-      border-top:1px solid var(--border);
-      color:var(--muted);
+      font-size:12px;
       font-weight:800;
-      background:#fbfdff;
-      font-size:13px;
-    }
-
-    /* predictive box */
-    .predictive{
-      padding:14px 16px;
-      border-top:1px solid var(--border);
-      font-weight:900;
-      line-height:1.35;
-    }
-    .predictive.ok{background:#f0fdf4; color:var(--ok)}
-    .predictive.warn{background:#fffbeb; color:var(--warn)}
-    .predictive.bad{background:#fff5f5; color:var(--danger)}
-    .predictive .muted{color:inherit; opacity:.8; font-weight:800}
-
-    .span-3{grid-column: span 3}
-    .span-4{grid-column: span 4}
-    .span-6{grid-column: span 6}
-    .span-8{grid-column: span 8}
-    .span-12{grid-column: span 12}
-
-    @media (max-width: 980px){
-      .span-3,.span-4,.span-6,.span-8{grid-column: span 12}
-      .topbar-inner{align-items:flex-start}
+      color:#111827;
+      text-transform:lowercase;
     }
   </style>
 </head>
@@ -261,7 +208,7 @@
       <div class="brand">
         <div>
           CMS Admin Dashboard
-          <small>Health + trends + breakdowns (admin token required)</small>
+          <small>Quick health + breakdown by campus / role / source type</small>
         </div>
       </div>
 
@@ -274,38 +221,6 @@
   </div>
 
   <div class="wrap">
-    <!-- Header status row -->
-    <div class="card" style="margin-bottom:12px;">
-      <div class="card-head">
-        <div class="title">
-          Status
-          <span class="subtitle">Live stats from Worker admin endpoints</span>
-        </div>
-
-        <div class="row">
-          <span class="pill">
-            Badge: <span id="badge" class="badge ok">OK</span>
-          </span>
-
-          <span class="pill">
-            <small>Last refresh</small>
-            <span id="last-refresh">—</span>
-          </span>
-
-          <span class="pill">
-            <small>Auto-refresh</small>
-            <span id="auto-refresh-state">—</span>
-          </span>
-
-          <button id="refresh-btn" class="btn" type="button">Refresh</button>
-        </div>
-      </div>
-
-      <div class="notice">
-        <span id="status-line">Loading…</span>
-      </div>
-    </div>
-
     <div class="grid">
       <!-- KPI cards -->
       <div class="card span-3">
@@ -314,8 +229,8 @@
         </div>
         <div class="kpi">
           <div class="label">Total</div>
-          <div class="value" id="kpi-total">—</div>
-          <div class="hint">Based on /admin/stats?limit=200</div>
+          <div class="value" id="kpiTotal">–</div>
+          <div class="hint mini" id="kpiRange">–</div>
         </div>
       </div>
 
@@ -325,8 +240,8 @@
         </div>
         <div class="kpi">
           <div class="label">OK</div>
-          <div class="value" id="kpi-ok">—</div>
-          <div class="hint muted">OK count</div>
+          <div class="value" id="kpiOk">–</div>
+          <div class="hint mini" id="kpiOkRate">–</div>
         </div>
       </div>
 
@@ -336,8 +251,8 @@
         </div>
         <div class="kpi">
           <div class="label">Bad</div>
-          <div class="value" id="kpi-bad">—</div>
-          <div class="hint muted">Non-OK logs</div>
+          <div class="value" id="kpiBad">–</div>
+          <div class="hint mini">Includes non-OK logs</div>
         </div>
       </div>
 
@@ -347,52 +262,16 @@
         </div>
         <div class="kpi">
           <div class="label">Avg ms</div>
-          <div class="value" id="kpi-avgms">—</div>
-          <div class="hint muted">From /admin/stats</div>
+          <div class="value" id="kpiMs">–</div>
+          <div class="hint mini" id="kpiBadgeWrap">–</div>
         </div>
       </div>
 
-      <!-- Predictive alert -->
-      <div class="card span-12">
+      <!-- Breakdown tables -->
+      <div class="card span-4">
         <div class="card-head">
-          <div class="title">Predictive Alert<span class="subtitle">trend-based warning (no library)</span></div>
-          <span class="pill"><small>Based on last 120 logs</small></span>
-        </div>
-        <div id="predictive-box" class="predictive ok">
-          <div id="predictive-text">—</div>
-          <div class="muted small" style="margin-top:6px;">
-            Compares recent 60 vs previous 60 (error-rate delta).
-          </div>
-        </div>
-      </div>
-
-      <!-- Charts -->
-      <div class="card span-6">
-        <div class="card-head">
-          <div class="title">Campus Volume<span class="subtitle">from /admin/logs</span></div>
-          <span class="pill"><small>Tooltip on hover</small></span>
-        </div>
-        <div class="canvas-wrap">
-          <!-- IMPORTANT: dashboard.js uses canvas.width/height for tooltip math -->
-          <canvas id="campusChart" width="980" height="360"></canvas>
-        </div>
-      </div>
-
-      <div class="card span-6">
-        <div class="card-head">
-          <div class="title">Error Rate Trend<span class="subtitle">rolling window</span></div>
-          <span class="pill"><small>Tooltip on hover</small></span>
-        </div>
-        <div class="canvas-wrap">
-          <canvas id="trendChart" width="980" height="360"></canvas>
-        </div>
-      </div>
-
-      <!-- Tables -->
-      <div class="card span-6">
-        <div class="card-head">
-          <div class="title">By Campus<span class="subtitle">volume & OK rate</span></div>
-          <span class="pill"><small>Sorted by total</small></span>
+          <div class="title">By Campus<span class="subtitle">volume & error rate</span></div>
+          <button class="btn" id="refreshBtn">Refresh</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -402,62 +281,322 @@
                 <th class="right">Total</th>
                 <th class="right">OK</th>
                 <th class="right">Bad</th>
-                <th class="right">OK%</th>
               </tr>
             </thead>
-            <tbody id="campus-body">
-              <tr><td colspan="5" class="muted">—</td></tr>
-            </tbody>
+            <tbody id="byCampusBody"></tbody>
           </table>
         </div>
       </div>
 
-      <div class="card span-6">
+      <div class="card span-4">
         <div class="card-head">
-          <div class="title">Top Topics<span class="subtitle">keyword bucketing</span></div>
-          <span class="pill"><small>Top 10</small></span>
+          <div class="title">By Role<span class="subtitle">staff / parent / admin</span></div>
+          <div class="mini">Always shows parent even if 0</div>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Topic</th>
-                <th class="right">Count</th>
-                <th class="right">Share</th>
+                <th>Role</th>
+                <th class="right">Total</th>
+                <th class="right">OK</th>
+                <th class="right">Bad</th>
               </tr>
             </thead>
-            <tbody id="topics-body">
-              <tr><td colspan="3" class="muted">—</td></tr>
-            </tbody>
+            <tbody id="byRoleBody"></tbody>
           </table>
         </div>
       </div>
 
+      <div class="card span-4">
+        <div class="card-head">
+          <div class="title">By Source Type<span class="subtitle">policy / protocol / handbook</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th class="right">Total</th>
+                <th class="right">OK</th>
+                <th class="right">Bad</th>
+              </tr>
+            </thead>
+            <tbody id="bySourceBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Latest examples -->
       <div class="card span-12">
         <div class="card-head">
-          <div class="title">Handbook Hotspots<span class="subtitle">campus + handbook + section</span></div>
-          <span class="pill"><small>Top 20</small></span>
+          <div class="title">Latest Examples<span class="subtitle">last 30 questions</span></div>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
+                <th>Time</th>
                 <th>Campus</th>
-                <th>Handbook</th>
+                <th>Role</th>
+                <th>OK</th>
+                <th class="right">MS</th>
+                <th>Source</th>
+                <th>Title</th>
                 <th>Section</th>
-                <th class="right">Count</th>
+                <th>Question</th>
               </tr>
             </thead>
-            <tbody id="handbooks-body">
-              <tr><td colspan="4" class="muted">—</td></tr>
-            </tbody>
+            <tbody id="latestBody"></tbody>
           </table>
         </div>
       </div>
     </div>
+
+    <div id="errorBox" class="error-box" style="display:none;"></div>
   </div>
 
-  <!-- Your final JS -->
-  <script src="dashboard.js"></script>
+  <script>
+    // ===== CONFIG =====
+    const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
+    const STATS_URL = `${WORKER_BASE}/admin/stats?limit=200`;
+    const LOGS_URL  = `${WORKER_BASE}/admin/logs?limit=30`;
+
+    const LS = {
+      adminToken: "cms_admin_token",
+      adminUntil: "cms_admin_until"
+    };
+
+    // ===== DOM =====
+    const kpiTotal = document.getElementById("kpiTotal");
+    const kpiOk = document.getElementById("kpiOk");
+    const kpiBad = document.getElementById("kpiBad");
+    const kpiMs = document.getElementById("kpiMs");
+    const kpiOkRate = document.getElementById("kpiOkRate");
+    const kpiBadgeWrap = document.getElementById("kpiBadgeWrap");
+    const kpiRange = document.getElementById("kpiRange");
+
+    const byCampusBody = document.getElementById("byCampusBody");
+    const byRoleBody = document.getElementById("byRoleBody");
+    const bySourceBody = document.getElementById("bySourceBody");
+    const latestBody = document.getElementById("latestBody");
+
+    const refreshBtn = document.getElementById("refreshBtn");
+    const errorBox = document.getElementById("errorBox");
+
+    // ===== HELPERS =====
+    function isAdminActive() {
+      const token = localStorage.getItem(LS.adminToken);
+      const until = Number(localStorage.getItem(LS.adminUntil) || "0");
+      return !!token && Date.now() < until;
+    }
+    function getAdminToken() {
+      return localStorage.getItem(LS.adminToken) || "";
+    }
+    function esc(s) {
+      return String(s ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+    function showError(msg) {
+      errorBox.style.display = "block";
+      errorBox.textContent = msg || "Error";
+    }
+    function clearError() {
+      errorBox.style.display = "none";
+      errorBox.textContent = "";
+    }
+    function fmtTime(ts) {
+      const d = new Date(Number(ts || 0));
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleString();
+    }
+    function badgeHtml(badge) {
+      const b = String(badge || "OK").toUpperCase();
+      const cls = b === "OK" ? "badge ok" : b === "WARN" ? "badge warn" : "badge bad";
+      return `<span class="${cls}">${esc(b)}</span>`;
+    }
+    function sourceChip(type) {
+      const t = (type || "unknown").toLowerCase();
+      const cls =
+        t === "policy" ? "chip" :
+        t === "protocol" ? "chip" :
+        t === "handbook" ? "chip" :
+        "chip";
+      return `<span class="${cls}">${esc(t)}</span>`;
+    }
+
+    function normalizeRole(l) {
+      const r = (l.user_role || l.role || "").trim().toLowerCase();
+      return r || "unknown";
+    }
+    function normalizeSourceType(l) {
+      return (l.source_type || "").trim().toLowerCase() || "unknown";
+    }
+    function normalizeTitle(l) {
+      return (l.handbook_title || l.source_title || l.source_id || "").trim();
+    }
+    function normalizeSection(l) {
+      return (l.section_key || "").trim();
+    }
+    function normalizeQuestion(l) {
+      return (l.query || l.question || "").trim();
+    }
+
+    function sortKeysAlpha(obj) {
+      return Object.keys(obj || {}).sort((a,b)=>String(a).localeCompare(String(b)));
+    }
+
+    function ensureRoleBuckets(byRole) {
+      // Ensure parent appears even if 0
+      const fixed = ["staff","parent","admin","unknown"];
+      const out = { ...(byRole || {}) };
+      for (const r of fixed) {
+        if (!out[r]) out[r] = { total: 0, ok: 0, bad: 0 };
+      }
+      return out;
+    }
+
+    // ===== RENDERERS =====
+    function renderByCampus(byCampus) {
+      const keys = sortKeysAlpha(byCampus);
+      byCampusBody.innerHTML = keys.map(k => {
+        const row = byCampus[k] || { total:0, ok:0, bad:0 };
+        return `
+          <tr>
+            <td>${esc(k)}</td>
+            <td class="right">${esc(row.total || 0)}</td>
+            <td class="right">${esc(row.ok || 0)}</td>
+            <td class="right">${esc(row.bad || 0)}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="4" class="muted">No data</td></tr>`;
+    }
+
+    function renderByRole(byRoleRaw) {
+      const byRole = ensureRoleBuckets(byRoleRaw);
+      const keys = sortKeysAlpha(byRole);
+      byRoleBody.innerHTML = keys.map(k => {
+        const row = byRole[k] || { total:0, ok:0, bad:0 };
+        return `
+          <tr>
+            <td><span class="chip">${esc(k)}</span></td>
+            <td class="right">${esc(row.total || 0)}</td>
+            <td class="right">${esc(row.ok || 0)}</td>
+            <td class="right">${esc(row.bad || 0)}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="4" class="muted">No data</td></tr>`;
+    }
+
+    function renderBySource(bySource) {
+      const keys = sortKeysAlpha(bySource);
+      bySourceBody.innerHTML = keys.map(k => {
+        const row = bySource[k] || { total:0, ok:0, bad:0 };
+        return `
+          <tr>
+            <td>${sourceChip(k)}</td>
+            <td class="right">${esc(row.total || 0)}</td>
+            <td class="right">${esc(row.ok || 0)}</td>
+            <td class="right">${esc(row.bad || 0)}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="4" class="muted">No data</td></tr>`;
+    }
+
+    function renderLatest(logs) {
+      const arr = Array.isArray(logs) ? logs : [];
+      latestBody.innerHTML = arr.map(l => {
+        const ok = l.ok === true;
+        const okCell = ok ? `<span style="color:var(--ok);font-weight:900">OK</span>`
+                          : `<span style="color:var(--danger);font-weight:900">BAD</span>`;
+        const st = normalizeSourceType(l);
+        return `
+          <tr>
+            <td class="muted" style="font-size:12px">${esc(fmtTime(l.ts))}</td>
+            <td>${esc(String(l.campus || "UNKNOWN"))}</td>
+            <td><span class="chip">${esc(normalizeRole(l))}</span></td>
+            <td>${okCell}</td>
+            <td class="right">${esc(Number(l.ms || 0))}</td>
+            <td>${sourceChip(st)}</td>
+            <td class="muted" style="font-size:12px">${esc(normalizeTitle(l))}</td>
+            <td class="muted" style="font-size:12px">${esc(normalizeSection(l))}</td>
+            <td>${esc(normalizeQuestion(l))}</td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="9" class="muted">No logs yet</td></tr>`;
+    }
+
+    function setKpis(stats) {
+      const total = Number(stats.total || 0);
+      const ok = Number(stats.ok || 0);
+      const bad = Number(stats.bad || 0);
+      const avg = Number(stats.avg_ms || 0);
+      const badge = String(stats.badge || "OK").toUpperCase();
+
+      kpiTotal.textContent = total;
+      kpiOk.textContent = ok;
+      kpiBad.textContent = bad;
+      kpiMs.textContent = avg;
+
+      const rate = total ? Math.round((ok/total)*100) : 100;
+      kpiOkRate.textContent = `OK rate: ${rate}%`;
+      kpiBadgeWrap.innerHTML = `Badge: ${badgeHtml(badge)}`;
+
+      kpiRange.textContent = "Using last 200 logs (worker /admin/stats)";
+    }
+
+    // ===== LOADERS =====
+    async function loadAll() {
+      clearError();
+      refreshBtn.disabled = true;
+
+      if (!isAdminActive()) {
+        showError("Admin session not found or expired. Go to Main App and enable Admin mode again.");
+        refreshBtn.disabled = false;
+        return;
+      }
+
+      try {
+        const token = getAdminToken();
+
+        const [statsRes, logsRes] = await Promise.all([
+          fetch(STATS_URL, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(LOGS_URL,  { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+
+        const stats = await statsRes.json().catch(()=>({}));
+        const logs  = await logsRes.json().catch(()=>({}));
+
+        if (!statsRes.ok || !stats.ok) {
+          throw new Error(stats?.error || "Failed to load stats");
+        }
+        if (!logsRes.ok || !logs.ok) {
+          throw new Error(logs?.error || "Failed to load logs");
+        }
+
+        setKpis(stats);
+
+        renderByCampus(stats.byCampus || {});
+        renderByRole(stats.byRole || {});
+        renderBySource(stats.bySourceType || {});
+
+        const arr = Array.isArray(logs.logs) ? logs.logs : [];
+        arr.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
+        renderLatest(arr);
+
+      } catch (e) {
+        showError(e?.message || "Network error");
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    refreshBtn.addEventListener("click", loadAll);
+    loadAll();
+  </script>
 </body>
 </html>
