@@ -1,147 +1,80 @@
 /* =========================================================
-   app.js — CMS Policy Chatbot (FULL)
-   - Staff/Parent login + campus required
-   - Admin PIN modal (stores admin token)
-   - Top menus: Policies / Protocols / Parent Handbook
-   - Menu panel overlay with clickable items
-   - Parent Handbook browser via GET /handbooks
-   - Chat via POST /api { query, campus }
+   CMS Policy Chatbot — app.js (FULL / Copy-Paste)
+   Works with your index.html IDs:
+   - login-screen, chat-screen
+   - campus-select, access-code, login-form, login-admin-btn, login-error
+   - header-actions, campus-switch, admin-mode-btn, mode-badge, logout-btn
+   - top-menu-bar, admin-links, menu pills (data-menu)
+   - menu-overlay, menu-panel, menu-panel-title, menu-panel-body, menu-panel-close
+   - admin-modal, admin-pin, admin-pin-cancel, admin-pin-submit
+   - chat-window, chat-form, user-input
    ========================================================= */
 
 const LS = {
+  role: "cms_role",                // staff | parent
+  campus: "cms_campus",
+
   staffToken: "cms_staff_token",
   staffUntil: "cms_staff_until",
+
   parentToken: "cms_parent_token",
   parentUntil: "cms_parent_until",
+
   adminToken: "cms_admin_token",
-  adminUntil: "cms_admin_until",
-  campus: "cms_campus",
-  role: "cms_role" // staff | parent
+  adminUntil: "cms_admin_until"
 };
 
-// ✅ IMPORTANT: use SAME-ORIGIN endpoints (Pages Functions)
-// so no CORS pain and no direct worker origin in frontend.
-const API_URL = "/api";
-const AUTH = {
-  staff: "/auth/staff",
-  parent: "/auth/parent",
-  admin: "/auth/admin"
+// Same-origin endpoints (Cloudflare Pages Functions)
+const ENDPOINTS = {
+  api: "/api",
+  handbooks: "/handbooks",
+  authStaff: "/auth/staff",
+  authParent: "/auth/parent",
+  authAdmin: "/auth/admin"
 };
-const HANDBOOKS_URL = "/handbooks"; // GET /handbooks?campus=YC[&id=...][&section=...]
-
-const $ = (id) => document.getElementById(id);
 
 // ---------- DOM ----------
-const loginScreen = $("login-screen");
-const chatScreen = $("chat-screen");
+const el = (id) => document.getElementById(id);
 
-const loginForm = $("login-form");
-const accessCodeEl = $("access-code");
-const campusSelectEl = $("campus-select");
-const loginErrorEl = $("login-error");
-const loginAdminBtn = $("login-admin-btn");
+const loginScreen = el("login-screen");
+const chatScreen = el("chat-screen");
 
-const headerActions = $("header-actions");
-const campusSwitch = $("campus-switch");
-const adminModeBtn = $("admin-mode-btn");
-const modeBadge = $("mode-badge");
-const logoutBtn = $("logout-btn");
+const loginForm = el("login-form");
+const accessCode = el("access-code");
+const campusSelect = el("campus-select");
+const loginError = el("login-error");
+const loginAdminBtn = el("login-admin-btn");
 
-const topMenuBar = $("top-menu-bar");
-const adminLinks = $("admin-links");
+const headerActions = el("header-actions");
+const campusSwitch = el("campus-switch");
+const adminModeBtn = el("admin-mode-btn");
+const modeBadge = el("mode-badge");
+const logoutBtn = el("logout-btn");
 
-const chatWindow = $("chat-window");
-const chatForm = $("chat-form");
-const userInput = $("user-input");
+const topMenuBar = el("top-menu-bar");
+const adminLinks = el("admin-links");
 
-const menuOverlay = $("menu-overlay");
-const menuPanel = $("menu-panel");
-const menuPanelTitle = $("menu-panel-title");
-const menuPanelBody = $("menu-panel-body");
-const menuPanelClose = $("menu-panel-close");
+const chatWindow = el("chat-window");
+const chatForm = el("chat-form");
+const userInput = el("user-input");
 
-const adminModal = $("admin-modal");
-const adminPinEl = $("admin-pin");
-const adminPinCancel = $("admin-pin-cancel");
-const adminPinSubmit = $("admin-pin-submit");
+const menuOverlay = el("menu-overlay");
+const menuPanel = el("menu-panel");
+const menuPanelTitle = el("menu-panel-title");
+const menuPanelBody = el("menu-panel-body");
+const menuPanelClose = el("menu-panel-close");
 
-// ---------- Helpers ----------
-function now() { return Date.now(); }
+const adminModal = el("admin-modal");
+const adminPin = el("admin-pin");
+const adminPinCancel = el("admin-pin-cancel");
+const adminPinSubmit = el("admin-pin-submit");
 
-function setHidden(el, hidden) {
-  if (!el) return;
-  el.classList.toggle("hidden", !!hidden);
-}
+// ---------- helpers ----------
+const now = () => Date.now();
 
-function safeUpper(x) {
-  return String(x || "").trim().toUpperCase();
-}
-
-function safeLower(x) {
-  return String(x || "").trim().toLowerCase();
-}
-
-function setLoginError(msg) {
-  if (!loginErrorEl) return;
-  loginErrorEl.textContent = msg || "";
-}
-
-function tokenActive(tokenKey, untilKey) {
-  const t = localStorage.getItem(tokenKey) || "";
-  const u = Number(localStorage.getItem(untilKey) || "0");
-  return !!t && now() < u;
-}
-
-function getRole() {
-  return localStorage.getItem(LS.role) || "";
-}
-
-function setRole(role) {
-  localStorage.setItem(LS.role, role);
-}
-
-function getCampus() {
-  return localStorage.getItem(LS.campus) || "";
-}
-
-function setCampus(campus) {
-  localStorage.setItem(LS.campus, campus);
-}
-
-function getChatToken() {
-  const role = getRole();
-  if (role === "staff") return localStorage.getItem(LS.staffToken) || "";
-  if (role === "parent") return localStorage.getItem(LS.parentToken) || "";
-  return "";
-}
-
-function isChatActive() {
-  const role = getRole();
-  if (role === "staff") return tokenActive(LS.staffToken, LS.staffUntil);
-  if (role === "parent") return tokenActive(LS.parentToken, LS.parentUntil);
-  return false;
-}
-
-function isAdminActive() {
-  return tokenActive(LS.adminToken, LS.adminUntil);
-}
-
-function setModeBadge() {
-  const role = getRole() || "STAFF";
-  const isAdmin = isAdminActive();
-
-  if (!modeBadge) return;
-  if (isAdmin) {
-    modeBadge.textContent = "ADMIN";
-    modeBadge.classList.add("admin");
-  } else {
-    modeBadge.textContent = (role || "staff").toUpperCase();
-    modeBadge.classList.remove("admin");
-  }
-}
-
-function showToastInChat(text) {
-  addMsg("assistant", text);
+function setHidden(node, hidden) {
+  if (!node) return;
+  node.classList.toggle("hidden", !!hidden);
 }
 
 function escapeHtml(s) {
@@ -151,6 +84,53 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function setError(msg) {
+  if (!loginError) return;
+  loginError.textContent = msg || "";
+}
+
+function getRole() {
+  return localStorage.getItem(LS.role) || "";
+}
+function setRole(role) {
+  localStorage.setItem(LS.role, role);
+}
+
+function getCampus() {
+  return localStorage.getItem(LS.campus) || "";
+}
+function setCampus(c) {
+  localStorage.setItem(LS.campus, c);
+}
+
+function tokenActive(tokenKey, untilKey) {
+  const t = localStorage.getItem(tokenKey) || "";
+  const u = Number(localStorage.getItem(untilKey) || "0");
+  return !!t && now() < u;
+}
+
+function chatActive() {
+  const role = getRole();
+  if (role === "staff") return tokenActive(LS.staffToken, LS.staffUntil);
+  if (role === "parent") return tokenActive(LS.parentToken, LS.parentUntil);
+  return false;
+}
+
+function adminActive() {
+  return tokenActive(LS.adminToken, LS.adminUntil);
+}
+
+function getChatToken() {
+  const role = getRole();
+  if (role === "staff") return localStorage.getItem(LS.staffToken) || "";
+  if (role === "parent") return localStorage.getItem(LS.parentToken) || "";
+  return "";
+}
+
+function getAdminToken() {
+  return localStorage.getItem(LS.adminToken) || "";
 }
 
 function addMsg(who, text) {
@@ -163,7 +143,6 @@ function addMsg(who, text) {
 }
 
 function linkify(htmlEscapedText) {
-  // super simple URL linkify on escaped text
   const urlRe = /(https?:\/\/[^\s]+)/g;
   return htmlEscapedText.replace(urlRe, (m) => {
     const u = m.replaceAll('"', "");
@@ -172,13 +151,13 @@ function linkify(htmlEscapedText) {
 }
 
 function showTyping(show) {
-  let el = document.getElementById("typing");
+  let node = document.getElementById("typing");
   if (show) {
-    if (el) return;
-    el = document.createElement("div");
-    el.id = "typing";
-    el.className = "typing-bubble";
-    el.innerHTML = `
+    if (node) return;
+    node = document.createElement("div");
+    node.id = "typing";
+    node.className = "typing-bubble";
+    node.innerHTML = `
       <div class="typing-dots">
         <div class="typing-dot"></div>
         <div class="typing-dot"></div>
@@ -186,23 +165,23 @@ function showTyping(show) {
       </div>
       <div class="muted" style="font-weight:800">Thinking…</div>
     `;
-    chatWindow.appendChild(el);
+    chatWindow.appendChild(node);
     chatWindow.scrollTop = chatWindow.scrollHeight;
   } else {
-    el?.remove();
+    node?.remove();
   }
 }
 
-async function jsonFetch(url, options = {}) {
+async function fetchJson(url, options = {}) {
   const res = await fetch(url, options);
   const data = await res.json().catch(() => ({}));
   return { res, data };
 }
 
-// ---------- UI: open/close menu panel ----------
-function openMenu(title, html) {
+// ---------- menu panel ----------
+function openMenu(title, bodyHtml) {
   menuPanelTitle.textContent = title || "Menu";
-  menuPanelBody.innerHTML = html || "";
+  menuPanelBody.innerHTML = bodyHtml || "";
   setHidden(menuOverlay, false);
   setHidden(menuPanel, false);
   menuPanel.setAttribute("aria-hidden", "false");
@@ -217,63 +196,12 @@ function closeMenu() {
 menuOverlay?.addEventListener("click", closeMenu);
 menuPanelClose?.addEventListener("click", closeMenu);
 
-// ---------- Auth ----------
-async function loginAs(role, code, campus) {
-  setLoginError("");
-
-  const endpoint = role === "parent" ? AUTH.parent : AUTH.staff;
-  const payload = { code: String(code || "").trim() };
-
-  const { res, data } = await jsonFetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-
-  if (!res.ok || !data.ok) {
-    setLoginError(data.error || `Login failed (${res.status})`);
-    return false;
-  }
-
-  // store token
-  const expiresIn = Number(data.expires_in || 28800);
-  const until = now() + expiresIn * 1000;
-
-  if (role === "parent") {
-    localStorage.setItem(LS.parentToken, data.token);
-    localStorage.setItem(LS.parentUntil, String(until));
-  } else {
-    localStorage.setItem(LS.staffToken, data.token);
-    localStorage.setItem(LS.staffUntil, String(until));
-  }
-
-  setRole(role);
-  setCampus(campus);
-
-  return true;
-}
-
-function logoutAll() {
-  // clear all sessions
-  [
-    LS.staffToken, LS.staffUntil,
-    LS.parentToken, LS.parentUntil,
-    LS.adminToken, LS.adminUntil,
-    LS.role
-  ].forEach((k) => localStorage.removeItem(k));
-
-  // keep campus optional; I usually keep it for convenience, ولی می‌تونی پاکش کنی:
-  // localStorage.removeItem(LS.campus);
-
-  renderAppState();
-}
-
-// ---------- Admin PIN modal ----------
+// ---------- admin modal ----------
 function openAdminModal() {
-  adminPinEl.value = "";
+  adminPin.value = "";
   setHidden(adminModal, false);
   adminModal.setAttribute("aria-hidden", "false");
-  setTimeout(() => adminPinEl?.focus(), 50);
+  setTimeout(() => adminPin?.focus(), 50);
 }
 
 function closeAdminModal() {
@@ -284,10 +212,10 @@ function closeAdminModal() {
 adminPinCancel?.addEventListener("click", closeAdminModal);
 
 adminPinSubmit?.addEventListener("click", async () => {
-  const pin = String(adminPinEl.value || "").trim();
+  const pin = String(adminPin.value || "").trim();
   if (!pin) return;
 
-  const { res, data } = await jsonFetch(AUTH.admin, {
+  const { res, data } = await fetchJson(ENDPOINTS.authAdmin, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pin })
@@ -298,125 +226,131 @@ adminPinSubmit?.addEventListener("click", async () => {
     return;
   }
 
-  const expiresIn = Number(data.expires_in || 28800);
+  const expires = Number(data.expires_in || 28800);
   localStorage.setItem(LS.adminToken, data.token);
-  localStorage.setItem(LS.adminUntil, String(now() + expiresIn * 1000));
+  localStorage.setItem(LS.adminUntil, String(now() + expires * 1000));
 
   closeAdminModal();
-  setModeBadge();
   renderAdminLinks();
-  showToastInChat("✅ Admin mode enabled.");
+  renderModeBadge();
+  addMsg("assistant", "✅ Admin mode enabled.");
 });
 
-// ---------- Admin links visibility ----------
+// ---------- header ----------
 function renderAdminLinks() {
-  const admin = isAdminActive();
-  setHidden(adminLinks, !admin);
+  setHidden(adminLinks, !adminActive());
 }
 
-// ---------- App state render ----------
-function renderAppState() {
-  const active = isChatActive();
-  const campus = getCampus();
+function renderModeBadge() {
+  if (!modeBadge) return;
 
-  if (!active) {
-    // show login
-    setHidden(loginScreen, false);
-    setHidden(chatScreen, true);
-
-    setHidden(headerActions, true);
-    setHidden(topMenuBar, true);
-
-    // prefill campus select from storage
-    if (campusSelectEl) campusSelectEl.value = campus || "";
+  if (adminActive()) {
+    modeBadge.textContent = "ADMIN";
+    modeBadge.classList.add("admin");
     return;
   }
 
-  // show chat
-  setHidden(loginScreen, true);
-  setHidden(chatScreen, false);
+  const role = (getRole() || "staff").toUpperCase();
+  modeBadge.textContent = role;
+  modeBadge.classList.remove("admin");
+}
 
-  setHidden(headerActions, false);
-  setHidden(topMenuBar, false);
+logoutBtn?.addEventListener("click", () => {
+  [
+    LS.role,
+    LS.staffToken, LS.staffUntil,
+    LS.parentToken, LS.parentUntil,
+    LS.adminToken, LS.adminUntil
+  ].forEach(k => localStorage.removeItem(k));
 
-  // sync campus switch
-  if (campusSwitch) {
-    campusSwitch.value = campus || "";
+  renderState();
+});
+
+campusSwitch?.addEventListener("change", () => {
+  const c = String(campusSwitch.value || "").trim().toUpperCase();
+  if (!c) return;
+  setCampus(c);
+  addMsg("assistant", `📍 Campus switched to ${c}.`);
+});
+
+// ---------- login ----------
+async function loginTry(role, code, campus) {
+  const endpoint = role === "staff" ? ENDPOINTS.authStaff : ENDPOINTS.authParent;
+
+  const { res, data } = await fetchJson(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code })
+  });
+
+  if (!res.ok || !data.ok) {
+    return { ok: false, error: data.error || `Login failed (${res.status})` };
   }
 
-  setModeBadge();
-  renderAdminLinks();
-}
+  const expires = Number(data.expires_in || 28800);
+  const until = now() + expires * 1000;
 
-// ---------- Menu data ----------
-function buildQuickList(title, items) {
-  const buttons = items.map(it => {
-    return `
-      <button class="menu-item-btn" type="button" data-q="${escapeHtml(it.q)}">
-        ${escapeHtml(it.label)}
-      </button>
-    `;
-  }).join("");
+  setRole(role);
+  setCampus(campus);
 
-  return `
-    <div class="menu-group-label">${escapeHtml(title)}</div>
-    ${buttons || `<div class="small muted">No items.</div>`}
-  `;
-}
-
-function attachMenuButtonHandlers() {
-  // handle clicks inside menu panel for quick questions
-  menuPanelBody?.addEventListener("click", async (e) => {
-    const btn = e.target?.closest?.("button[data-q]");
-    if (!btn) return;
-    const q = btn.getAttribute("data-q") || "";
-    closeMenu();
-    await askQuestion(q);
-  });
-
-  // handle handbook section open buttons
-  menuPanelBody?.addEventListener("click", async (e) => {
-    const btn = e.target?.closest?.("button[data-hb][data-section]");
-    if (!btn) return;
-    const hbId = btn.getAttribute("data-hb");
-    const sectionKey = btn.getAttribute("data-section");
-    const campus = getCampus();
-    closeMenu();
-    await openHandbookSection(campus, hbId, sectionKey);
-  });
-
-  // open handbook link
-  menuPanelBody?.addEventListener("click", (e) => {
-    const a = e.target?.closest?.("a[data-external]");
-    if (!a) return;
-    // default behavior ok (open new tab)
-  });
-}
-
-// ---------- API calls ----------
-async function askQuestion(questionText) {
-  const campus = getCampus();
-  const role = getRole();
-  const token = getChatToken();
-
-  if (!token) {
-    showToastInChat("Session expired. Please login again.");
-    logoutAll();
-    return;
+  if (role === "staff") {
+    localStorage.setItem(LS.staffToken, data.token);
+    localStorage.setItem(LS.staffUntil, String(until));
+  } else {
+    localStorage.setItem(LS.parentToken, data.token);
+    localStorage.setItem(LS.parentUntil, String(until));
   }
-  if (!campus) {
-    showToastInChat("Campus missing. Please login again and select a campus.");
-    logoutAll();
+
+  return { ok: true };
+}
+
+loginForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setError("");
+
+  const code = String(accessCode?.value || "").trim();
+  const campus = String(campusSelect?.value || "").trim().toUpperCase();
+
+  if (!campus) return setError("Please select a campus.");
+  if (!code) return setError("Please enter access code.");
+
+  // Try staff then parent (single input)
+  let r = await loginTry("staff", code, campus);
+  if (!r.ok) r = await loginTry("parent", code, campus);
+
+  if (!r.ok) {
+    setError(r.error || "Login failed");
     return;
   }
 
-  const q = String(questionText || "").trim();
+  renderState();
+  addMsg("assistant", `✅ Logged in. Campus: ${campus}.`);
+});
+
+loginAdminBtn?.addEventListener("click", openAdminModal);
+adminModeBtn?.addEventListener("click", () => {
+  if (!chatActive()) return alert("Please login first.");
+  if (adminActive()) return alert("Admin already active.");
+  openAdminModal();
+});
+
+// ---------- chat ----------
+async function ask(query) {
+  const q = String(query || "").trim();
   if (!q) return;
+
+  const token = getChatToken();
+  const campus = getCampus();
+
+  if (!token || !campus) {
+    addMsg("assistant", "Session expired. Please login again.");
+    return renderState();
+  }
 
   addMsg("user", q);
   showTyping(true);
 
-  const { res, data } = await jsonFetch(API_URL, {
+  const { res, data } = await fetchJson(ENDPOINTS.api, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -428,54 +362,53 @@ async function askQuestion(questionText) {
   showTyping(false);
 
   if (!res.ok) {
-    addMsg("assistant", `❌ Error: ${data.error || res.status}`);
+    addMsg("assistant", `❌ ${data.error || `Error ${res.status}`}`);
     return;
   }
 
-  // Render answer
-  const answer = data.answer || "";
-  addMsg("assistant", answer || "—");
+  addMsg("assistant", data.answer || "—");
 
-  // Optional: show source
   if (data.source?.title) {
-    const srcLine =
-      `📌 Source: ${data.source.title}` +
-      (data.source.type ? ` (${data.source.type})` : "");
-    addMsg("assistant", srcLine);
+    addMsg("assistant", `📌 Source: ${data.source.title}${data.source.type ? ` (${data.source.type})` : ""}`);
   }
 
-  // If handbook_section returned, show it
   if (data.handbook_section?.section_title || data.handbook_section?.section_content) {
     const t = data.handbook_section.section_title ? `\n\n${data.handbook_section.section_title}\n` : "";
     const c = data.handbook_section.section_content || "";
     addMsg("assistant", `📄 Handbook Section:${t}\n${c}`);
   }
-
-  // debug info (optional)
-  // if (data.match_reason) addMsg("assistant", `🔎 ${data.match_reason}`);
 }
 
-async function fetchHandbooksList(campus) {
-  const token = getChatToken();
-  const url = `${HANDBOOKS_URL}?campus=${encodeURIComponent(campus)}`;
+chatForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const q = String(userInput?.value || "").trim();
+  if (!q) return;
+  userInput.value = "";
+  await ask(q);
+});
 
-  const { res, data } = await jsonFetch(url, {
+// ---------- handbook menu ----------
+async function fetchHandbooks(campus) {
+  const token = getChatToken();
+  const { res, data } = await fetchJson(`${ENDPOINTS.handbooks}?campus=${encodeURIComponent(campus)}`, {
     method: "GET",
     headers: { "Authorization": `Bearer ${token}` }
   });
 
-  if (!res.ok || !data.ok) throw new Error(data.error || `Failed to load handbooks (${res.status})`);
+  if (!res.ok || !data.ok) throw new Error(data.error || `Failed (${res.status})`);
   return data.handbooks || [];
 }
 
-async function openHandbookSection(campus, hbId, sectionKey) {
+async function openHandbookSection(hbId, sectionKey) {
   const token = getChatToken();
-  const url =
-    `${HANDBOOKS_URL}?campus=${encodeURIComponent(campus)}&id=${encodeURIComponent(hbId)}&section=${encodeURIComponent(sectionKey)}`;
+  const campus = getCampus();
 
   showTyping(true);
 
-  const { res, data } = await jsonFetch(url, {
+  const url =
+    `${ENDPOINTS.handbooks}?campus=${encodeURIComponent(campus)}&id=${encodeURIComponent(hbId)}&section=${encodeURIComponent(sectionKey)}`;
+
+  const { res, data } = await fetchJson(url, {
     method: "GET",
     headers: { "Authorization": `Bearer ${token}` }
   });
@@ -494,196 +427,171 @@ async function openHandbookSection(campus, hbId, sectionKey) {
   addMsg("assistant", `📘 ${hbTitle}\n\n${secTitle}\n\n${secContent}`);
 }
 
-// ---------- Menu clicks ----------
-async function handleMenuClick(which) {
+// Listen clicks inside menu panel
+menuPanelBody?.addEventListener("click", async (e) => {
+  const btnQ = e.target?.closest?.("button[data-q]");
+  if (btnQ) {
+    const q = btnQ.getAttribute("data-q") || "";
+    closeMenu();
+    await ask(q);
+    return;
+  }
+
+  const btnSec = e.target?.closest?.("button[data-hb][data-section]");
+  if (btnSec) {
+    const hbId = btnSec.getAttribute("data-hb");
+    const sectionKey = btnSec.getAttribute("data-section");
+    closeMenu();
+    await openHandbookSection(hbId, sectionKey);
+  }
+});
+
+// ---------- menus ----------
+function quickList(title, items) {
+  return `
+    <div class="menu-group-label">${escapeHtml(title)}</div>
+    ${items.map(it => `
+      <button class="menu-item-btn" type="button" data-q="${escapeHtml(it.q)}">
+        ${escapeHtml(it.label)}
+      </button>
+    `).join("")}
+  `;
+}
+
+async function openPoliciesMenu() {
+  openMenu("Policies", quickList("Common policy questions", [
+    { label: "Illness policy (fever / symptoms)", q: "What is the illness policy (fever, symptoms)?" },
+    { label: "Arrival / dismissal", q: "What is the arrival and dismissal procedure?" },
+    { label: "Uniform / dress code", q: "What is the uniform or dress code policy?" },
+    { label: "Payments / late fees / NSF", q: "What is the policy for late payments or NSF?" }
+  ]));
+}
+
+async function openProtocolsMenu() {
+  openMenu("Protocols", quickList("Common protocol questions", [
+    { label: "Fire / evacuation protocol", q: "What is the fire evacuation protocol?" },
+    { label: "Lockdown protocol", q: "What is the lockdown protocol?" },
+    { label: "Anaphylaxis / EpiPen", q: "What is the anaphylaxis / EpiPen protocol?" },
+    { label: "Incident reporting", q: "How do staff report incidents?" }
+  ]));
+}
+
+async function openHandbookMenu() {
   const campus = getCampus();
   if (!campus) {
-    alert("Please select a campus first.");
+    openMenu("Parent Handbook", `<div class="muted" style="font-weight:800">Select a campus first.</div>`);
     return;
   }
 
-  if (which === "policies") {
-    const html =
-      buildQuickList("Policies", [
-        { label: "Safe arrival / pickup rules", q: "What is the safe arrival and pickup procedure?" },
-        { label: "Uniform / dress code", q: "What is the uniform or dress code policy?" },
-        { label: "Fees / payments / NSF", q: "What is the policy for fees, late payments, or NSF?" },
-        { label: "Sick policy (fever, symptoms)", q: "What is the illness policy (fever, symptoms)?" }
-      ]) +
-      `<div class="small muted" style="margin-top:10px">Tip: You can also type any question in chat.</div>`;
+  openMenu("Parent Handbook", `<div class="muted" style="font-weight:800">Loading handbooks…</div>`);
 
-    openMenu("Policies", html);
-    return;
-  }
+  try {
+    const list = await fetchHandbooks(campus);
 
-  if (which === "protocols") {
-    const html =
-      buildQuickList("Protocols", [
-        { label: "Emergency / fire procedure", q: "What is the emergency or fire evacuation protocol?" },
-        { label: "Lockdown protocol", q: "What is the lockdown protocol?" },
-        { label: "Allergy / anaphylaxis protocol", q: "What is the anaphylaxis / EpiPen protocol?" },
-        { label: "Incident reporting", q: "How do staff report incidents and document them?" }
-      ]);
+    if (!list.length) {
+      openMenu("Parent Handbook", `<div class="small muted">No handbooks found for campus ${escapeHtml(campus)}.</div>`);
+      return;
+    }
 
-    openMenu("Protocols", html);
-    return;
-  }
+    const cards = list.map(hb => {
+      const sections = (hb.sections || []).map(s => `
+        <button class="hb-section-btn" type="button"
+          data-hb="${escapeHtml(hb.id)}"
+          data-section="${escapeHtml(s.key || "")}">
+          ${escapeHtml(s.title || s.key || "")}
+        </button>
+      `).join("");
 
-  if (which === "handbook") {
-    // Load handbook list and show sections
-    try {
-      openMenu("Parent Handbook", `<div class="muted" style="font-weight:800">Loading handbooks…</div>`);
-      const list = await fetchHandbooksList(campus);
+      const link = hb.link
+        ? `<div class="small" style="margin-top:8px">
+            <a data-external="1" href="${escapeHtml(hb.link)}" target="_blank" rel="noopener noreferrer">
+              Open original handbook link
+            </a>
+          </div>`
+        : "";
 
-      if (!list.length) {
-        openMenu("Parent Handbook", `<div class="small muted">No handbooks found for campus ${escapeHtml(campus)}.</div>`);
-        return;
-      }
-
-      const cards = list.map(hb => {
-        const sections = (hb.sections || []).map(s => {
-          const key = s.key || "";
-          const title = s.title || key;
-          return `
-            <button class="hb-section-btn" type="button"
-              data-hb="${escapeHtml(hb.id)}"
-              data-section="${escapeHtml(key)}">
-              ${escapeHtml(title)}
-            </button>
-          `;
-        }).join("");
-
-        const link = hb.link
-          ? `<a data-external="1" href="${escapeHtml(hb.link)}" target="_blank" rel="noopener noreferrer">Open original handbook link</a>`
-          : "";
-
-        return `
-          <div class="hb-card">
-            <div class="hb-title">${escapeHtml(hb.title || "Parent Handbook")}</div>
-            <div class="hb-meta">
-              Campus: <b>${escapeHtml(hb.campus || campus)}</b>
-              ${hb.program ? ` · Program: <b>${escapeHtml(hb.program)}</b>` : ""}
-            </div>
-
-            ${link ? `<div class="small" style="margin-top:8px">${link}</div>` : ""}
-
-            <div style="margin-top:10px">
-              <div class="menu-group-label">Sections</div>
-              ${sections || `<div class="small muted">No sections.</div>`}
-            </div>
+      return `
+        <div class="hb-card">
+          <div class="hb-title">${escapeHtml(hb.title || "Parent Handbook")}</div>
+          <div class="hb-meta">
+            Campus: <b>${escapeHtml(hb.campus || campus)}</b>
+            ${hb.program ? ` · Program: <b>${escapeHtml(hb.program)}</b>` : ""}
           </div>
-        `;
-      }).join("");
+          ${link}
+          <div style="margin-top:10px">
+            <div class="menu-group-label">Sections</div>
+            ${sections || `<div class="small muted">No sections.</div>`}
+          </div>
+        </div>
+      `;
+    }).join("");
 
-      openMenu("Parent Handbook", cards);
-    } catch (e) {
-      openMenu("Parent Handbook", `<div class="small" style="color:#b91c1c;font-weight:800">${escapeHtml(e.message || "Failed")}</div>`);
-    }
+    openMenu("Parent Handbook", cards);
+  } catch (e) {
+    openMenu("Parent Handbook", `<div class="small" style="color:#b91c1c;font-weight:800">${escapeHtml(e.message || "Failed")}</div>`);
   }
 }
 
-// ---------- Events wiring ----------
-function wireEvents() {
-  // login submit
-  loginForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    setLoginError("");
+// Wire menu pill clicks
+document.querySelectorAll(".menu-pill[data-menu]")?.forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const which = btn.getAttribute("data-menu");
 
-    const code = String(accessCodeEl?.value || "").trim();
-    const campus = safeUpper(campusSelectEl?.value);
+    // active class
+    document.querySelectorAll(".menu-pill").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
 
-    if (!campus) {
-      setLoginError("Please select a campus.");
-      return;
-    }
-    if (!code) {
-      setLoginError("Please enter access code.");
-      return;
-    }
-
-    // Try staff first, then parent (so one box works)
-    let ok = await loginAs("staff", code, campus);
-    if (!ok) {
-      ok = await loginAs("parent", code, campus);
-    }
-    if (!ok) return;
-
-    renderAppState();
-    addMsg("assistant", `✅ Logged in. Campus: ${campus}. You can ask questions now.`);
+    if (which === "policies") return openPoliciesMenu();
+    if (which === "protocols") return openProtocolsMenu();
+    if (which === "handbook") return openHandbookMenu();
   });
+});
 
-  // admin login button on login screen
-  loginAdminBtn?.addEventListener("click", openAdminModal);
+// ESC close overlays
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    closeMenu();
+    closeAdminModal();
+  }
+});
 
-  // admin mode button in header (requires staff/parent session)
-  adminModeBtn?.addEventListener("click", () => {
-    if (!isChatActive()) {
-      alert("Please login first.");
-      return;
-    }
-    if (isAdminActive()) {
-      alert("Admin mode already active.");
-      return;
-    }
-    openAdminModal();
-  });
+// ---------- state render ----------
+function renderState() {
+  const active = chatActive();
+  const campus = getCampus();
 
-  // campus switch in header
-  campusSwitch?.addEventListener("change", () => {
-    const c = safeUpper(campusSwitch.value);
-    if (!c) return;
-    setCampus(c);
-    showToastInChat(`📍 Campus switched to ${c}.`);
-  });
+  if (!active) {
+    setHidden(loginScreen, false);
+    setHidden(chatScreen, true);
+    setHidden(headerActions, true);
+    setHidden(topMenuBar, true);
 
-  // logout
-  logoutBtn?.addEventListener("click", logoutAll);
+    // restore campus in login select
+    if (campusSelect) campusSelect.value = campus || "";
+    return;
+  }
 
-  // chat submit
-  chatForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const q = String(userInput?.value || "").trim();
-    if (!q) return;
-    userInput.value = "";
-    await askQuestion(q);
-  });
+  setHidden(loginScreen, true);
+  setHidden(chatScreen, false);
+  setHidden(headerActions, false);
+  setHidden(topMenuBar, false);
 
-  // menu pills
-  document.querySelectorAll(".menu-pill[data-menu]")?.forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const which = btn.getAttribute("data-menu");
-      // active styling
-      document.querySelectorAll(".menu-pill").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
+  // sync campus switch
+  if (campusSwitch) campusSwitch.value = campus || "";
 
-      await handleMenuClick(which);
-    });
-  });
-
-  // modal close by ESC
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      closeMenu();
-      closeAdminModal();
-    }
-  });
-
-  attachMenuButtonHandlers();
+  renderAdminLinks();
+  renderModeBadge();
 }
 
-// ---------- Init ----------
 (function init() {
-  // restore campus selects
+  // restore campus UI
   const c = getCampus();
-  if (campusSelectEl && c) campusSelectEl.value = c;
-  if (campusSwitch && c) campusSwitch.value = c;
+  if (c && campusSelect) campusSelect.value = c;
+  if (c && campusSwitch) campusSwitch.value = c;
 
-  wireEvents();
-  renderAppState();
-  setModeBadge();
+  renderState();
 
-  // small welcome
-  if (isChatActive() && chatWindow?.children?.length === 0) {
+  if (chatActive() && chatWindow?.children?.length === 0) {
     addMsg("assistant", "Hi! Ask any CMS policy / protocol / parent handbook question. ✅");
   }
 })();
