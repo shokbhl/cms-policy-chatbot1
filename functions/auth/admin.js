@@ -1,43 +1,12 @@
-export async function onRequest(context) {
-  const { request } = context;
-
+export async function onRequest({ request }) {
   const WORKER_ORIGIN = "https://cms-policy-worker.shokbhl.workers.dev";
-  const targetUrl = WORKER_ORIGIN + "/auth/admin";
+  const target = new URL(WORKER_ORIGIN + "/auth/admin");
 
-  // --- CORS / Preflight ---
-  if (request.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Access-Control-Max-Age": "86400"
-      }
-    });
-  }
-
-  // (Optional) Force method: only POST allowed
-  if (request.method !== "POST") {
-    return new Response(JSON.stringify({ ok: false, error: "POST required" }, null, 2), {
-      status: 405,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*"
-      }
-    });
-  }
-
-  // ✅ Forward request correctly (method/body/headers)
-  const upstreamReq = new Request(targetUrl, request);
+  const upstreamReq = new Request(target.toString(), request);
   const res = await fetch(upstreamReq);
-
-  // Return response with CORS
-  const headers = new Headers(res.headers);
-  headers.set("Access-Control-Allow-Origin", "*");
 
   return new Response(res.body, {
     status: res.status,
-    headers
+    headers: res.headers
   });
 }
