@@ -2,9 +2,9 @@ export async function onRequest(context) {
   const { request } = context;
 
   const WORKER_ORIGIN = "https://cms-policy-worker.shokbhl.workers.dev";
-  const targetUrl = WORKER_ORIGIN + "/auth/admin";
+  const targetUrl = WORKER_ORIGIN + "/auth/staff";
 
-  // --- CORS / Preflight ---
+  // Preflight
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
@@ -17,7 +17,6 @@ export async function onRequest(context) {
     });
   }
 
-  // (Optional) Force method: only POST allowed
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ ok: false, error: "POST required" }, null, 2), {
       status: 405,
@@ -28,16 +27,11 @@ export async function onRequest(context) {
     });
   }
 
-  // ✅ Forward request correctly (method/body/headers)
   const upstreamReq = new Request(targetUrl, request);
   const res = await fetch(upstreamReq);
 
-  // Return response with CORS
   const headers = new Headers(res.headers);
   headers.set("Access-Control-Allow-Origin", "*");
 
-  return new Response(res.body, {
-    status: res.status,
-    headers
-  });
+  return new Response(res.body, { status: res.status, headers });
 }
