@@ -89,7 +89,7 @@ const campusSelect = document.getElementById("campus-select"); // login select
 const campusSwitch = document.getElementById("campus-switch"); // header select
 
 const adminModeBtn = document.getElementById("admin-mode-btn");
-const loginAdminBtn = document.getElementById("login-admin-btn");
+const loginAdminBtn = document.getElementById("login-admin-btn"); // login page admin
 const modeBadge = document.getElementById("mode-badge");
 const adminModal = document.getElementById("admin-modal");
 const adminPinInput = document.getElementById("admin-pin");
@@ -98,17 +98,6 @@ const adminPinCancel = document.getElementById("admin-pin-cancel");
 
 // might exist in HTML or injected dynamically
 let adminLinks = document.getElementById("admin-links");
-
-// Ensure admin modal can show even if login screen is visible.
-// (If adminModal is inside a hidden container, it won't appear.)
-function ensureAdminModalUsable() {
-  if (!adminModal) return;
-  // Move to <body> so it can overlay both login and chat screens
-  if (adminModal.parentElement !== document.body) {
-    document.body.appendChild(adminModal);
-  }
-}
-
 
 // Ensure a top-menu-bar exists
 let topMenuBar = document.getElementById("top-menu-bar");
@@ -417,7 +406,13 @@ loginForm?.addEventListener("submit", async (e) => {
     if (!out.res.ok || !out.data.ok) out = await tryAuth(PARENT_AUTH_URL);
 
     if (!out.res.ok || !out.data.ok) {
-      setInlineError(out.data?.error || "Invalid code.");
+      const codeLower = code.toLowerCase();
+      // Helpful hint: prevent users from trying the admin PIN in the Staff/Parent field
+      if (codeLower.includes("admin")) {
+        setInlineError("That looks like an Admin PIN. Please click Admin Mode and enter the PIN there.");
+      } else {
+        setInlineError(out.data?.error || "Invalid code.");
+      }
       return;
     }
 
@@ -540,6 +535,22 @@ async function enterAdminMode(pin) {
     localStorage.setItem(LS.adminUntil, String(Date.now() + (data.expires_in || 28800) * 1000));
 
     syncModeBadge();
+    setInlineError("");
+
+    // ✅ If user enabled admin from the login screen, switch them into the app immediately
+    const onLoginScreen = loginScreen && !loginScreen.classList.contains("hidden");
+    if (onLoginScreen) {
+      showChatUI();
+      clearChat();
+      addMessage(
+        "assistant",
+        `✅ Admin mode enabled.<br><b>Campus: ${escapeHtml(getCampus() || "(not selected)")}</b><br><br>` +
+          `You can browse <b>Policies</b>, <b>Protocols</b>, and <b>Parent Handbook</b>, and access <b>Dashboard/Logs</b>.<br>` +
+          `To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
+      );
+      return;
+    }
+
     if (chatScreen && !chatScreen.classList.contains("hidden")) {
       addMessage("assistant", "✅ Admin mode enabled (8 hours).");
     }
@@ -549,11 +560,7 @@ async function enterAdminMode(pin) {
   }
 }
 
-adminModeBtn?.addEventListener("click", async () => {
-  // If we are on the login screen, use prompt (modal may be inside hidden chat container).
-  const onLogin = loginScreen && !loginScreen.classList.contains("hidden");
-
-  // Toggle off if already active
+adminModeBtn?.addEventListener("click", () => {
   if (isAdminActive()) {
     clearAdminSession();
     syncModeBadge();
@@ -561,15 +568,6 @@ adminModeBtn?.addEventListener("click", async () => {
     return;
   }
 
-  // Login flow
-  if (onLogin) {
-    const pin = prompt("Enter Admin PIN:");
-    if (pin) await enterAdminMode(pin);
-    return;
-  }
-
-  // Chat screen: show modal (nicer UX)
-  ensureAdminModalUsable();
   if (adminModal && adminPinInput && adminPinSubmit && adminPinCancel) {
     adminPinInput.value = "";
     adminModal.classList.remove("hidden");
@@ -584,23 +582,18 @@ adminModeBtn?.addEventListener("click", async () => {
     return;
   }
 
-  // Fallback
   const pin = prompt("Enter Admin PIN:");
-  if (pin) await enterAdminMode(pin);
-});
+  if (pin) enterAdminMode(pin);
 
-// Admin login button on LOGIN screen
+// Admin mode button on the LOGIN card (so admin can enter without staff/parent login)
 loginAdminBtn?.addEventListener("click", () => {
-  // If already active, let the user disable admin mode quickly
   if (isAdminActive()) {
     clearAdminSession();
     syncModeBadge();
-    // stay on login screen
     setInlineError("Admin mode disabled.");
     return;
   }
 
-  // Reuse the same modal / prompt flow as header Admin button
   if (adminModal && adminPinInput && adminPinSubmit && adminPinCancel) {
     adminPinInput.value = "";
     adminModal.classList.remove("hidden");
@@ -619,6 +612,8 @@ loginAdminBtn?.addEventListener("click", () => {
   if (pin) enterAdminMode(pin);
 });
 
+});
+
 // ============================
 // MENU PANEL
 // ============================
@@ -634,6 +629,9 @@ async function openMenuPanel(type) {
   }
 
   menuPills.forEach((btn) => btn.classList.toggle("active", btn.dataset.menu === type));
+
+  // expose current panel type for CSS styling
+  try { menuPanel.setAttribute("data-menu", type); } catch {}
 
   menuPanelTitle.textContent =
     type === "policies" ? "Policies" :
@@ -699,6 +697,7 @@ async function openMenuPanel(type) {
 
 function closeMenuPanel() {
   if (menuPanel) menuPanel.classList.add("hidden");
+  try { menuPanel.removeAttribute("data-menu"); } catch {}
   if (menuOverlay) menuOverlay.classList.add("hidden");
   menuPills.forEach((btn) => btn.classList.remove("active"));
 }
@@ -1024,8 +1023,6 @@ chatForm?.addEventListener("submit", (e) => {
 // ============================
 (function init() {
   ensureTopMenuBar();
-  ensureAdminModalUsable();
-
 
   // Clean expired tokens
   if (!isStaffActive()) clearStaffSession();
