@@ -966,6 +966,153 @@ chatForm?.addEventListener("submit", (e) => {
 // ============================
 // INIT
 // ============================
+function renderHandbookModernMenu({
+  mountEl,              // menu-panel-body
+  campus,               // "MC"
+  handbooks,            // array of handbook objects
+  selectedHandbookId,   // current selected
+  onSelectHandbook,     // (id)=>{}
+  onOpenSection         // (handbookId, sectionKey)=>{}
+}) {
+  if (!mountEl) return;
+
+  mountEl.innerHTML = "";
+
+  const shell = document.createElement("div");
+  shell.className = "hb-shell";
+
+  // --- Top bar (title + search)
+  const top = document.createElement("div");
+  top.className = "hb-top";
+  top.innerHTML = `
+    <div class="hb-top-left">
+      <div class="hb-title-row">
+        <div class="hb-title-big">Parent Handbook</div>
+        <div class="hb-campus-chip">${escapeHtml(campus || "—")}</div>
+      </div>
+      <div class="hb-sub">Search sections or pick a handbook</div>
+    </div>
+    <div class="hb-actions">
+      <input class="hb-search" id="hbSearch" placeholder="Search (e.g., pickup, fee, illness)..." />
+    </div>
+  `;
+
+  shell.appendChild(top);
+
+  const searchInput = top.querySelector("#hbSearch");
+
+  // --- Handbooks (cards)
+  const grid = document.createElement("div");
+  grid.className = "hb-grid";
+  shell.appendChild(grid);
+
+  // --- Sections container
+  const sectionsWrap = document.createElement("div");
+  sectionsWrap.className = "hb-sections";
+  shell.appendChild(sectionsWrap);
+
+  mountEl.appendChild(shell);
+
+  const hbArr = Array.isArray(handbooks) ? handbooks : [];
+
+  function getSelected() {
+    return hbArr.find(h => h.id === selectedHandbookId) || hbArr[0] || null;
+  }
+
+  function renderHandbookCards() {
+    grid.innerHTML = "";
+    hbArr.forEach(h => {
+      const card = document.createElement("div");
+      card.className = "hb-item" + (h.id === selectedHandbookId ? " active" : "");
+      card.innerHTML = `
+        <div class="hb-item-title">${escapeHtml(h.title || h.id || "Handbook")}</div>
+        <div class="hb-item-meta">${escapeHtml(h.program || "—")} • ${escapeHtml(h.campus || campus || "—")}</div>
+      `;
+      card.addEventListener("click", () => onSelectHandbook?.(h.id));
+      grid.appendChild(card);
+    });
+  }
+
+  function sectionLabelFromKey(key) {
+    // key مثل "fee_structure" -> "Fee structure"
+    const s = String(key || "").replaceAll("_", " ").trim();
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Section";
+  }
+
+  function renderSections() {
+    sectionsWrap.innerHTML = "";
+
+    const hb = getSelected();
+    if (!hb) {
+      sectionsWrap.innerHTML = `<div class="muted">No handbook available for this campus.</div>`;
+      return;
+    }
+
+    const sections = Array.isArray(hb.sections) ? hb.sections : []; 
+    // اگر ساختار تو اینه: hb.content یا hb.items یا هرچی، همینجا مپ کن.
+
+    // Search filter
+    const q = (searchInput?.value || "").trim().toLowerCase();
+
+    const filtered = sections.filter(sec => {
+      const title = (sec.title || sectionLabelFromKey(sec.key)).toLowerCase();
+      const key = String(sec.key || "").toLowerCase();
+      return !q || title.includes(q) || key.includes(q);
+    });
+
+    if (!filtered.length) {
+      sectionsWrap.innerHTML = `<div class="muted">No sections match your search.</div>`;
+      return;
+    }
+
+    // Grouping ساده: اگر sec.group داری، گروه‌بندی می‌کنیم؛ اگر نه همگی زیر "Sections"
+    const groups = {};
+    filtered.forEach(sec => {
+      const g = sec.group || "Sections";
+      (groups[g] ||= []).push(sec);
+    });
+
+    Object.keys(groups).forEach(groupName => {
+      const details = document.createElement("details");
+      details.className = "hb-acc";
+      details.open = true;
+
+      details.innerHTML = `
+        <summary>
+          <span class="hb-sec-left">
+            <span class="hb-dot"></span>
+            <span class="hb-sec-title">${escapeHtml(groupName)}</span>
+          </span>
+          <span class="hb-chevron">⌄</span>
+        </summary>
+        <div class="hb-acc-body"></div>
+      `;
+
+      const body = details.querySelector(".hb-acc-body");
+      groups[groupName].forEach(sec => {
+        const btn = document.createElement("button");
+        btn.className = "hb-open-sec";
+        btn.type = "button";
+        btn.textContent = sec.title || sectionLabelFromKey(sec.key);
+        btn.addEventListener("click", () => onOpenSection?.(hb.id, sec.key));
+        body.appendChild(btn);
+      });
+
+      sectionsWrap.appendChild(details);
+    });
+  }
+
+  // Initial render
+  renderHandbookCards();
+  renderSections();
+
+  // Live search
+  searchInput?.addEventListener("input", renderSections);
+
+  // If parent code updates selectedHandbookId later, you can call:
+  // renderHandbookCards(); renderSections();
+}
+
 (function init() {
   ensureTopMenuBar();
 
