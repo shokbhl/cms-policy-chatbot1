@@ -89,6 +89,7 @@ const campusSelect = document.getElementById("campus-select"); // login select
 const campusSwitch = document.getElementById("campus-switch"); // header select
 
 const adminModeBtn = document.getElementById("admin-mode-btn");
+const loginAdminBtn = document.getElementById("login-admin-btn");
 const modeBadge = document.getElementById("mode-badge");
 const adminModal = document.getElementById("admin-modal");
 const adminPinInput = document.getElementById("admin-pin");
@@ -545,6 +546,36 @@ adminModeBtn?.addEventListener("click", () => {
     return;
   }
 
+  if (adminModal && adminPinInput && adminPinSubmit && adminPinCancel) {
+    adminPinInput.value = "";
+    adminModal.classList.remove("hidden");
+    adminPinInput.focus();
+
+    adminPinCancel.onclick = () => adminModal.classList.add("hidden");
+    adminPinSubmit.onclick = async () => {
+      const pin = adminPinInput.value.trim();
+      adminModal.classList.add("hidden");
+      await enterAdminMode(pin);
+    };
+    return;
+  }
+
+  const pin = prompt("Enter Admin PIN:");
+  if (pin) enterAdminMode(pin);
+});
+
+// Admin login button on LOGIN screen
+loginAdminBtn?.addEventListener("click", () => {
+  // If already active, let the user disable admin mode quickly
+  if (isAdminActive()) {
+    clearAdminSession();
+    syncModeBadge();
+    // stay on login screen
+    setInlineError("Admin mode disabled.");
+    return;
+  }
+
+  // Reuse the same modal / prompt flow as header Admin button
   if (adminModal && adminPinInput && adminPinSubmit && adminPinCancel) {
     adminPinInput.value = "";
     adminModal.classList.remove("hidden");
