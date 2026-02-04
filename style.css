@@ -772,14 +772,15 @@ a{ color: inherit; }
 /* Sections container under an open handbook */
 /* فقط بک‌گراند زیر دکمه‌ها – بدون دست زدن به خود دکمه‌ها */
 .hb-sections{
-  background: #f4f7ff;                 /* خیلی ملایم */
+  background: linear-gradient(
+    180deg,
+    rgba(238,242,255,.7),
+    rgba(255,255,255,0)
+  );
   border-radius: 14px;
   padding: 10px 10px 6px;
   margin: 8px 0 6px;
-
-  /* جداکننده‌ی ظریف از بالا */
-  border-top: 1px solid #e6ebff;
-}
+ }
 
 /* Section pill buttons */
 .hb-section-btn{
