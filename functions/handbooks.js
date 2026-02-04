@@ -1,134 +1,103 @@
-export async function onRequestGet({ request, env }) {
-  const corsHeaders = cors();
+export async function onRequest(context) {
+  const { request, env } = context;
 
-  const user = await validateAnyToken(env, request);
-  if (!user.ok) return j({ ok: false, error: "Unauthorized" }, 401, corsHeaders);
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors() });
+  if (request.method !== "POST") return json({ ok: false, error: "POST required" }, 405);
 
-  const url = new URL(request.url);
-  const campus = String(url.searchParams.get("campus") || "").trim().toUpperCase();
-  if (!campus) return j({ ok: false, error: "Missing campus" }, 400, corsHeaders);
+  try {
+    const body = await request.json().catch(() => ({}));
+    const campus = String(body.campus || "").trim().toUpperCase();
+    const token = String(body.token || "").trim();
+    const role = String(body.role || "").trim().toLowerCase();
+    const handbookId = body.handbook_id ? String(body.handbook_id) : "";
 
-  // IMPORTANT: your KV keys are handbook_MC, handbook_YC, ...
-  const key = `handbook_${campus}`;
-  const raw = await env.cms_handbooks.get(key);
-  const handbooks = raw ? safeJsonParse(raw, []) : [];
+    if (!campus) return json({ ok: false, error: "Campus required" }, 400);
+    if (!token) return json({ ok: false, error: "Unauthorized (staff/parent token required)" }, 401);
+    if (role !== "staff" && role !== "parent") return json({ ok: false, error: "Role required" }, 400);
 
-  const id = String(url.searchParams.get("id") || "").trim();
-  const sectionKey = String(url.searchParams.get("section") || "").trim();
+    const session = await verifyToken(env, token);
+    if (!session.ok) return json({ ok: false, error: "Unauthorized (invalid/expired token)" }, 401);
+    if (session.payload.role !== role) return json({ ok: false, error: "Unauthorized (role mismatch)" }, 401);
 
-  // list
-  if (!id) {
-    const list = Array.isArray(handbooks)
-      ? handbooks.map((hb) => ({
-          id: hb?.id || null,
-          campus: hb?.campus || campus,
-          program: hb?.program || null,
-          title: hb?.title || "Parent Handbook",
-          link: hb?.link || null,
-          sections: Array.isArray(hb?.sections)
-            ? hb.sections.map((s) => ({ key: s?.key || "", title: s?.title || "" }))
-            : []
-        }))
-      : [];
-    return j({ ok: true, campus, count: list.length, handbooks: list }, 200, corsHeaders);
+    // IMPORTANT: campus binding (اگر خواستی قفل کنی)
+    // if (session.payload.campus && session.payload.campus !== campus) {
+    //   return json({ ok: false, error: "Unauthorized (campus mismatch)" }, 401);
+    // }
+
+    // اگر WORKER_URL ست شده، از Worker بگیر
+    if (env.WORKER_URL) {
+      const url = handbookId
+        ? `${env.WORKER_URL}/handbooks`
+        : `${env.WORKER_URL}/handbooks`;
+
+      const forward = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campus, role, token, handbook_id: handbookId })
+      });
+
+      const data = await forward.json().catch(() => ({}));
+      return json(data, forward.status);
+    }
+
+    // اگر Worker نداری، اینجا نمونه‌ی ساده از KV/DB نیست؛ پس خطا می‌دیم تا بدونی باید Worker_URL بدی
+    return json({ ok: false, error: "WORKER_URL not set. handbooks.js needs a data source." }, 500);
+
+  } catch (e) {
+    return json({ ok: false, error: e?.message || "Server error" }, 500);
   }
-
-  const hb = Array.isArray(handbooks)
-    ? handbooks.find((x) => String(x?.id || "") === id)
-    : null;
-
-  if (!hb) return j({ ok: false, error: "Handbook not found" }, 404, corsHeaders);
-
-  // one section
-  if (sectionKey) {
-    const sec = Array.isArray(hb?.sections)
-      ? hb.sections.find((s) => String(s?.key || "").trim() === sectionKey)
-      : null;
-
-    if (!sec) return j({ ok: false, error: "Section not found" }, 404, corsHeaders);
-
-    return j(
-      {
-        ok: true,
-        campus,
-        handbook: { id: hb.id, title: hb.title, program: hb.program || null, link: hb.link || null },
-        section: { key: sec.key, title: sec.title || "", content: normalizeText(sec.content) }
-      },
-      200,
-      corsHeaders
-    );
-  }
-
-  // one handbook full
-  return j(
-    {
-      ok: true,
-      campus,
-      handbook: {
-        id: hb.id,
-        title: hb.title,
-        program: hb.program || null,
-        link: hb.link || null,
-        sections: Array.isArray(hb?.sections)
-          ? hb.sections.map((s) => ({
-              key: s?.key || "",
-              title: s?.title || "",
-              content: normalizeText(s?.content)
-            }))
-          : []
-      }
-    },
-    200,
-    corsHeaders
-  );
-}
-
-export function onRequestOptions() {
-  return new Response(null, { status: 204, headers: cors() });
 }
 
 function cors() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
   };
 }
-
-function j(obj, status, corsHeaders) {
-  return new Response(JSON.stringify(obj, null, 2), {
-    status,
-    headers: { "Content-Type": "application/json", ...corsHeaders }
-  });
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", ...cors() } });
 }
 
-function getBearerToken(request) {
-  const auth = request.headers.get("Authorization") || "";
-  if (!auth.startsWith("Bearer ")) return "";
-  return auth.slice(7).trim();
-}
-
-async function validateAnyToken(env, request) {
-  const token = getBearerToken(request);
-  if (!token) return { ok: false, role: "", token: "" };
-
-  if (await env.cms_auth.get(`staff:${token}`)) return { ok: true, role: "staff", token };
-  if (await env.cms_auth.get(`parent:${token}`)) return { ok: true, role: "parent", token };
-  if (await env.cms_auth.get(`admin:${token}`)) return { ok: true, role: "admin", token };
-
-  return { ok: false, role: "", token: "" };
-}
-
-function normalizeText(x) {
-  if (x == null) return "";
-  if (Array.isArray(x)) return x.join("\n");
-  return String(x);
-}
-
-function safeJsonParse(raw, fallback) {
+async function verifyToken(env, token) {
   try {
-    return JSON.parse(raw);
+    const secret = String(env.TOKEN_SECRET || "");
+    if (!secret) return { ok: false, error: "TOKEN_SECRET missing" };
+
+    const [data, sig] = String(token).split(".");
+    if (!data || !sig) return { ok: false, error: "Bad token format" };
+
+    const expected = await hmac256(secret, data);
+    if (sig !== expected) return { ok: false, error: "Bad signature" };
+
+    const payload = JSON.parse(decodeBase64url(data));
+    const exp = Number(payload.exp || 0);
+    if (!exp || Math.floor(Date.now() / 1000) > exp) return { ok: false, error: "Expired" };
+
+    return { ok: true, payload };
   } catch {
-    return fallback;
+    return { ok: false, error: "Invalid token" };
   }
+}
+
+async function hmac256(secret, data) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
+  return base64urlBytes(new Uint8Array(signature));
+}
+function decodeBase64url(b64url) {
+  const b64 = b64url.replaceAll("-", "+").replaceAll("_", "/") + "===".slice((b64url.length + 3) % 4);
+  const str = atob(b64);
+  return decodeURIComponent(escape(str));
+}
+function base64urlBytes(bytes) {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
