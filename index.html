@@ -3,20 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CMS Policy Chatbot</title>
+  <title>CMS Chatbot</title>
+
+  <!-- Icons / PWA -->
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/cms-180.png">
-  <!-- Favicon -->
   <link rel="icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-
-  <!-- Apple (iPhone / iPad) -->
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-
-  <!-- PWA -->
   <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#1e3a8a">
- 
+
   <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -24,16 +21,18 @@
   <!-- ================= HEADER ================= -->
   <header class="app-header">
     <div class="header-inner">
+
       <!-- Left: Logo + Title -->
       <div class="brand">
-        <img class="brand-logo" src="cms-logo.png" alt="CMS" />
+        <!-- ✅ Use correct path for your logo -->
+        <img class="brand-logo" src="/icons/cms-logo.png" alt="CMS" />
         <div class="brand-text">
           <div class="brand-title">CMS Policy Chatbot</div>
           <div class="brand-subtitle">Internal staff &amp; parent assistant</div>
         </div>
       </div>
 
-      <!-- Right: Actions -->
+      <!-- Right: Actions (shown after login) -->
       <div id="header-actions" class="header-actions hidden">
         <select id="campus-switch" class="campus-switch">
           <option value="">Campus</option>
@@ -49,6 +48,7 @@
 
         <button id="logout-btn" class="pill-btn danger" type="button">Logout</button>
       </div>
+
     </div>
   </header>
 
@@ -69,10 +69,12 @@
 
   <!-- ================= MAIN ================= -->
   <main class="app-main">
+
     <!-- ============ LOGIN SCREEN ============ -->
     <section id="login-screen" class="screen">
       <div class="card login-card">
         <h2 class="card-title">Login</h2>
+
         <p class="card-hint">
           Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.
           <br />
@@ -142,6 +144,7 @@
 
       <div class="footer-note">© CMS – Staff internal tool</div>
     </section>
+
   </main>
 
   <!-- ================= MENU PANEL (Modal) ================= -->
@@ -171,23 +174,7 @@
   </div>
 
   <!-- ================= SCRIPT ================= -->
-  <script src="handbook.js"></script>
+  <!-- ✅ IMPORTANT: must be app.js (not inline) -->
   <script src="app.js"></script>
-
-  <!-- Campus preview helper (no dependency on app.js) -->
-  <script>
-    (function () {
-      const sel = document.getElementById("campus-select");
-      const pill = document.getElementById("campus-preview");
-      if (!sel || !pill) return;
-
-      const update = () => {
-        pill.textContent = sel.value ? sel.value : "—";
-      };
-
-      sel.addEventListener("change", update);
-      update();
-    })();
-  </script>
 </body>
 </html>
