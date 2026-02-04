@@ -1,9 +1,10 @@
 /* =========================
-   CMS Policy Chatbot - style.css (CLEAN + FULL)
+   CMS Policy Chatbot - style.css (FULL)
    - Modern UI
-   - Menu panel (Policies / Protocols / Parent Handbook)
-   - Parent Handbook: subtle light-blue background under section pills
-   - No duplicate roots / no conflicting overrides
+   - Parent Handbook Modal: Search + Accordion
+   - Section actions: Quick Ask + Copy Link
+   - Toast notifications
+   - Fixes: logo stretch, alignment, responsive
 ========================= */
 
 :root{
@@ -17,9 +18,6 @@
   --brand-2: #1f5fbf;
 
   --pill: #eef2ff;
-  --pill-soft: #eef6ff;         /* ✅ light blue (requested) */
-  --pill-border: #c7d2fe;
-
   --danger: #b91c1c;
   --ok: #065f46;
 
@@ -72,7 +70,7 @@ a{ color: inherit; }
 .brand-logo{
   width: 44px;
   height: 44px;
-  object-fit: contain;
+  object-fit: contain;         /* ✅ prevent stretch */
   object-position: center;
   flex: 0 0 auto;
 }
@@ -138,7 +136,7 @@ a{ color: inherit; }
   border-radius: 999px;
   font-weight: 900;
   letter-spacing: .3px;
-  background: var(--pill);
+  background: #eef2ff;
   border: 1px solid rgba(11,58,122,.15);
   color: var(--brand);
   user-select:none;
@@ -175,17 +173,10 @@ a{ color: inherit; }
   color: var(--text);
   cursor: pointer;
   font-weight: 800;
-  transition: background .12s ease, border-color .12s ease, transform .08s ease;
-}
-
-.menu-pill:hover{
-  background:#f8fafc;
-  border-color:#cbd5e1;
-  transform: translateY(-1px);
 }
 
 .menu-pill.active{
-  background: var(--pill-soft);
+  background: var(--pill);
   border-color: rgba(11,58,122,.22);
   color: var(--brand);
 }
@@ -339,7 +330,7 @@ a{ color: inherit; }
   height: 28px;
   padding: 0 10px;
   border-radius: 999px;
-  background: var(--pill-soft);
+  background: var(--pill);
   border: 1px solid rgba(11,58,122,.15);
   color: var(--brand);
   font-weight: 950;
@@ -478,187 +469,136 @@ a{ color: inherit; }
   overflow:auto;
 }
 
-/* ================= Policies / Protocols pills ================= */
-/* این همون چیزی هست که الان تو عکسِ درستت می‌بینی */
-.menu-item-btn{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  margin: 6px 8px 0 0;
-  padding: 8px 12px;
-  border-radius: 999px;
-
-  border: 1px solid var(--line);
-  background: #ffffff;
-  color: #111827;
-
-  font-size: 13px;
-  font-weight: 850;
-  cursor: pointer;
-
-  transition: background .12s ease, border-color .12s ease, transform .08s ease, box-shadow .12s ease;
-}
-
-.menu-item-btn:hover{
-  background: var(--pill-soft);                 /* ✅ light blue hover */
-  border-color: rgba(31,95,191,.20);
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(2,6,23,.06);
-}
-
-.menu-item-btn:active{ transform: translateY(0); }
-
-/* ================= Handbook (Campus-based) ================= */
-/* دکمه‌های handbook و سکشن‌ها را دست نمی‌زنیم؛ فقط UI مرتب + بک‌گراند آبی کمرنگ زیر سکشن‌ها */
-
-.handbook-wrap{
+/* ===== Modal Search Bar ===== */
+.modal-search{
   display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-
-.handbook-top{
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: linear-gradient(180deg, #fbfdff, #ffffff);
-}
-
-.handbook-meta{
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-/* Handbook list "cards" */
-.handbook-btn{
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
-  background: #fff;
-  border-radius: 14px;
-  padding: 12px 12px;
-  cursor: pointer;
-  box-shadow: 0 6px 18px rgba(2,6,23,.06);
-  transition: transform .08s ease, box-shadow .12s ease, border-color .12s ease;
-}
-
-.handbook-btn:hover{
-  transform: translateY(-1px);
-  box-shadow: 0 14px 28px rgba(2,6,23,.10);
-  border-color: #cbd5e1;
-}
-
-.hb-title{
-  font-weight: 900;
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.2;
-}
-
-.hb-sub{
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--muted);
-  font-weight: 700;
-}
-
-/* ✅ فقط بک‌گراند زیر دکمه‌های سکشن‌ها (آبی کمرنگ) */
-.hb-sections{
-  background: linear-gradient(
-    180deg,
-    rgba(238,246,255,.95),
-    rgba(255,255,255,0)
-  );
-  border: 1px solid rgba(31,95,191,.10);
-  border-radius: 14px;
-  padding: 10px 10px 6px;
-  margin: 8px 0 6px;
-}
-
-/* Section pill buttons (همون دکمه‌های قبلی) */
-.hb-section-btn{
-  border: 1px solid var(--line);
-  background: #fff;
-  border-radius: 999px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 800;
-  color: #111827;
-  transition: background .12s ease, border-color .12s ease, transform .08s ease;
-}
-
-.hb-section-btn:hover{
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  transform: translateY(-1px);
-}
-
-/* Section view (وقتی یک سکشن باز میشه) */
-.hb-section-view{
-  margin-top: 10px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  overflow: hidden;
-  background: #fff;
-  box-shadow: 0 10px 30px rgba(2,6,23,.06);
-}
-
-.hb-section-head{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
   gap: 10px;
-  padding: 12px 14px;
-  background: linear-gradient(180deg, #fbfdff, #ffffff);
-  border-bottom: 1px solid var(--line);
-}
-
-.hb-section-title{
-  font-weight: 950;
-  font-size: 14px;
-  color: var(--text);
-}
-
-.hb-section-actions{
-  display:flex;
   align-items:center;
+  margin-bottom: 12px;
+}
+
+.modal-search .text-input{
+  height: 42px;
+  border-radius: 14px;
+}
+
+.modal-subrow{
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.modal-subrow select{
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:#fff;
+  outline:none;
+  min-width: 260px;
+}
+
+/* ===== Generic list item cards ===== */
+.list-card{
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fff;
+}
+
+.list-title{
+  font-weight: 950;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.list-meta{
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.list-actions{
+  margin-top: 10px;
+  display:flex;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.mini-btn{
+.small-btn{
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
   border: 1px solid var(--line);
   background: #fff;
-  border-radius: 12px;
-  padding: 8px 10px;
+  font-weight: 900;
   cursor: pointer;
-  font-weight: 900;
-  font-size: 12px;
 }
 
-.mini-btn:hover{
-  background: #f8fafc;
-  border-color: #cbd5e1;
+.small-btn:hover{
+  border-color: rgba(11,58,122,.25);
+  background: #f7f9fe;
 }
 
-.mini-link{
-  font-size: 12px;
-  font-weight: 900;
-  color: var(--brand-2);
-  text-decoration: none;
+.small-btn.primary{
+  background: var(--pill);
+  border-color: rgba(11,58,122,.22);
+  color: var(--brand);
 }
 
-.mini-link:hover{ text-decoration: underline; }
+/* ===== Accordion for handbook sections ===== */
+.acc{
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  background:#fff;
+}
 
-.hb-section-content{
-  padding: 14px;
-  font-size: 14px;
-  line-height: 1.65;
-  color: #0f172a;
+.acc-head{
+  width: 100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  padding: 12px 12px;
+  cursor:pointer;
+  background: #fbfdff;
+  border:0;
+  text-align:left;
+}
+
+.acc-title{
+  font-weight: 950;
+}
+
+.acc-caret{
+  font-weight: 950;
+  color: var(--muted);
+}
+
+.acc-body{
+  display:none;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+.acc.open .acc-body{ display:block; }
+
+.acc-text{
+  color: var(--text);
+  line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.acc-actions{
+  margin-top: 12px;
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* ================= ADMIN MODAL ================= */
@@ -740,9 +680,305 @@ a{ color: inherit; }
   .campus-select{ min-width: 100%; }
 
   .menu-panel{ top: 92px; }
+  .modal-subrow select{ min-width: 100%; }
+}
+/* =========================
+   HANDBOOK MENU - PRETTY UI
+   Paste at the END of style.css
+========================= */
+
+:root{
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e5e7eb;
+  --shadow: 0 10px 30px rgba(2,6,23,.08);
+  --brand: #0b1f3a;
+  --brand2:#003b8e;
 }
 
+/* panel container (if you have menu panel) */
+#menu-panel{
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+/* generic label */
+.menu-group-label{
+  margin: 10px 0 8px;
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+/* handbook main wrap */
+.handbook-wrap{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.handbook-top{
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fbfdff, #ffffff);
+}
+
+.handbook-meta{
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Handbook "card buttons" */
+.handbook-btn{
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px 12px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(2,6,23,.06);
+  transition: transform .08s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.handbook-btn:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(2,6,23,.10);
+  border-color: #cbd5e1;
+}
+
+.hb-title{
+  font-weight: 900;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.hb-sub{
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+/* Sections container under an open handbook */
+/* فقط بک‌گراند زیر دکمه‌ها – بدون دست زدن به خود دکمه‌ها */
+.hb-sections{
+  background: linear-gradient(
+    180deg,
+    rgba(238,242,255,.7),
+    rgba(255,255,255,0)
+  );
+  border-radius: 14px;
+  padding: 10px 10px 6px;
+  margin: 8px 0 6px;
+ }
+
+/* Section pill buttons */
+.hb-section-btn{
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  color: #111827;
+  transition: background .12s ease, border-color .12s ease, transform .08s ease;
+}
+
+.hb-section-btn:hover{
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+/* Section view */
+.hb-section-view{
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(2,6,23,.06);
+}
+
+.hb-section-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, #fbfdff, #ffffff);
+  border-bottom: 1px solid var(--border);
+}
+
+.hb-section-title{
+  font-weight: 950;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.hb-section-actions{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.mini-btn{
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.mini-btn:hover{
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.mini-link{
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--brand2);
+  text-decoration: none;
+}
+
+.mini-link:hover{ text-decoration: underline; }
+
+.hb-section-content{
+  padding: 14px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #0f172a;
+  white-space: pre-wrap;
+}
+
+/* Ask button */
+.primary-btn{
+  border: 0;
+  background: var(--brand2);
+  color: #fff;
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(0,59,142,.22);
+}
+
+.primary-btn:hover{
+  filter: brightness(1.05);
+}
+
+/* Muted */
+.muted{
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Top menu pills (Policies/Protocols/Handbook) */
+.top-menu-bar{
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(255,255,255,.9);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.top-menu-inner{
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 10px 12px;
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.menu-pill{
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 950;
+  cursor: pointer;
+  color: #111827;
+  transition: background .12s ease, transform .08s ease, border-color .12s ease;
+}
+
+.menu-pill:hover{
+  background:#f8fafc;
+  border-color:#cbd5e1;
+  transform: translateY(-1px);
+}
+
+.menu-pill.active{
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #1e3a8a;
+}
+
+/* Responsive */
 @media (max-width: 560px){
+  .hb-sections{ gap: 6px; }
   .hb-section-btn{ font-size: 12px; padding: 7px 10px; }
   .handbook-btn{ padding: 10px 10px; }
 }
+
+/* =========================
+   POLICIES / PROTOCOLS - Pretty pills
+   (بدون دست زدن به handbook)
+========================= */
+
+.menu-panel-body{
+  /* فقط برای اینکه دکمه‌ها فاصله و ردیف‌بندی درست بگیرن */
+}
+
+.menu-item-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  margin: 6px 8px 0 0;          /* فاصله بین دکمه‌ها */
+  padding: 8px 12px;
+  border-radius: 999px;
+
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #111827;
+
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+
+  transition: background .12s ease, border-color .12s ease, transform .08s ease;
+}
+
+.menu-item-btn:hover{
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.menu-item-btn:active{
+  transform: translateY(0);
+}
+
+/* اگر خواستی فرق رنگ Policies و Protocols خیلی ظریف باشه */
+.menu-panel-title:contains("Policies") + .menu-panel-body .menu-item-btn{
+  /* این selector توی CSS استاندارد کار نمی‌کنه، پس این قسمت رو نذار */
+}
+
