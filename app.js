@@ -99,6 +99,17 @@ const adminPinCancel = document.getElementById("admin-pin-cancel");
 // might exist in HTML or injected dynamically
 let adminLinks = document.getElementById("admin-links");
 
+// Ensure admin modal can show even if login screen is visible.
+// (If adminModal is inside a hidden container, it won't appear.)
+function ensureAdminModalUsable() {
+  if (!adminModal) return;
+  // Move to <body> so it can overlay both login and chat screens
+  if (adminModal.parentElement !== document.body) {
+    document.body.appendChild(adminModal);
+  }
+}
+
+
 // Ensure a top-menu-bar exists
 let topMenuBar = document.getElementById("top-menu-bar");
 let menuPills = document.querySelectorAll(".menu-pill");
@@ -538,7 +549,11 @@ async function enterAdminMode(pin) {
   }
 }
 
-adminModeBtn?.addEventListener("click", () => {
+adminModeBtn?.addEventListener("click", async () => {
+  // If we are on the login screen, use prompt (modal may be inside hidden chat container).
+  const onLogin = loginScreen && !loginScreen.classList.contains("hidden");
+
+  // Toggle off if already active
   if (isAdminActive()) {
     clearAdminSession();
     syncModeBadge();
@@ -546,6 +561,15 @@ adminModeBtn?.addEventListener("click", () => {
     return;
   }
 
+  // Login flow
+  if (onLogin) {
+    const pin = prompt("Enter Admin PIN:");
+    if (pin) await enterAdminMode(pin);
+    return;
+  }
+
+  // Chat screen: show modal (nicer UX)
+  ensureAdminModalUsable();
   if (adminModal && adminPinInput && adminPinSubmit && adminPinCancel) {
     adminPinInput.value = "";
     adminModal.classList.remove("hidden");
@@ -560,8 +584,9 @@ adminModeBtn?.addEventListener("click", () => {
     return;
   }
 
+  // Fallback
   const pin = prompt("Enter Admin PIN:");
-  if (pin) enterAdminMode(pin);
+  if (pin) await enterAdminMode(pin);
 });
 
 // Admin login button on LOGIN screen
@@ -999,6 +1024,8 @@ chatForm?.addEventListener("submit", (e) => {
 // ============================
 (function init() {
   ensureTopMenuBar();
+  ensureAdminModalUsable();
+
 
   // Clean expired tokens
   if (!isStaffActive()) clearStaffSession();
