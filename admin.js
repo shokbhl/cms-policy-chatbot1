@@ -1,68 +1,43 @@
-// admin.js
-// Shared admin helper for dashboard.html and logs.html
+export async function onRequest(context) {
+  const { request } = context;
 
-const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
+  const WORKER_ORIGIN = "https://cms-policy-worker.shokbhl.workers.dev";
+  const targetUrl = WORKER_ORIGIN + "/auth/admin";
 
-const LS = {
-  adminToken: "cms_admin_token",
-  adminUntil: "cms_admin_until"
-};
-
-// -------------------------
-// Admin session helpers
-// -------------------------
-function isAdminActive() {
-  const token = localStorage.getItem(LS.adminToken);
-  const until = Number(localStorage.getItem(LS.adminUntil) || "0");
-  return !!token && Date.now() < until;
-}
-
-function getAdminToken() {
-  return localStorage.getItem(LS.adminToken) || "";
-}
-
-function requireAdminOrRedirect() {
-  if (!isAdminActive()) {
-    alert("Admin session expired. Please enable Admin Mode again in the main app.");
-    window.location.href = "index.html";
-    return false;
+  // --- CORS / Preflight ---
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "86400"
+      }
+    });
   }
-  return true;
-}
 
-// -------------------------
-// Authenticated admin fetch
-// -------------------------
-async function adminFetch(path) {
-  const res = await fetch(`${WORKER_BASE}${path}`, {
-    headers: {
-      Authorization: `Bearer ${getAdminToken()}`
-    }
+  // (Optional) Force method: only POST allowed
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ ok: false, error: "POST required" }, null, 2), {
+      status: 405,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*"
+      }
+    });
+  }
+
+  // ✅ Forward request correctly (method/body/headers)
+  const upstreamReq = new Request(targetUrl, request);
+  const res = await fetch(upstreamReq);
+
+  // Return response with CORS
+  const headers = new Headers(res.headers);
+  headers.set("Access-Control-Allow-Origin", "*");
+
+  return new Response(res.body, {
+    status: res.status,
+    headers
   });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (res.status === 401) {
-    alert(data.error || "Unauthorized. Re-enable Admin Mode.");
-    window.location.href = "index.html";
-    return null;
-  }
-
-  if (!res.ok) {
-    throw new Error(data.error || "Request failed");
-  }
-
-  return data;
-}
-
-// -------------------------
-// Utils
-// -------------------------
-function escapeHtml(s) {
-  return String(s ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
