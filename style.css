@@ -771,31 +771,34 @@ a{ color: inherit; }
 
 /* Sections container under an open handbook */
 .hb-sections{
-  display:flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 6px 2px;
-  border-left: 3px solid #eef2ff;
-  margin-left: 6px;
+ background: linear-gradient(180deg, rgba(238,242,255,.85), rgba(255,255,255,0));
+  border: 1px solid rgba(199,210,254,.9);
+  border-left: 6px solid rgba(59,130,246,.25);
+  border-radius: 14px;
+  padding: 12px 12px;
+  margin: 10px 0 6px;
 }
 
 /* Section pill buttons */
+/* زیرمنوهای Parent Handbook (کانتینر دکمه‌های Section) */
+.hb-sections{
+  background: linear-gradient(180deg, rgba(238,242,255,.85), rgba(255,255,255,0));
+  border: 1px solid rgba(199,210,254,.9);
+  border-left: 6px solid rgba(59,130,246,.25);
+  border-radius: 14px;
+  padding: 12px 12px;
+  margin: 10px 0 6px;
+}
+
+/* خود دکمه‌های section کمی نرم‌تر و هماهنگ‌تر */
 .hb-section-btn{
-  border: 1px solid var(--border);
-  background: #fff;
-  border-radius: 999px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 800;
-  color: #111827;
-  transition: background .12s ease, border-color .12s ease, transform .08s ease;
+  background: rgba(255,255,255,.9);
+  border-color: rgba(203,213,225,.9);
 }
 
 .hb-section-btn:hover{
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  transform: translateY(-1px);
+  background: rgba(238,242,255,.65);
+  border-color: rgba(99,102,241,.25);
 }
 
 /* Section view */
