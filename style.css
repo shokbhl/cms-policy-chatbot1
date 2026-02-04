@@ -938,3 +938,47 @@ a{ color: inherit; }
   .handbook-btn{ padding: 10px 10px; }
 }
 
+/* =========================
+   POLICIES / PROTOCOLS - Pretty pills
+   (بدون دست زدن به handbook)
+========================= */
+
+.menu-panel-body{
+  /* فقط برای اینکه دکمه‌ها فاصله و ردیف‌بندی درست بگیرن */
+}
+
+.menu-item-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  margin: 6px 8px 0 0;          /* فاصله بین دکمه‌ها */
+  padding: 8px 12px;
+  border-radius: 999px;
+
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #111827;
+
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+
+  transition: background .12s ease, border-color .12s ease, transform .08s ease;
+}
+
+.menu-item-btn:hover{
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.menu-item-btn:active{
+  transform: translateY(0);
+}
+
+/* اگر خواستی فرق رنگ Policies و Protocols خیلی ظریف باشه */
+.menu-panel-title:contains("Policies") + .menu-panel-body .menu-item-btn{
+  /* این selector توی CSS استاندارد کار نمی‌کنه، پس این قسمت رو نذار */
+}
+
