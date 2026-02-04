@@ -5,18 +5,20 @@ export async function onRequest(context) {
 
   const url = new URL(request.url);
 
-  // forward: /api/...  =>  WORKER_ORIGIN/api/...
-  const forwardPath = url.pathname.replace(/^\/api/, "/api");
+  // /api/...  ->  /...
+  const forwardPath = url.pathname.replace(/^\/api/, "") || "/";
+
   const targetUrl = new URL(WORKER_ORIGIN + forwardPath);
 
-  // keep querystring
+  // keep query string
   targetUrl.search = url.search;
 
-  // clone request with new URL
+  // forward original request (method/body/headers)
   const newReq = new Request(targetUrl.toString(), request);
 
   const res = await fetch(newReq);
 
+  // return response back to browser
   return new Response(res.body, {
     status: res.status,
     headers: res.headers,
