@@ -1,995 +1,903 @@
 /* =========================
-   app.js (FULL FINAL)
-   - Works with your index.html + style.css
-   - Uses /api (Cloudflare Pages Function) to proxy Worker
-   - Login staff/parent
-   - Campus-based handbook UI (modern)
-   - Policies/Protocols menu panel
-   - Admin mode PIN + dashboard/logs links
-   - Chat UI
-========================= */
+   app.js (FULL)
+   - Staff + Parent login
+   - Role-based UI (Parent: Handbook only | Staff: Policies/Protocols/Handbook | Admin: links)
+   - Uses same-origin /api (Cloudflare Pages Function) + sends Authorization header
+   - Handbook modal:
+       • Search
+       • Accordion sections
+       • Quick Ask (sends question)
+       • Copy Link (deep link with #hb=...&sec=...)
+   ========================= */
 
-(() => {
-  // =============== CONFIG ===============
-  // We call same-origin /api (Pages Function) which proxies to Worker /api.
-  const API_URL = "/api";
+const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
 
-  // LocalStorage keys
-  const LS = {
-    campus: "cms_campus",
-    role: "cms_role", // staff | parent
-    staffToken: "cms_staff_token",
-    staffUntil: "cms_staff_until",
+// Endpoints (Worker)
+const AUTH_STAFF_URL = `${WORKER_BASE}/auth/staff`;
+const AUTH_PARENT_URL = `${WORKER_BASE}/auth/parent`;
+const AUTH_ADMIN_URL  = `${WORKER_BASE}/auth/admin`;
 
-    parentToken: "cms_parent_token",
-    parentUntil: "cms_parent_until",
+const HANDBOOKS_URL   = `${WORKER_BASE}/handbooks`; // GET ?campus=MC
 
-    adminToken: "cms_admin_token",
-    adminUntil: "cms_admin_until",
+// These two are best-effort (depends on your Worker routes)
+const POLICIES_LIST_URL  = `${WORKER_BASE}/policies`;   // GET ?campus=MC
+const PROTOCOLS_LIST_URL = `${WORKER_BASE}/protocols`;  // GET ?campus=MC
 
-    // optional: last selected menu
-    lastMenu: "cms_last_menu"
-  };
+// Pages Function proxy (same-origin) -> forwards to WORKER /api
+const API_PROXY = `/api`;
 
-  const CAMPUSES = ["YC", "MC", "SC", "TC", "WC"];
+const LS = {
+  role:       "cms_role",          // "parent" | "staff" | "admin"
+  campus:     "cms_campus",
 
-  // =============== DOM ===============
-  const $ = (id) => document.getElementById(id);
+  staffToken: "cms_staff_token",
+  staffUntil: "cms_staff_until",
 
-  // screens
-  const loginScreen = $("login-screen");
-  const chatScreen = $("chat-screen");
+  parentToken:"cms_parent_token",
+  parentUntil:"cms_parent_until",
 
-  // header + top menu
-  const headerActions = $("header-actions");
-  const topMenuBar = $("top-menu-bar");
-  const campusSwitch = $("campus-switch");
-  const logoutBtn = $("logout-btn");
-  const adminModeBtn = $("admin-mode-btn");
-  const modeBadge = $("mode-badge");
-  const adminLinks = $("admin-links");
+  adminToken: "cms_admin_token",
+  adminUntil: "cms_admin_until"
+};
 
-  // login form
-  const loginForm = $("login-form");
-  const accessCodeInput = $("access-code");
-  const campusSelect = $("campus-select");
-  const loginAdminBtn = $("login-admin-btn");
-  const loginError = $("login-error");
+// -------------------------
+// DOM helpers
+// -------------------------
+const el = (id) => document.getElementById(id);
+const qs = (sel) => document.querySelector(sel);
+const qsa = (sel) => Array.from(document.querySelectorAll(sel));
 
-  // chat
-  const chatWindow = $("chat-window");
-  const chatForm = $("chat-form");
-  const userInput = $("user-input");
+const loginScreen = el("login-screen");
+const chatScreen  = el("chat-screen");
 
-  // menu panel (modal)
-  const menuOverlay = $("menu-overlay");
-  const menuPanel = $("menu-panel");
-  const menuPanelTitle = $("menu-panel-title");
-  const menuPanelBody = $("menu-panel-body");
-  const menuPanelClose = $("menu-panel-close");
+const loginForm   = el("login-form");
+const accessCode  = el("access-code");
+const campusSelect= el("campus-select");
+const campusSwitch= el("campus-switch");
+const campusPreview = el("campus-preview");
+const loginError  = el("login-error");
 
-  // admin modal
-  const adminModal = $("admin-modal");
-  const adminPinInput = $("admin-pin");
-  const adminPinCancel = $("admin-pin-cancel");
-  const adminPinSubmit = $("admin-pin-submit");
+const headerActions = el("header-actions");
+const topMenuBar    = el("top-menu-bar");
 
-  // =============== UTIL ===============
-  const esc = (s) =>
-    String(s ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+const adminModeBtn = el("admin-mode-btn");
+const modeBadge    = el("mode-badge");
+const logoutBtn    = el("logout-btn");
+const adminLinks   = el("admin-links");
 
-  const now = () => Date.now();
+const chatWindow = el("chat-window");
+const chatForm   = el("chat-form");
+const userInput  = el("user-input");
 
-  function setText(el, t) {
-    if (!el) return;
-    el.textContent = t;
+const menuOverlay   = el("menu-overlay");
+const menuPanel     = el("menu-panel");
+const menuPanelTitle= el("menu-panel-title");
+const menuPanelBody = el("menu-panel-body");
+const menuPanelClose= el("menu-panel-close");
+
+const adminModal     = el("admin-modal");
+const adminPinInput  = el("admin-pin");
+const adminPinCancel = el("admin-pin-cancel");
+const adminPinSubmit = el("admin-pin-submit");
+
+const loginAdminBtn  = el("login-admin-btn");
+
+let CURRENT_MENU = null; // "policies" | "protocols" | "handbook"
+let HANDBOOK_CACHE = []; // loaded list for current campus
+
+// -------------------------
+// Utils
+// -------------------------
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function nowMs() { return Date.now(); }
+
+function setCampus(c) {
+  const campus = String(c || "").toUpperCase();
+  if (campus) localStorage.setItem(LS.campus, campus);
+  if (campusSelect) campusSelect.value = campus;
+  if (campusSwitch) campusSwitch.value = campus;
+  if (campusPreview) campusPreview.textContent = campus || "—";
+}
+
+function getCampus() {
+  return (localStorage.getItem(LS.campus) || campusSelect?.value || campusSwitch?.value || "").toUpperCase();
+}
+
+function setRole(role) {
+  localStorage.setItem(LS.role, role);
+}
+
+function getRole() {
+  return (localStorage.getItem(LS.role) || "").toLowerCase();
+}
+
+function clearSession() {
+  Object.values(LS).forEach((k) => localStorage.removeItem(k));
+}
+
+function setLoginError(msg) {
+  if (!loginError) return;
+  loginError.textContent = msg || "";
+}
+
+function showScreens(isLoggedIn) {
+  if (isLoggedIn) {
+    loginScreen?.classList.add("hidden");
+    chatScreen?.classList.remove("hidden");
+    headerActions?.classList.remove("hidden");
+    topMenuBar?.classList.remove("hidden");
+  } else {
+    loginScreen?.classList.remove("hidden");
+    chatScreen?.classList.add("hidden");
+    headerActions?.classList.add("hidden");
+    topMenuBar?.classList.add("hidden");
+  }
+}
+
+// -------------------------
+// Token helpers
+// -------------------------
+function tokenKeyForRole(role) {
+  if (role === "admin") return LS.adminToken;
+  if (role === "staff") return LS.staffToken;
+  if (role === "parent")return LS.parentToken;
+  return "";
+}
+function untilKeyForRole(role) {
+  if (role === "admin") return LS.adminUntil;
+  if (role === "staff") return LS.staffUntil;
+  if (role === "parent")return LS.parentUntil;
+  return "";
+}
+
+function isTokenActive(role) {
+  const tKey = tokenKeyForRole(role);
+  const uKey = untilKeyForRole(role);
+  if (!tKey || !uKey) return false;
+
+  const token = localStorage.getItem(tKey) || "";
+  const until = Number(localStorage.getItem(uKey) || "0");
+  return !!token && nowMs() < until;
+}
+
+function getActiveToken() {
+  // priority: admin > staff > parent
+  if (isTokenActive("admin")) return { role: "admin", token: localStorage.getItem(LS.adminToken) || "" };
+  if (isTokenActive("staff")) return { role: "staff", token: localStorage.getItem(LS.staffToken) || "" };
+  if (isTokenActive("parent"))return { role: "parent", token: localStorage.getItem(LS.parentToken) || "" };
+  return { role: "", token: "" };
+}
+
+function setToken(role, token, expiresInSeconds = 28800) {
+  const tKey = tokenKeyForRole(role);
+  const uKey = untilKeyForRole(role);
+  if (!tKey || !uKey) return;
+
+  localStorage.setItem(tKey, token);
+  localStorage.setItem(uKey, String(nowMs() + Number(expiresInSeconds || 28800) * 1000));
+  setRole(role);
+}
+
+// -------------------------
+// Auth fetch (IMPORTANT)
+// -------------------------
+async function authFetch(url, options = {}) {
+  // Determine which token to use:
+  // - If user is in admin mode (active), use admin token
+  // - else use role token (staff/parent)
+  const active = getActiveToken();
+  const token = active.token || "";
+
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (!headers.has("Content-Type") && options.method && options.method !== "GET") {
+    headers.set("Content-Type", "application/json");
   }
 
-  function show(el) {
-    if (!el) return;
-    el.classList.remove("hidden");
+  const res = await fetch(url, { ...options, headers });
+
+  // If unauthorized: keep UI clean + force logout to re-login
+  if (res.status === 401) {
+    // do not clear admin automatically if admin is active and user is just parent/staff
+    // but if the active token itself failed => clear all
+    const txt = await res.text().catch(() => "");
+    console.warn("401:", txt);
+  }
+  return res;
+}
+
+async function readJson(res) {
+  return await res.json().catch(() => ({}));
+}
+
+// -------------------------
+// UI: role-based visibility
+// -------------------------
+function applyRoleUI() {
+  const role = getRole();
+  const isAdmin = isTokenActive("admin");
+
+  // Mode badge
+  if (modeBadge) {
+    const label = (isAdmin ? "ADMIN" : (role || "STAFF")).toUpperCase();
+    modeBadge.textContent = label;
+    modeBadge.classList.toggle("admin", isAdmin);
   }
 
-  function hide(el) {
-    if (!el) return;
-    el.classList.add("hidden");
+  // Admin links in top menu
+  if (adminLinks) {
+    adminLinks.classList.toggle("hidden", !isAdmin);
   }
 
-  function openMenuPanel(title) {
-    setText(menuPanelTitle, title || "Menu");
-    show(menuOverlay);
-    show(menuPanel);
-    menuPanel.setAttribute("aria-hidden", "false");
+  // Top menu buttons
+  const policiesBtn  = qs('[data-menu="policies"]');
+  const protocolsBtn = qs('[data-menu="protocols"]');
+  const handbookBtn  = qs('[data-menu="handbook"]');
+
+  // Default show all for staff/admin, handbook always for staff+parent
+  const parentOnly = role === "parent" && !isAdmin;
+
+  if (policiesBtn)  policiesBtn.style.display  = parentOnly ? "none" : "inline-flex";
+  if (protocolsBtn) protocolsBtn.style.display = parentOnly ? "none" : "inline-flex";
+  if (handbookBtn)  handbookBtn.style.display  = "inline-flex";
+
+  // If parent: force current menu to handbook
+  if (parentOnly) {
+    setActiveMenuPill("handbook");
   }
+}
 
-  function closeMenuPanel() {
-    hide(menuOverlay);
-    hide(menuPanel);
-    menuPanel.setAttribute("aria-hidden", "true");
-    menuPanelBody.innerHTML = "";
-  }
+function setActiveMenuPill(menuName) {
+  qsa(".menu-pill").forEach(btn => {
+    const is = btn.getAttribute("data-menu") === menuName;
+    btn.classList.toggle("active", is);
+  });
+}
 
-  function openAdminModal() {
-    show(adminModal);
-    adminModal.setAttribute("aria-hidden", "false");
-    adminPinInput.value = "";
-    adminPinInput.focus();
-  }
+// -------------------------
+// Chat rendering
+// -------------------------
+function addMsg(role, text) {
+  if (!chatWindow) return;
+  const div = document.createElement("div");
+  div.className = `msg ${role === "user" ? "user" : "assistant"}`;
+  div.innerHTML = linkify(escapeHtml(String(text || "")));
+  chatWindow.appendChild(div);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
 
-  function closeAdminModal() {
-    hide(adminModal);
-    adminModal.setAttribute("aria-hidden", "true");
-    adminPinInput.value = "";
-  }
+function addTyping() {
+  if (!chatWindow) return null;
+  const wrap = document.createElement("div");
+  wrap.className = "typing-bubble";
+  wrap.innerHTML = `
+    <div class="typing-dots">
+      <span class="typing-dot"></span>
+      <span class="typing-dot"></span>
+      <span class="typing-dot"></span>
+    </div>
+  `;
+  chatWindow.appendChild(wrap);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+  return wrap;
+}
 
-  function isTokenActive(tokenKey, untilKey) {
-    const token = localStorage.getItem(tokenKey) || "";
-    const until = Number(localStorage.getItem(untilKey) || "0");
-    return !!token && now() < until;
-  }
+function linkify(s) {
+  // simple URL linkify
+  return s.replace(
+    /(https?:\/\/[^\s<]+)/g,
+    (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`
+  );
+}
 
-  function isStaffActive() {
-    return isTokenActive(LS.staffToken, LS.staffUntil);
-  }
+// -------------------------
+// Login
+// -------------------------
+async function loginWithCode(code, campus) {
+  const payload = { code: String(code || "").trim(), campus: String(campus || "").trim().toUpperCase() };
 
-  function isParentActive() {
-    return isTokenActive(LS.parentToken, LS.parentUntil);
-  }
-
-  function isAdminActive() {
-    return isTokenActive(LS.adminToken, LS.adminUntil);
-  }
-
-  function getCampus() {
-    return localStorage.getItem(LS.campus) || "";
-  }
-
-  function setCampus(c) {
-    const campus = String(c || "").toUpperCase();
-    localStorage.setItem(LS.campus, campus);
-    if (campusSwitch) campusSwitch.value = campus;
-    if (campusSelect) campusSelect.value = campus;
-  }
-
-  function getRole() {
-    return localStorage.getItem(LS.role) || "";
-  }
-
-  function setRole(r) {
-    localStorage.setItem(LS.role, r);
-  }
-
-  function setModeBadge() {
-    const role = getRole();
-    const admin = isAdminActive();
-
-    if (admin) {
-      modeBadge.textContent = "ADMIN";
-      modeBadge.classList.add("admin");
-      show(adminLinks);
-      return;
-    }
-
-    modeBadge.classList.remove("admin");
-    hide(adminLinks);
-
-    if (role === "parent") modeBadge.textContent = "PARENT";
-    else modeBadge.textContent = "STAFF";
-  }
-
-  function setActiveMenuPill(menuKey) {
-    const pills = document.querySelectorAll(".menu-pill");
-    pills.forEach((p) => p.classList.remove("active"));
-    const active = document.querySelector(`.menu-pill[data-menu="${menuKey}"]`);
-    if (active) active.classList.add("active");
-  }
-
-  function pushMsg(role, html) {
-    const div = document.createElement("div");
-    div.className = `msg ${role}`;
-    div.innerHTML = html;
-    chatWindow.appendChild(div);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-  }
-
-  function showTyping() {
-    const wrap = document.createElement("div");
-    wrap.className = "typing-bubble";
-    wrap.id = "typing-bubble";
-    wrap.innerHTML = `
-      <div class="typing-dots">
-        <span class="typing-dot"></span>
-        <span class="typing-dot"></span>
-        <span class="typing-dot"></span>
-      </div>
-      <div class="muted" style="font-weight:800">Thinking…</div>
-    `;
-    chatWindow.appendChild(wrap);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-  }
-
-  function hideTyping() {
-    const el = document.getElementById("typing-bubble");
-    if (el) el.remove();
-  }
-
-  // =============== API ===============
-  async function apiPost(payload) {
-    const res = await fetch(API_URL, {
+  // Try staff first, then parent (so staff codes work even if they look similar)
+  // If your worker ONLY has /auth/staff and /auth/parent, this will work.
+  // If you only have /auth/staff that accepts both, you can simplify later.
+  {
+    const res = await fetch(AUTH_STAFF_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload || {})
+      body: JSON.stringify(payload)
     });
-    const data = await res.json().catch(() => ({}));
-    return { res, data };
-  }
-
-  // =============== LOGIN ===============
-  async function doLogin(code, campus) {
-    const cleanCode = String(code || "").trim();
-    const cleanCampus = String(campus || "").trim().toUpperCase();
-
-    if (!cleanCode) return { ok: false, error: "Please enter access code." };
-    if (!cleanCampus) return { ok: false, error: "Please select campus." };
-
-    // Call Worker via /api: { action:"auth", code, campus }
-    // The worker should decide staff/parent based on code.
-    const { res, data } = await apiPost({
-      action: "auth",
-      code: cleanCode,
-      campus: cleanCampus
-    });
-
-    if (!res.ok || !data.ok) {
-      return { ok: false, error: data.error || "Login failed." };
+    const data = await readJson(res);
+    if (res.ok && data.ok) {
+      setToken("staff", data.token, data.expires_in || 28800);
+      setCampus(payload.campus);
+      return { ok: true, role: "staff" };
     }
+  }
 
-    // expected: { ok:true, role:"staff|parent", token, expires_in }
-    const role = String(data.role || "").toLowerCase();
-    const token = String(data.token || "");
-    const expiresIn = Number(data.expires_in || 28800); // default 8h
-
-    if (!token || (role !== "staff" && role !== "parent")) {
-      return { ok: false, error: "Invalid auth response (missing token/role)." };
+  {
+    const res = await fetch(AUTH_PARENT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await readJson(res);
+    if (res.ok && data.ok) {
+      setToken("parent", data.token, data.expires_in || 28800);
+      setCampus(payload.campus);
+      return { ok: true, role: "parent" };
     }
-
-    setCampus(cleanCampus);
-    setRole(role);
-
-    const until = now() + expiresIn * 1000;
-
-    if (role === "staff") {
-      localStorage.setItem(LS.staffToken, token);
-      localStorage.setItem(LS.staffUntil, String(until));
-      // clear parent token if any
-      localStorage.removeItem(LS.parentToken);
-      localStorage.removeItem(LS.parentUntil);
-    } else {
-      localStorage.setItem(LS.parentToken, token);
-      localStorage.setItem(LS.parentUntil, String(until));
-      // clear staff token if any
-      localStorage.removeItem(LS.staffToken);
-      localStorage.removeItem(LS.staffUntil);
-    }
-
-    // keep admin as-is (admin is separate)
-    return { ok: true };
   }
 
-  function logout() {
-    // clear user session
-    localStorage.removeItem(LS.role);
-    localStorage.removeItem(LS.staffToken);
-    localStorage.removeItem(LS.staffUntil);
-    localStorage.removeItem(LS.parentToken);
-    localStorage.removeItem(LS.parentUntil);
+  return { ok: false, error: "Invalid access code." };
+}
 
-    // keep campus? (your choice). I keep campus because it’s convenient.
-    // localStorage.removeItem(LS.campus);
+// -------------------------
+// Admin mode
+// -------------------------
+function openAdminModal() {
+  if (!adminModal) return;
+  adminModal.classList.remove("hidden");
+  adminModal.setAttribute("aria-hidden", "false");
+  setTimeout(() => adminPinInput?.focus(), 50);
+}
 
-    // also clear admin
-    localStorage.removeItem(LS.adminToken);
-    localStorage.removeItem(LS.adminUntil);
+function closeAdminModal() {
+  if (!adminModal) return;
+  adminModal.classList.add("hidden");
+  adminModal.setAttribute("aria-hidden", "true");
+  if (adminPinInput) adminPinInput.value = "";
+}
 
-    // UI
-    hide(headerActions);
-    hide(topMenuBar);
-    hide(chatScreen);
-    show(loginScreen);
+async function loginAdmin(pin) {
+  const res = await fetch(AUTH_ADMIN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin: String(pin || "").trim() })
+  });
+  const data = await readJson(res);
 
-    setText(loginError, "");
-    accessCodeInput.value = "";
-    setModeBadge();
-
-    closeMenuPanel();
-    closeAdminModal();
+  if (!res.ok || !data.ok) {
+    return { ok: false, error: data.error || "Admin PIN invalid." };
   }
 
-  // =============== ADMIN MODE ===============
-  async function adminLogin(pin) {
-    const cleanPin = String(pin || "").trim();
-    if (!cleanPin) return { ok: false, error: "PIN required." };
+  setToken("admin", data.token, data.expires_in || 28800);
+  return { ok: true };
+}
 
-    // Call worker directly through /api? or via action admin_auth.
-    // We'll send through /api for same-origin.
-    const { res, data } = await apiPost({
-      action: "admin_auth",
-      pin: cleanPin
-    });
+// -------------------------
+// Menu panel modal
+// -------------------------
+function openMenuPanel(title) {
+  if (!menuOverlay || !menuPanel) return;
+  menuPanelTitle.textContent = title || "Menu";
+  menuOverlay.classList.remove("hidden");
+  menuPanel.classList.remove("hidden");
+  menuPanel.setAttribute("aria-hidden", "false");
+}
 
-    if (!res.ok || !data.ok) {
-      return { ok: false, error: data.error || "Admin PIN invalid." };
-    }
+function closeMenuPanel() {
+  if (!menuOverlay || !menuPanel) return;
+  menuOverlay.classList.add("hidden");
+  menuPanel.classList.add("hidden");
+  menuPanel.setAttribute("aria-hidden", "true");
+  menuPanelBody.innerHTML = "";
+  CURRENT_MENU = null;
+  // Clear hash if it was handbook deep-link
+  // (keep if user wants shareable links; we only clear when user closes)
+  // window.location.hash = "";
+}
 
-    const token = String(data.token || "");
-    const expiresIn = Number(data.expires_in || 28800);
+// -------------------------
+// Handbook UI (Search + Accordion + Quick Ask + Copy Link)
+// -------------------------
+function parseHash() {
+  const h = String(window.location.hash || "").replace(/^#/, "");
+  const params = new URLSearchParams(h);
+  const hb = params.get("hb") || "";
+  const sec = params.get("sec") || "";
+  return { hb, sec };
+}
 
-    if (!token) return { ok: false, error: "Missing admin token." };
+function setHash(hbId, secKey) {
+  const params = new URLSearchParams();
+  if (hbId) params.set("hb", hbId);
+  if (secKey) params.set("sec", secKey);
+  window.location.hash = params.toString();
+}
 
-    localStorage.setItem(LS.adminToken, token);
-    localStorage.setItem(LS.adminUntil, String(now() + expiresIn * 1000));
+async function loadHandbooksForCampus(campus) {
+  const c = String(campus || "").toUpperCase();
+  if (!c) return [];
 
-    return { ok: true };
+  const url = `${HANDBOOKS_URL}?campus=${encodeURIComponent(c)}`;
+  const res = await authFetch(url, { method: "GET" });
+  const data = await readJson(res);
+
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || "Failed to load handbooks");
+  }
+  const list = Array.isArray(data.handbooks) ? data.handbooks : [];
+  return list;
+}
+
+function renderHandbookPanel(handbooks, campus) {
+  // Header + search
+  const campusTxt = escapeHtml(campus || "—");
+
+  menuPanelBody.innerHTML = `
+    <div class="menu-group-label">Parent Handbook (Campus-based)</div>
+    <div class="small muted" style="margin-bottom:10px;">
+      Current campus: <b>${campusTxt}</b>
+    </div>
+
+    <input id="hb-search" class="text-input" style="height:42px;border-radius:14px;margin-bottom:12px;"
+           placeholder="Search handbook titles or section titles…" />
+
+    <div id="hb-list"></div>
+
+    <div class="small muted" style="margin-top:10px;">
+      Tip: Use Search to quickly find a section, then Quick Ask to ask about it.
+    </div>
+  `;
+
+  const listEl = el("hb-list");
+  const searchEl = el("hb-search");
+
+  function matches(hb, q) {
+    if (!q) return true;
+    const hay = [
+      hb.title, hb.program, hb.campus,
+      ...(Array.isArray(hb.sections) ? hb.sections.map(s => s.title) : [])
+    ].join(" ").toLowerCase();
+    return hay.includes(q);
   }
 
-  // =============== MENU DATA LOADERS ===============
-  async function loadPoliciesList() {
-    // Worker should respond: { ok:true, items:[{id,title,summary,link,keywords?}, ...] }
-    const campus = getCampus();
-    const role = getRole(); // staff/parent
-    const token = role === "parent" ? (localStorage.getItem(LS.parentToken) || "") : (localStorage.getItem(LS.staffToken) || "");
+  function buildAccordionHTML(hb) {
+    const hbId = hb.id || "";
+    const sections = Array.isArray(hb.sections) ? hb.sections : [];
+    const secHtml = sections.map((s, idx) => {
+      const secKey = s.key || `sec_${idx}`;
+      const title = escapeHtml(s.title || secKey);
+      const content = escapeHtml(s.content || "");
 
-    const { res, data } = await apiPost({
-      action: "list",
-      source: "policy",
-      campus,
-      token,
-      role
-    });
+      return `
+        <div class="acc-item" data-hb="${escapeHtml(hbId)}" data-sec="${escapeHtml(secKey)}" style="border:1px solid var(--line);border-radius:14px;margin-top:10px;overflow:hidden;">
+          <button class="acc-header" type="button"
+            style="width:100%;text-align:left;padding:12px 12px;background:#f7f9fe;border:0;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
+            <span>${title}</span>
+            <span class="muted" style="font-weight:900;">+</span>
+          </button>
 
-    if (!res.ok || !data.ok) throw new Error(data.error || "Failed to load policies.");
-    return Array.isArray(data.items) ? data.items : [];
-  }
+          <div class="acc-body" style="display:none;padding:12px 12px;background:#fff;">
+            <div style="white-space:pre-wrap;line-height:1.4;">${content}</div>
 
-  async function loadProtocolsList() {
-    const campus = getCampus();
-    const role = getRole();
-    const token = role === "parent" ? (localStorage.getItem(LS.parentToken) || "") : (localStorage.getItem(LS.staffToken) || "");
-
-    const { res, data } = await apiPost({
-      action: "list",
-      source: "protocol",
-      campus,
-      token,
-      role
-    });
-
-    if (!res.ok || !data.ok) throw new Error(data.error || "Failed to load protocols.");
-    return Array.isArray(data.items) ? data.items : [];
-  }
-
-  async function loadHandbooks() {
-    const campus = getCampus();
-    const role = getRole();
-    const token = role === "parent" ? (localStorage.getItem(LS.parentToken) || "") : (localStorage.getItem(LS.staffToken) || "");
-
-    const { res, data } = await apiPost({
-      action: "handbooks",
-      campus,
-      token,
-      role
-    });
-
-    if (!res.ok || !data.ok) throw new Error(data.error || "Failed to load handbooks.");
-    return Array.isArray(data.items) ? data.items : [];
-  }
-
-  async function loadHandbookById(handbookId) {
-    const campus = getCampus();
-    const role = getRole();
-    const token = role === "parent" ? (localStorage.getItem(LS.parentToken) || "") : (localStorage.getItem(LS.staffToken) || "");
-
-    const { res, data } = await apiPost({
-      action: "handbook_get",
-      campus,
-      handbook_id: handbookId,
-      token,
-      role
-    });
-
-    if (!res.ok || !data.ok) throw new Error(data.error || "Failed to load handbook.");
-    return data.handbook || null;
-  }
-
-  // =============== RENDER: POLICIES / PROTOCOLS ===============
-  function renderListItems(title, items, type) {
-    openMenuPanel(title);
-
-    if (!items.length) {
-      menuPanelBody.innerHTML = `<div class="muted" style="font-weight:800">No items found.</div>`;
-      return;
-    }
-
-    menuPanelBody.innerHTML = items
-      .map((it) => {
-        const t = it.title || it.name || it.id || "Untitled";
-        const sum = it.summary || it.description || "";
-        const link = it.link || it.url || "";
-        const id = it.id || "";
-
-        return `
-          <div class="hb-card">
-            <div class="hb-title">${esc(t)}</div>
-            ${sum ? `<div class="hb-meta">${esc(sum)}</div>` : ""}
-            <div class="hb-open-row">
-              <button class="hb-open-btn" data-open-doc="${esc(id)}" data-doc-type="${esc(type)}">Open sections</button>
-              ${link ? `<a class="hb-open-btn" href="${esc(link)}" target="_blank" rel="noreferrer">Open full document</a>` : ""}
-              <button class="hb-open-btn" data-ask="${esc(t)}">Ask about this</button>
+            <div class="acc-actions" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+              <button class="pill-btn acc-quickask" type="button" data-hb="${escapeHtml(hbId)}" data-sec="${escapeHtml(secKey)}" data-title="${title}">
+                Quick Ask
+              </button>
+              <button class="pill-btn acc-copylink" type="button" data-hb="${escapeHtml(hbId)}" data-sec="${escapeHtml(secKey)}">
+                Copy Link
+              </button>
             </div>
           </div>
-        `;
-      })
-      .join("");
-
-    // handlers
-    menuPanelBody.querySelectorAll("[data-ask]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const t = btn.getAttribute("data-ask") || "";
-        closeMenuPanel();
-        userInput.value = `Summarize ${t} for ${getCampus()} campus.`;
-        userInput.focus();
-      });
-    });
-
-    // If your worker supports "doc sections", we can request on click:
-    menuPanelBody.querySelectorAll("[data-open-doc]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const id = btn.getAttribute("data-open-doc") || "";
-        const docType = btn.getAttribute("data-doc-type") || type;
-
-        btn.disabled = true;
-        btn.textContent = "Loading…";
-
-        try {
-          const campus = getCampus();
-          const role = getRole();
-          const token =
-            role === "parent"
-              ? localStorage.getItem(LS.parentToken) || ""
-              : localStorage.getItem(LS.staffToken) || "";
-
-          const { res, data } = await apiPost({
-            action: "doc_sections",
-            doc_type: docType,
-            doc_id: id,
-            campus,
-            token,
-            role
-          });
-
-          if (!res.ok || !data.ok) throw new Error(data.error || "Failed to load sections.");
-
-          const sections = Array.isArray(data.sections) ? data.sections : [];
-          renderDocSections(title, sections, docType, id, data.doc || null);
-        } catch (e) {
-          alert(e?.message || "Error");
-        } finally {
-          btn.disabled = false;
-          btn.textContent = "Open sections";
-        }
-      });
-    });
-  }
-
-  function renderDocSections(title, sections, docType, docId, docObj) {
-    // docObj may contain title/link
-    const docTitle = docObj?.title || title;
-    const docLink = docObj?.link || "";
-
-    openMenuPanel(docTitle);
-
-    const secHtml = sections
-      .map((s) => {
-        const k = s.key || s.id || "";
-        const st = s.title || k || "Section";
-        const preview = s.preview || s.summary || s.content || "";
-        const snippet = String(preview).slice(0, 180);
-
-        return `
-          <button class="hb-open-sec" data-doc-sec="${esc(k)}" data-doc-type="${esc(docType)}" data-doc-id="${esc(docId)}">
-            ${esc(st)}
-            ${snippet ? `<div class="muted" style="font-weight:700;margin-top:6px">${esc(snippet)}${preview.length>180 ? "…" : ""}</div>` : ""}
-          </button>
-        `;
-      })
-      .join("");
-
-    menuPanelBody.innerHTML = `
-      <div class="hb-preview">
-        <div class="hb-preview-title">${esc(docTitle)}</div>
-        <div class="muted" style="font-weight:800;margin-top:6px">Select a section to preview. You can also ask in chat.</div>
-        <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
-          ${docLink ? `<a class="hb-copy-btn" href="${esc(docLink)}" target="_blank" rel="noreferrer">Open full document</a>` : ""}
-          <button class="hb-copy-btn" id="askDocBtn">Ask about this document</button>
-        </div>
-      </div>
-
-      <div style="margin-top:12px; display:grid; gap:10px;">
-        ${secHtml || `<div class="muted" style="font-weight:800">No sections found.</div>`}
-      </div>
-
-      <div id="docPreview" class="hb-preview" style="margin-top:14px; display:none;"></div>
-    `;
-
-    const askDocBtn = document.getElementById("askDocBtn");
-    askDocBtn?.addEventListener("click", () => {
-      closeMenuPanel();
-      userInput.value = `Explain ${docTitle} for ${getCampus()} campus.`;
-      userInput.focus();
-    });
-
-    const previewBox = document.getElementById("docPreview");
-
-    menuPanelBody.querySelectorAll("[data-doc-sec]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const secKey = btn.getAttribute("data-doc-sec") || "";
-        const docType2 = btn.getAttribute("data-doc-type") || docType;
-        const docId2 = btn.getAttribute("data-doc-id") || docId;
-
-        btn.disabled = true;
-
-        try {
-          const campus = getCampus();
-          const role = getRole();
-          const token =
-            role === "parent"
-              ? localStorage.getItem(LS.parentToken) || ""
-              : localStorage.getItem(LS.staffToken) || "";
-
-          const { res, data } = await apiPost({
-            action: "doc_section_get",
-            doc_type: docType2,
-            doc_id: docId2,
-            section_key: secKey,
-            campus,
-            token,
-            role
-          });
-
-          if (!res.ok || !data.ok) throw new Error(data.error || "Failed to load section.");
-
-          const secTitle = data.section?.title || secKey;
-          const content = data.section?.content || "";
-
-          previewBox.style.display = "block";
-          previewBox.innerHTML = `
-            <div class="hb-preview-title">${esc(secTitle)}</div>
-            <div class="hb-preview-text" style="margin-top:10px; white-space:pre-wrap;">${esc(content)}</div>
-
-            <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-              <button class="hb-copy-btn" id="copySecBtn">Copy</button>
-              <button class="hb-copy-btn" id="askSecBtn">Ask about this section</button>
-            </div>
-          `;
-
-          document.getElementById("copySecBtn")?.addEventListener("click", async () => {
-            try {
-              await navigator.clipboard.writeText(`${secTitle}\n\n${content}`);
-              alert("Copied!");
-            } catch {
-              alert("Copy failed (browser permission).");
-            }
-          });
-
-          document.getElementById("askSecBtn")?.addEventListener("click", () => {
-            closeMenuPanel();
-            userInput.value = `Based on "${secTitle}", answer: `;
-            userInput.focus();
-          });
-
-        } catch (e) {
-          alert(e?.message || "Error");
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    });
-  }
-
-  // =============== RENDER: HANDBOOK (MODERN) ===============
-  function renderHandbookPicker(handbooks) {
-    openMenuPanel("Parent Handbook");
-
-    const campus = getCampus() || "—";
-
-    if (!handbooks.length) {
-      menuPanelBody.innerHTML = `
-        <div class="hb-preview">
-          <div class="hb-preview-title">Parent Handbook (Campus-based)</div>
-          <div class="muted" style="font-weight:800;margin-top:6px">Current campus: ${esc(campus)}</div>
-          <div class="muted" style="font-weight:800;margin-top:10px">No handbooks found for this campus.</div>
         </div>
       `;
+    }).join("");
+
+    return `
+      <div class="hb-card">
+        <div class="hb-title">${escapeHtml(hb.title || "Handbook")}</div>
+        <div class="hb-meta">Program: <b>${escapeHtml(hb.program || "—")}</b></div>
+
+        <div style="margin-top:10px;">
+          ${secHtml || `<div class="small muted">No sections found in this handbook.</div>`}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderList(query = "") {
+    const q = String(query || "").trim().toLowerCase();
+    const filtered = handbooks.filter(hb => matches(hb, q));
+
+    listEl.innerHTML = filtered.length
+      ? filtered.map(buildAccordionHTML).join("")
+      : `<div class="small muted">No matching handbooks / sections.</div>`;
+
+    wireAccordionHandlers();
+  }
+
+  function wireAccordionHandlers() {
+    // Toggle accordion
+    qsa(".acc-header").forEach((btn) => {
+      btn.onclick = () => {
+        const item = btn.closest(".acc-item");
+        const body = item?.querySelector(".acc-body");
+        const plus = btn.querySelector("span.muted");
+        const isOpen = body && body.style.display !== "none";
+
+        // Close others inside same handbook card? (optional)
+        // We'll allow multiple open.
+        if (body) body.style.display = isOpen ? "none" : "block";
+        if (plus) plus.textContent = isOpen ? "+" : "–";
+
+        // Update hash when opening
+        if (!isOpen && item) {
+          const hbId = item.getAttribute("data-hb") || "";
+          const secKey = item.getAttribute("data-sec") || "";
+          setHash(hbId, secKey);
+        }
+      };
+    });
+
+    // Quick Ask
+    qsa(".acc-quickask").forEach((btn) => {
+      btn.onclick = async () => {
+        const hbId = btn.getAttribute("data-hb") || "";
+        const secKey = btn.getAttribute("data-sec") || "";
+        const title = btn.getAttribute("data-title") || "this section";
+
+        closeMenuPanel();
+        showScreens(true);
+
+        // Auto question template
+        const campus = getCampus();
+        const q = `Please summarize "${title}" for campus ${campus} and highlight key rules.`;
+        userInput.value = q;
+        await sendChat(q, { handbook_id: hbId, section_key: secKey });
+      };
+    });
+
+    // Copy Link
+    qsa(".acc-copylink").forEach((btn) => {
+      btn.onclick = async () => {
+        const hbId = btn.getAttribute("data-hb") || "";
+        const secKey = btn.getAttribute("data-sec") || "";
+        setHash(hbId, secKey);
+
+        const url = window.location.href;
+        try {
+          await navigator.clipboard.writeText(url);
+          btn.textContent = "Copied ✅";
+          setTimeout(() => (btn.textContent = "Copy Link"), 1200);
+        } catch {
+          // Fallback
+          prompt("Copy this link:", url);
+        }
+      };
+    });
+  }
+
+  // Search
+  searchEl?.addEventListener("input", () => renderList(searchEl.value));
+
+  renderList("");
+
+  // If hash has hb/sec -> open that section
+  const { hb, sec } = parseHash();
+  if (hb && sec) {
+    // small delay so HTML exists
+    setTimeout(() => {
+      const target = qs(`.acc-item[data-hb="${CSS.escape(hb)}"][data-sec="${CSS.escape(sec)}"]`);
+      const header = target?.querySelector(".acc-header");
+      header?.click();
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+  }
+}
+
+async function openHandbookMenu() {
+  const campus = getCampus();
+  if (!campus) {
+    openMenuPanel("Parent Handbook");
+    menuPanelBody.innerHTML = `<div class="small" style="color:var(--danger);font-weight:800;">Select a campus first.</div>`;
+    return;
+  }
+
+  openMenuPanel("Parent Handbook");
+  menuPanelBody.innerHTML = `<div class="small muted">Loading handbooks…</div>`;
+
+  try {
+    HANDBOOK_CACHE = await loadHandbooksForCampus(campus);
+    renderHandbookPanel(HANDBOOK_CACHE, campus);
+  } catch (e) {
+    menuPanelBody.innerHTML = `
+      <div class="small" style="color:var(--danger);font-weight:900;">Error</div>
+      <div class="small muted" style="margin-top:6px;">${escapeHtml(e?.message || "Failed to load handbooks")}</div>
+    `;
+  }
+}
+
+// -------------------------
+// Policies / Protocols (list UI)
+// -------------------------
+async function openSimpleListMenu(kind) {
+  const campus = getCampus();
+  openMenuPanel(kind === "policies" ? "Policies" : "Protocols");
+  menuPanelBody.innerHTML = `<div class="small muted">Loading…</div>`;
+
+  const url = (kind === "policies" ? POLICIES_LIST_URL : PROTOCOLS_LIST_URL) + `?campus=${encodeURIComponent(campus || "")}`;
+
+  try {
+    const res = await authFetch(url, { method: "GET" });
+    const data = await readJson(res);
+
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || "Unauthorized (staff token required)");
+    }
+
+    const items = Array.isArray(data.items) ? data.items : Array.isArray(data.docs) ? data.docs : [];
+
+    if (!items.length) {
+      menuPanelBody.innerHTML = `<div class="small muted">No items found.</div>`;
       return;
     }
 
     menuPanelBody.innerHTML = `
-      <div class="hb-preview">
-        <div class="hb-preview-title">Parent Handbook (Campus-based)</div>
-        <div class="muted" style="font-weight:800;margin-top:6px">Current campus: ${esc(campus)}</div>
-        <div class="muted" style="font-weight:800;margin-top:6px">Select a handbook to view sections:</div>
-      </div>
-
-      <div id="hbList" style="display:grid; gap:10px; margin-top:12px;"></div>
-
-      <div id="hbSectionsWrap" class="hb-preview" style="display:none; margin-top:14px;"></div>
-      <div id="hbPreviewWrap" class="hb-preview" style="display:none; margin-top:14px;"></div>
+      <div class="menu-group-label">Select an item</div>
+      ${items.map((it, idx) => {
+        const title = escapeHtml(it.title || it.name || `Item ${idx+1}`);
+        const id = escapeHtml(it.id || it.doc_id || "");
+        const link = escapeHtml(it.link || it.url || "");
+        return `
+          <button class="menu-item-btn" type="button" data-doc="${id}" data-link="${link}">
+            ${title}
+          </button>
+        `;
+      }).join("")}
+      <div class="small muted" style="margin-top:10px;">Click an item to ask about it.</div>
     `;
 
-    const hbList = document.getElementById("hbList");
-    const sectionsWrap = document.getElementById("hbSectionsWrap");
-    const previewWrap = document.getElementById("hbPreviewWrap");
-
-    hbList.innerHTML = handbooks
-      .map((hb, i) => {
-        const title = hb.title || hb.name || hb.id || `Handbook ${i + 1}`;
-        const prog = hb.program || hb.program_name || "";
-        const link = hb.link || "";
-        return `
-          <div class="hb-item" data-hb-id="${esc(hb.id)}">
-            <div style="font-weight:900">${esc(title)}</div>
-            <div class="muted" style="font-weight:800; margin-top:4px">${esc(prog)}</div>
-            ${link ? `<div class="muted" style="font-weight:800; margin-top:4px">Has full link</div>` : ""}
-          </div>
-        `;
-      })
-      .join("");
-
-    hbList.querySelectorAll("[data-hb-id]").forEach((card) => {
-      card.addEventListener("click", async () => {
-        hbList.querySelectorAll(".hb-item").forEach((x) => x.classList.remove("active"));
-        card.classList.add("active");
-
-        const hbId = card.getAttribute("data-hb-id") || "";
-        sectionsWrap.style.display = "block";
-        sectionsWrap.innerHTML = `<div class="muted" style="font-weight:900">Loading sections…</div>`;
-        previewWrap.style.display = "none";
-        previewWrap.innerHTML = "";
-
-        try {
-          const hbObj = await loadHandbookById(hbId);
-          const hbTitle = hbObj?.title || hbId;
-          const hbLink = hbObj?.link || "";
-
-          const sections = Array.isArray(hbObj?.sections) ? hbObj.sections : [];
-
-          sectionsWrap.innerHTML = `
-            <div class="hb-preview-title">${esc(hbTitle)}</div>
-            <div class="muted" style="font-weight:800;margin-top:6px">Choose a section to preview:</div>
-
-            <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
-              ${hbLink ? `<a class="hb-copy-btn" href="${esc(hbLink)}" target="_blank" rel="noreferrer">Open full document</a>` : ""}
-              <button class="hb-copy-btn" id="askHbBtn">Ask about this handbook</button>
-            </div>
-
-            <div style="margin-top:12px; display:grid; gap:10px;">
-              ${
-                sections
-                  .map((s) => {
-                    const key = s.key || "";
-                    const st = s.title || key || "Section";
-                    const snippet = String(s.content || "").slice(0, 140);
-                    return `
-                      <button class="hb-open-sec" data-hb-sec="${esc(key)}" data-hb-id="${esc(hbId)}">
-                        ${esc(st)}
-                        ${snippet ? `<div class="muted" style="font-weight:700;margin-top:6px">${esc(snippet)}${(s.content||"").length>140?"…":""}</div>` : ""}
-                      </button>
-                    `;
-                  })
-                  .join("") || `<div class="muted" style="font-weight:800">No sections found.</div>`
-              }
-            </div>
-          `;
-
-          document.getElementById("askHbBtn")?.addEventListener("click", () => {
-            closeMenuPanel();
-            userInput.value = `Summarize the ${hbTitle} for ${getCampus()} campus.`;
-            userInput.focus();
-          });
-
-          sectionsWrap.querySelectorAll("[data-hb-sec]").forEach((btn) => {
-            btn.addEventListener("click", () => {
-              const key = btn.getAttribute("data-hb-sec") || "";
-              const sec = sections.find((x) => String(x.key) === String(key));
-              const secTitle = sec?.title || key;
-              const content = sec?.content || "";
-
-              previewWrap.style.display = "block";
-              previewWrap.innerHTML = `
-                <div class="hb-preview-title">${esc(secTitle)}</div>
-                <div class="hb-preview-text" style="margin-top:10px; white-space:pre-wrap;">${esc(content)}</div>
-
-                <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-                  <button class="hb-copy-btn" id="copyHbSecBtn">Copy</button>
-                  <button class="hb-copy-btn" id="askHbSecBtn">Ask about this section</button>
-                </div>
-              `;
-
-              document.getElementById("copyHbSecBtn")?.addEventListener("click", async () => {
-                try {
-                  await navigator.clipboard.writeText(`${secTitle}\n\n${content}`);
-                  alert("Copied!");
-                } catch {
-                  alert("Copy failed (browser permission).");
-                }
-              });
-
-              document.getElementById("askHbSecBtn")?.addEventListener("click", () => {
-                closeMenuPanel();
-                userInput.value = `Based on "${secTitle}", answer: `;
-                userInput.focus();
-              });
-            });
-          });
-
-        } catch (e) {
-          sectionsWrap.innerHTML = `<div class="muted" style="font-weight:900;color:#b91c1c">${esc(e?.message || "Error")}</div>`;
-        }
-      });
+    qsa(".menu-item-btn").forEach((btn) => {
+      btn.onclick = () => {
+        const title = btn.textContent.trim();
+        closeMenuPanel();
+        showScreens(true);
+        const q = `Tell me the key points from "${title}" for campus ${getCampus()}.`;
+        userInput.value = q;
+        sendChat(q, { source_title: title, source_kind: kind });
+      };
     });
+  } catch (e) {
+    menuPanelBody.innerHTML = `
+      <div class="small" style="color:var(--danger);font-weight:900;">Error</div>
+      <div class="small muted" style="margin-top:6px;">${escapeHtml(e?.message || "Failed")}</div>
+      <div class="small muted" style="margin-top:10px;">
+        If you are logged in as Parent, Policies/Protocols are hidden. If you still see this, refresh.
+      </div>
+    `;
+  }
+}
+
+// -------------------------
+// Chat send
+// -------------------------
+async function sendChat(question, meta = {}) {
+  const q = String(question || "").trim();
+  if (!q) return;
+
+  // Require logged in token for staff/parent/admin
+  const active = getActiveToken();
+  if (!active.token) {
+    showScreens(false);
+    setLoginError("Please login first.");
+    return;
   }
 
-  // =============== CHAT SEND ===============
-  async function askQuestion(q) {
-    const question = String(q || "").trim();
-    if (!question) return;
+  addMsg("user", q);
+  const typing = addTyping();
 
-    const campus = getCampus();
-    const role = getRole();
+  const payload = {
+    query: q,
+    campus: getCampus(),
+    role: getRole() || active.role || "staff",
+    ...meta
+  };
 
-    if (!campus) {
-      alert("Please select a campus first.");
+  try {
+    const res = await authFetch(API_PROXY, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    const data = await readJson(res);
+
+    typing?.remove?.();
+
+    if (!res.ok || !data.ok) {
+      // common worker error
+      const msg = data.error || `Request failed (${res.status})`;
+      addMsg("assistant", msg);
+
+      // if token invalid, push back to login
+      if (res.status === 401) {
+        addMsg("assistant", "Session expired. Please login again.");
+        clearSession();
+        applyRoleUI();
+        showScreens(false);
+      }
       return;
     }
 
-    const token =
-      role === "parent"
-        ? localStorage.getItem(LS.parentToken) || ""
-        : localStorage.getItem(LS.staffToken) || "";
+    addMsg("assistant", data.answer || data.text || "OK");
+  } catch (e) {
+    typing?.remove?.();
+    addMsg("assistant", e?.message || "Network error");
+  }
+}
 
-    pushMsg("user", esc(question));
-    showTyping();
+// -------------------------
+// Events
+// -------------------------
+loginForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setLoginError("");
 
-    try {
-      const { res, data } = await apiPost({
-        action: "ask",
-        campus,
-        role,
-        token,
-        query: question
-      });
+  const code = accessCode?.value || "";
+  const campus = campusSelect?.value || "";
 
-      hideTyping();
-
-      if (!res.ok || !data.ok) {
-        pushMsg("assistant", `<b style="color:#b91c1c">Error:</b> ${esc(data.error || "Request failed")}`);
-        return;
-      }
-
-      const answer = data.answer || data.response || "Done.";
-      const link = data.link || data.source_link || "";
-      const title = data.title || data.source_title || "";
-
-      let html = `<div style="white-space:pre-wrap">${esc(answer)}</div>`;
-      if (link) {
-        html += `<div style="margin-top:10px"><a href="${esc(link)}" target="_blank" rel="noreferrer">Open full document</a>${title ? ` <span class="muted" style="font-weight:800">(${esc(title)})</span>` : ""}</div>`;
-      }
-      pushMsg("assistant", html);
-
-    } catch (e) {
-      hideTyping();
-      pushMsg("assistant", `<b style="color:#b91c1c">Network error:</b> ${esc(e?.message || "Failed")}`);
-    }
+  if (!campus) {
+    setLoginError("Please select a campus.");
+    return;
+  }
+  if (!code.trim()) {
+    setLoginError("Please enter your access code.");
+    return;
   }
 
-  // =============== UI STATE ===============
-  function enterApp() {
-    // show chat + controls
-    hide(loginScreen);
-    show(chatScreen);
-    show(headerActions);
-    show(topMenuBar);
+  // Optional: show loading UI
+  const btn = loginForm.querySelector('button[type="submit"]');
+  const oldText = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = "Logging in…"; }
 
-    // campus dropdowns
-    const c = getCampus();
-    if (campusSwitch && c) campusSwitch.value = c;
-    if (campusSelect && c) campusSelect.value = c;
-
-    setModeBadge();
-  }
-
-  function enterLogin() {
-    show(loginScreen);
-    hide(chatScreen);
-    hide(headerActions);
-    hide(topMenuBar);
-    setModeBadge();
-  }
-
-  function validateSessionOrLogout() {
-    const role = getRole();
-
-    const ok =
-      (role === "staff" && isStaffActive()) ||
-      (role === "parent" && isParentActive());
-
-    if (!ok) {
-      enterLogin();
-      return false;
+  try {
+    const out = await loginWithCode(code, campus);
+    if (!out.ok) {
+      setLoginError(out.error || "Login failed.");
+      return;
     }
-    return true;
-  }
 
-  // =============== EVENTS ===============
-  loginForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    setText(loginError, "");
+    // Success
+    setLoginError("");
+    accessCode.value = "";
 
-    const code = accessCodeInput.value;
-    const campus = campusSelect.value;
+    showScreens(true);
+    applyRoleUI();
 
-    try {
-      const r = await doLogin(code, campus);
-      if (!r.ok) {
-        setText(loginError, r.error || "Login failed.");
-        return;
-      }
-      enterApp();
-      pushMsg("assistant", `Hi! ✅ Logged in as <b>${esc(getRole().toUpperCase())}</b> for campus <b>${esc(getCampus())}</b>. How can I help?`);
-    } catch (err) {
-      setText(loginError, err?.message || "Login failed.");
-    }
-  });
-
-  campusSelect?.addEventListener("change", () => {
-    setCampus(campusSelect.value);
-  });
-
-  campusSwitch?.addEventListener("change", () => {
-    setCampus(campusSwitch.value);
-  });
-
-  logoutBtn?.addEventListener("click", () => logout());
-
-  chatForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const q = userInput.value;
-    userInput.value = "";
-    await askQuestion(q);
-  });
-
-  // top menu buttons
-  document.querySelectorAll(".menu-pill").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const menu = btn.getAttribute("data-menu") || "";
-      localStorage.setItem(LS.lastMenu, menu);
-      setActiveMenuPill(menu);
-
-      try {
-        if (!validateSessionOrLogout()) return;
-
-        if (menu === "policies") {
-          openMenuPanel("Policies");
-          menuPanelBody.innerHTML = `<div class="muted" style="font-weight:900">Loading…</div>`;
-          const items = await loadPoliciesList();
-          renderListItems("Policies", items, "policy");
-        }
-
-        if (menu === "protocols") {
-          openMenuPanel("Protocols");
-          menuPanelBody.innerHTML = `<div class="muted" style="font-weight:900">Loading…</div>`;
-          const items = await loadProtocolsList();
-          renderListItems("Protocols", items, "protocol");
-        }
-
-        if (menu === "handbook") {
-          openMenuPanel("Parent Handbook");
-          menuPanelBody.innerHTML = `<div class="muted" style="font-weight:900">Loading…</div>`;
-          const items = await loadHandbooks();
-          renderHandbookPicker(items);
-        }
-      } catch (e) {
-        openMenuPanel("Error");
-        menuPanelBody.innerHTML = `<div class="muted" style="font-weight:900;color:#b91c1c">${esc(e?.message || "Failed")}</div>`;
-      }
-    });
-  });
-
-  // menu panel close
-  menuOverlay?.addEventListener("click", closeMenuPanel);
-  menuPanelClose?.addEventListener("click", closeMenuPanel);
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      closeMenuPanel();
-      closeAdminModal();
-    }
-  });
-
-  // Admin button (header)
-  adminModeBtn?.addEventListener("click", () => {
-    openAdminModal();
-  });
-
-  // Admin login button (on login screen)
-  loginAdminBtn?.addEventListener("click", () => {
-    openAdminModal();
-  });
-
-  adminPinCancel?.addEventListener("click", closeAdminModal);
-
-  adminPinSubmit?.addEventListener("click", async () => {
-    try {
-      const pin = adminPinInput.value;
-      const r = await adminLogin(pin);
-      if (!r.ok) {
-        alert(r.error || "Admin login failed");
-        return;
-      }
-      closeAdminModal();
-      setModeBadge();
-      alert("Admin mode enabled ✅");
-    } catch (e) {
-      alert(e?.message || "Admin login failed");
-    }
-  });
-
-  // =============== INIT ===============
-  function initCampusSelects() {
-    // Ensure campus lists have values
-    if (campusSelect && campusSelect.options.length <= 1) {
-      CAMPUSES.forEach((c) => {
-        const opt = document.createElement("option");
-        opt.value = c;
-        opt.textContent = c;
-        campusSelect.appendChild(opt);
-      });
-    }
-    if (campusSwitch && campusSwitch.options.length <= 1) {
-      CAMPUSES.forEach((c) => {
-        const opt = document.createElement("option");
-        opt.value = c;
-        opt.textContent = c;
-        campusSwitch.appendChild(opt);
-      });
-    }
-  }
-
-  function init() {
-    initCampusSelects();
-
-    // default campus if missing (optional)
-    if (!getCampus()) setCampus("MC");
-
-    // session check
-    const role = getRole();
-    const loggedIn =
-      (role === "staff" && isStaffActive()) ||
-      (role === "parent" && isParentActive());
-
-    if (loggedIn) {
-      enterApp();
-      setActiveMenuPill(localStorage.getItem(LS.lastMenu) || "");
+    // Default menu after login:
+    if (getRole() === "parent" && !isTokenActive("admin")) {
+      setActiveMenuPill("handbook");
+      await openHandbookMenu();
     } else {
-      enterLogin();
+      setActiveMenuPill("policies");
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText || "Login"; }
+  }
+});
+
+chatForm?.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = userInput?.value || "";
+  userInput.value = "";
+  sendChat(q);
+});
+
+logoutBtn?.addEventListener("click", () => {
+  clearSession();
+  applyRoleUI();
+  showScreens(false);
+  setLoginError("");
+  closeMenuPanel();
+});
+
+campusSwitch?.addEventListener("change", async () => {
+  setCampus(campusSwitch.value);
+  // If handbook menu is open, refresh it for new campus
+  if (!menuPanel?.classList.contains("hidden") && CURRENT_MENU === "handbook") {
+    await openHandbookMenu();
+  }
+});
+
+adminModeBtn?.addEventListener("click", () => {
+  openAdminModal();
+});
+
+adminPinCancel?.addEventListener("click", () => {
+  closeAdminModal();
+});
+
+adminPinSubmit?.addEventListener("click", async () => {
+  const pin = adminPinInput?.value || "";
+  if (!pin.trim()) return;
+
+  adminPinSubmit.disabled = true;
+  const old = adminPinSubmit.textContent;
+  adminPinSubmit.textContent = "Checking…";
+
+  try {
+    const out = await loginAdmin(pin);
+    if (!out.ok) {
+      alert(out.error || "Admin PIN invalid.");
+      return;
+    }
+    closeAdminModal();
+    applyRoleUI();
+    alert("Admin mode enabled ✅");
+  } finally {
+    adminPinSubmit.disabled = false;
+    adminPinSubmit.textContent = old || "Submit";
+  }
+});
+
+loginAdminBtn?.addEventListener("click", () => {
+  openAdminModal();
+});
+
+menuOverlay?.addEventListener("click", closeMenuPanel);
+menuPanelClose?.addEventListener("click", closeMenuPanel);
+
+// Menu pills click
+qsa(".menu-pill").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const menu = btn.getAttribute("data-menu");
+    if (!menu) return;
+
+    // Role gating: Parent should only open handbook (unless admin token active)
+    const parentOnly = getRole() === "parent" && !isTokenActive("admin");
+    if (parentOnly && (menu === "policies" || menu === "protocols")) {
+      // just ignore (and keep active on handbook)
+      setActiveMenuPill("handbook");
+      await openHandbookMenu();
+      return;
     }
 
-    setModeBadge();
+    CURRENT_MENU = menu;
+    setActiveMenuPill(menu);
+
+    if (menu === "handbook") {
+      await openHandbookMenu();
+    } else if (menu === "policies") {
+      await openSimpleListMenu("policies");
+    } else if (menu === "protocols") {
+      await openSimpleListMenu("protocols");
+    }
+  });
+});
+
+// -------------------------
+// Init
+// -------------------------
+(function init() {
+  // Sync campus from storage
+  const savedCampus = (localStorage.getItem(LS.campus) || "").toUpperCase();
+  if (savedCampus) setCampus(savedCampus);
+
+  // If any active token -> show app
+  const active = getActiveToken();
+  if (active.token) {
+    // if user logged in previously as staff/parent but admin now active, keep role as stored
+    showScreens(true);
+  } else {
+    showScreens(false);
   }
 
-  init();
+  applyRoleUI();
+
+  // If deep link hash points to handbook section -> open handbook menu
+  const { hb, sec } = parseHash();
+  if (hb || sec) {
+    // Only open if logged in
+    if (active.token) {
+      setActiveMenuPill("handbook");
+      CURRENT_MENU = "handbook";
+      openHandbookMenu();
+    }
+  }
 })();
