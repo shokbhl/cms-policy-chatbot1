@@ -1,17 +1,25 @@
-// logs.js
+// logs.js (MATCHED WITH logs.html IDs)
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
-const LOGS_URL = `${WORKER_BASE}/admin/logs`;
+const LOGS_URL = `${WORKER_BASE}/admin/logs?limit=200`;
 
 const LS = {
-  adminToken: "cms_admin_token"
+  adminToken: "cms_admin_token",
+  adminUntil: "cms_admin_until"
 };
 
+// ================= HELPERS =================
 function getAdminToken() {
   return localStorage.getItem(LS.adminToken) || "";
 }
 
-function escapeHtml(s) {
-  return String(s || "")
+function isAdminActive() {
+  const token = localStorage.getItem(LS.adminToken);
+  const until = Number(localStorage.getItem(LS.adminUntil) || "0");
+  return !!token && Date.now() < until;
+}
+
+function esc(s) {
+  return String(s ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -19,143 +27,202 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
-async function fetchLogs(limit = 200) {
-  const token = getAdminToken();
-  const res = await fetch(`${LOGS_URL}?limit=${limit}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.ok) throw new Error(data.error || "Failed to load logs");
-  return data.logs || [];
+function fmtTime(ts) {
+  const d = new Date(Number(ts || 0));
+  return Number.isNaN(d.getTime()) ? "–" : d.toLocaleString();
 }
 
-// ---- UI refs (adjust ids to your file) ----
-const roleSelect = document.getElementById("role-filter");     // <select>
-const campusSelect = document.getElementById("campus-filter"); // <select>
-const searchInput = document.getElementById("search-input");   // <input>
-const tableBody = document.getElementById("logs-tbody");       // <tbody>
-const refreshBtn = document.getElementById("refresh-btn");     // <button>
+// ================= DOM =================
+const tbody = document.getElementById("tbody");
+const statusText = document.getElementById("statusText");
+const countPill = document.getElementById("countPill");
+const errorBox = document.getElementById("errorBox");
 
+const searchInput = document.getElementById("searchInput");
+const campusSelect = document.getElementById("campusSelect");
+const roleSelect = document.getElementById("roleSelect");
+const onlyErrors = document.getElementById("onlyErrors");
+const refreshBtn = document.getElementById("refreshBtn");
+
+// ================= STATE =================
 let ALL_LOGS = [];
 
-function normalizeRole(r) {
-  const x = String(r || "").trim().toLowerCase();
-  return x || "unknown";
+// ================= NORMALIZERS =================
+function normalizeRole(l) {
+  const r = (l.user_role || l.role || "").trim().toLowerCase();
+  return r || "unknown";
 }
 
+function normalizeSourceType(l) {
+  return (l.source_type || "").trim().toLowerCase() || "unknown";
+}
+
+function normalizeTitle(l) {
+  return (l.handbook_title || l.source_title || l.source_id || "").trim();
+}
+
+function normalizeSection(l) {
+  return (l.section_key || "").trim();
+}
+
+function normalizeQuestion(l) {
+  return (l.query || l.question || "").trim();
+}
+
+// ================= UI HELPERS =================
+function showError(msg) {
+  errorBox.style.display = "block";
+  errorBox.textContent = msg || "Error";
+}
+
+function clearError() {
+  errorBox.style.display = "none";
+  errorBox.textContent = "";
+}
+
+function setStatus(msg) {
+  statusText.textContent = msg;
+}
+
+// ================= SELECT BUILDERS =================
 function rebuildRoleOptions(logs) {
-  if (!roleSelect) return;
+  const fixed = ["staff", "parent", "admin", "unknown"];
+  const set = new Set(
+    logs.map(l => normalizeRole(l))
+  );
+  fixed.forEach(r => set.add(r));
 
-  const rolesSet = new Set();
-  logs.forEach((l) => rolesSet.add(normalizeRole(l.user_role)));
+  const current = roleSelect.value;
+  roleSelect.innerHTML = `<option value="">All roles</option>`;
 
-  // ✅ ensure these exist even if not in current slice
-  ["staff", "parent", "admin", "unknown"].forEach((x) => rolesSet.add(x));
-
-  const roles = Array.from(rolesSet).sort();
-
-  roleSelect.innerHTML = "";
-  const optAll = document.createElement("option");
-  optAll.value = "";
-  optAll.textContent = "All roles";
-  roleSelect.appendChild(optAll);
-
-  roles.forEach((r) => {
+  Array.from(set).sort().forEach(r => {
     const opt = document.createElement("option");
     opt.value = r;
     opt.textContent = r;
     roleSelect.appendChild(opt);
   });
+
+  if (current && Array.from(set).includes(current)) {
+    roleSelect.value = current;
+  }
 }
 
 function rebuildCampusOptions(logs) {
-  if (!campusSelect) return;
+  const set = new Set(
+    logs.map(l => String(l.campus || "UNKNOWN").toUpperCase())
+  );
 
-  const set = new Set();
-  logs.forEach((l) => set.add(String(l.campus || "UNKNOWN")));
+  const current = campusSelect.value;
+  campusSelect.innerHTML = `<option value="">All campuses</option>`;
 
-  const campuses = Array.from(set).sort();
-  campusSelect.innerHTML = "";
-
-  const optAll = document.createElement("option");
-  optAll.value = "";
-  optAll.textContent = "All campuses";
-  campusSelect.appendChild(optAll);
-
-  campuses.forEach((c) => {
+  Array.from(set).sort().forEach(c => {
     const opt = document.createElement("option");
     opt.value = c;
     opt.textContent = c;
     campusSelect.appendChild(opt);
   });
-}
 
-function renderTable(rows) {
-  if (!tableBody) return;
-  tableBody.innerHTML = "";
-
-  rows.forEach((r) => {
-    const tr = document.createElement("tr");
-
-    const ts = new Date(Number(r.ts || 0));
-    const timeStr = isFinite(ts.getTime()) ? ts.toLocaleString() : "-";
-
-    const role = normalizeRole(r.user_role); // ✅ never blank
-    const campus = r.campus || "UNKNOWN";
-    const ok = r.ok ? "OK" : "BAD";
-    const ms = Number(r.ms || 0);
-
-    const handbookTitle = r.handbook_title ? `Handbook: ${r.handbook_title}` : "";
-    const q = r.query || "";
-
-    tr.innerHTML = `
-      <td>${escapeHtml(timeStr)}</td>
-      <td>${escapeHtml(campus)}</td>
-      <td>${escapeHtml(role)}</td>
-      <td>${escapeHtml(ok)}</td>
-      <td>${escapeHtml(String(ms))}</td>
-      <td>${escapeHtml(handbookTitle)}</td>
-      <td>${escapeHtml(q)}</td>
-    `;
-
-    tableBody.appendChild(tr);
-  });
-}
-
-function applyFilters() {
-  const roleVal = roleSelect ? roleSelect.value : "";
-  const campusVal = campusSelect ? campusSelect.value : "";
-  const q = (searchInput?.value || "").trim().toLowerCase();
-
-  const filtered = ALL_LOGS.filter((r) => {
-    const role = normalizeRole(r.user_role);
-    const campus = String(r.campus || "UNKNOWN");
-    const query = String(r.query || "").toLowerCase();
-    const hb = String(r.handbook_title || "").toLowerCase();
-
-    if (roleVal && role !== roleVal) return false;
-    if (campusVal && campus !== campusVal) return false;
-    if (q && !(query.includes(q) || hb.includes(q))) return false;
-    return true;
-  });
-
-  renderTable(filtered);
-}
-
-async function load() {
-  try {
-    ALL_LOGS = await fetchLogs(200);
-    rebuildRoleOptions(ALL_LOGS);
-    rebuildCampusOptions(ALL_LOGS);
-    applyFilters();
-  } catch (e) {
-    alert(e.message || "Failed to load logs");
+  if (current && Array.from(set).includes(current)) {
+    campusSelect.value = current;
   }
 }
 
-roleSelect?.addEventListener("change", applyFilters);
-campusSelect?.addEventListener("change", applyFilters);
-searchInput?.addEventListener("input", applyFilters);
-refreshBtn?.addEventListener("click", load);
+// ================= RENDER =================
+function render() {
+  const q = (searchInput.value || "").toLowerCase().trim();
+  const campus = (campusSelect.value || "").toUpperCase();
+  const role = (roleSelect.value || "").toLowerCase();
+  const onlyBad = !!onlyErrors.checked;
 
-load();
+  let rows = [...ALL_LOGS];
+
+  if (campus) rows = rows.filter(l => String(l.campus || "").toUpperCase() === campus);
+  if (role) rows = rows.filter(l => normalizeRole(l) === role);
+  if (onlyBad) rows = rows.filter(l => l.ok === false);
+
+  if (q) {
+    rows = rows.filter(l => {
+      const hay = [
+        normalizeQuestion(l),
+        normalizeTitle(l),
+        normalizeSection(l),
+        normalizeRole(l),
+        normalizeSourceType(l),
+        String(l.campus || "")
+      ].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  countPill.textContent = `${rows.length} logs`;
+
+  tbody.innerHTML = rows.map(l => {
+    const okCell = l.ok
+      ? `<span class="ok">OK</span>`
+      : `<span class="bad">BAD</span>`;
+
+    return `
+      <tr>
+        <td class="small muted">${esc(fmtTime(l.ts))}</td>
+        <td>${esc(l.campus || "UNKNOWN")}</td>
+        <td><span class="role-chip">${esc(normalizeRole(l))}</span></td>
+        <td>${okCell}</td>
+        <td class="right">${esc(String(l.ms || 0))}</td>
+        <td>${esc(normalizeSourceType(l))}</td>
+        <td class="small">${esc(normalizeTitle(l))}</td>
+        <td class="small muted">${esc(normalizeSection(l))}</td>
+        <td class="q">${esc(normalizeQuestion(l))}</td>
+      </tr>
+    `;
+  }).join("");
+
+  setStatus(`Showing ${rows.length} / ${ALL_LOGS.length} logs`);
+}
+
+// ================= LOAD =================
+async function loadLogs() {
+  clearError();
+  refreshBtn.disabled = true;
+  setStatus("Loading…");
+
+  if (!isAdminActive()) {
+    showError("Admin session expired. Enable Admin mode again in main app.");
+    setStatus("Admin required.");
+    refreshBtn.disabled = false;
+    return;
+  }
+
+  try {
+    const res = await fetch(LOGS_URL, {
+      headers: { Authorization: `Bearer ${getAdminToken()}` }
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.ok) {
+      throw new Error(data?.error || "Failed to load logs");
+    }
+
+    ALL_LOGS = Array.isArray(data.logs) ? data.logs : [];
+    ALL_LOGS.sort((a,b) => Number(b.ts||0) - Number(a.ts||0));
+
+    rebuildCampusOptions(ALL_LOGS);
+    rebuildRoleOptions(ALL_LOGS);
+    render();
+
+  } catch (e) {
+    showError(e.message || "Network error");
+    setStatus("Error loading logs");
+  } finally {
+    refreshBtn.disabled = false;
+  }
+}
+
+// ================= EVENTS =================
+refreshBtn.addEventListener("click", loadLogs);
+searchInput.addEventListener("input", render);
+campusSelect.addEventListener("change", render);
+roleSelect.addEventListener("change", render);
+onlyErrors.addEventListener("change", render);
+
+// ================= INIT =================
+loadLogs();
