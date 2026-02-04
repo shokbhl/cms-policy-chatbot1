@@ -1,4 +1,10 @@
-// logs.js (MATCHED WITH logs.html IDs)
+// logs.js (PROFESSIONAL FULL VERSION - Matches logs.html IDs)
+// - Fetches and renders admin logs with sorting
+// - Supports filters: search, campus, role, only errors
+// - Dynamic options for campus and role selects
+// - Error handling and status updates
+// - Escapes HTML for security
+
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
 const LOGS_URL = `${WORKER_BASE}/admin/logs?limit=200`;
 
@@ -8,16 +14,29 @@ const LS = {
 };
 
 // ================= HELPERS =================
+/**
+ * Retrieves admin token.
+ * @returns {string}
+ */
 function getAdminToken() {
   return localStorage.getItem(LS.adminToken) || "";
 }
 
+/**
+ * Checks if admin is active.
+ * @returns {boolean}
+ */
 function isAdminActive() {
   const token = localStorage.getItem(LS.adminToken);
   const until = Number(localStorage.getItem(LS.adminUntil) || "0");
   return !!token && Date.now() < until;
 }
 
+/**
+ * Escapes HTML to prevent XSS.
+ * @param {any} s 
+ * @returns {string}
+ */
 function esc(s) {
   return String(s ?? "")
     .replaceAll("&", "&amp;")
@@ -27,9 +46,112 @@ function esc(s) {
     .replaceAll("'", "&#039;");
 }
 
+/**
+ * Formats timestamp to locale string.
+ * @param {number} ts 
+ * @returns {string}
+ */
 function fmtTime(ts) {
   const d = new Date(Number(ts || 0));
   return Number.isNaN(d.getTime()) ? "–" : d.toLocaleString();
+}
+
+/**
+ * Normalizes role from log.
+ * @param {Object} l 
+ * @returns {string}
+ */
+function normalizeRole(l) {
+  return (l.user_role || l.role || "").trim().toLowerCase() || "unknown";
+}
+
+/**
+ * Normalizes source type.
+ * @param {Object} l 
+ * @returns {string}
+ */
+function normalizeSourceType(l) {
+  return l.source_type || "unknown";
+}
+
+/**
+ * Normalizes title.
+ * @param {Object} l 
+ * @returns {string}
+ */
+function normalizeTitle(l) {
+  return l.handbook_title || l.source_id || "";
+}
+
+/**
+ * Normalizes section.
+ * @param {Object} l 
+ * @returns {string}
+ */
+function normalizeSection(l) {
+  return l.section_key || "";
+}
+
+/**
+ * Normalizes question/query.
+ * @param {Object} l 
+ * @returns {string}
+ */
+function normalizeQuestion(l) {
+  return l.query || "";
+}
+
+/**
+ * Rebuilds campus select options from logs.
+ * @param {Array} logs 
+ */
+function rebuildCampusOptions(logs) {
+  const campuses = new Set(logs.map(l => l.campus || "UNKNOWN"));
+  campusSelect.innerHTML = '<option value="">All Campuses</option>';
+  [...campuses].sort().forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = opt.textContent = c;
+    campusSelect.appendChild(opt);
+  });
+}
+
+/**
+ * Rebuilds role select options from logs.
+ * @param {Array} logs 
+ */
+function rebuildRoleOptions(logs) {
+  const roles = new Set(logs.map(l => normalizeRole(l)));
+  roleSelect.innerHTML = '<option value="">All Roles</option>';
+  [...roles].sort().forEach(r => {
+    const opt = document.createElement("option");
+    opt.value = opt.textContent = r;
+    roleSelect.appendChild(opt);
+  });
+}
+
+/**
+ * Sets status text.
+ * @param {string} msg 
+ */
+function setStatus(msg) {
+  statusText.textContent = msg;
+}
+
+/**
+ * Shows error box.
+ * @param {string} msg 
+ */
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.classList.remove("hidden");
+}
+
+/**
+ * Clears error box.
+ */
+function clearError() {
+  errorBox.textContent = "";
+  errorBox.classList.add("hidden");
 }
 
 // ================= DOM =================
@@ -47,139 +169,50 @@ const refreshBtn = document.getElementById("refreshBtn");
 // ================= STATE =================
 let ALL_LOGS = [];
 
-// ================= NORMALIZERS =================
-function normalizeRole(l) {
-  const r = (l.user_role || l.role || "").trim().toLowerCase();
-  return r || "unknown";
-}
-
-function normalizeSourceType(l) {
-  return (l.source_type || "").trim().toLowerCase() || "unknown";
-}
-
-function normalizeTitle(l) {
-  return (l.handbook_title || l.source_title || l.source_id || "").trim();
-}
-
-function normalizeSection(l) {
-  return (l.section_key || "").trim();
-}
-
-function normalizeQuestion(l) {
-  return (l.query || l.question || "").trim();
-}
-
-// ================= UI HELPERS =================
-function showError(msg) {
-  errorBox.style.display = "block";
-  errorBox.textContent = msg || "Error";
-}
-
-function clearError() {
-  errorBox.style.display = "none";
-  errorBox.textContent = "";
-}
-
-function setStatus(msg) {
-  statusText.textContent = msg;
-}
-
-// ================= SELECT BUILDERS =================
-function rebuildRoleOptions(logs) {
-  const fixed = ["staff", "parent", "admin", "unknown"];
-  const set = new Set(
-    logs.map(l => normalizeRole(l))
-  );
-  fixed.forEach(r => set.add(r));
-
-  const current = roleSelect.value;
-  roleSelect.innerHTML = `<option value="">All roles</option>`;
-
-  Array.from(set).sort().forEach(r => {
-    const opt = document.createElement("option");
-    opt.value = r;
-    opt.textContent = r;
-    roleSelect.appendChild(opt);
-  });
-
-  if (current && Array.from(set).includes(current)) {
-    roleSelect.value = current;
-  }
-}
-
-function rebuildCampusOptions(logs) {
-  const set = new Set(
-    logs.map(l => String(l.campus || "UNKNOWN").toUpperCase())
-  );
-
-  const current = campusSelect.value;
-  campusSelect.innerHTML = `<option value="">All campuses</option>`;
-
-  Array.from(set).sort().forEach(c => {
-    const opt = document.createElement("option");
-    opt.value = c;
-    opt.textContent = c;
-    campusSelect.appendChild(opt);
-  });
-
-  if (current && Array.from(set).includes(current)) {
-    campusSelect.value = current;
-  }
-}
-
 // ================= RENDER =================
+/**
+ * Renders filtered logs to table.
+ */
 function render() {
-  const q = (searchInput.value || "").toLowerCase().trim();
-  const campus = (campusSelect.value || "").toUpperCase();
-  const role = (roleSelect.value || "").toLowerCase();
-  const onlyBad = !!onlyErrors.checked;
+  const search = searchInput.value.trim().toLowerCase();
+  const campus = campusSelect.value;
+  const role = roleSelect.value;
+  const errorsOnly = onlyErrors.checked;
 
-  let rows = [...ALL_LOGS];
+  const filtered = ALL_LOGS.filter(l => {
+    if (campus && l.campus !== campus) return false;
+    if (role && normalizeRole(l) !== role) return false;
+    if (errorsOnly && l.ok) return false;
+    if (search) {
+      const q = normalizeQuestion(l).toLowerCase();
+      const t = normalizeTitle(l).toLowerCase();
+      return q.includes(search) || t.includes(search);
+    }
+    return true;
+  });
 
-  if (campus) rows = rows.filter(l => String(l.campus || "").toUpperCase() === campus);
-  if (role) rows = rows.filter(l => normalizeRole(l) === role);
-  if (onlyBad) rows = rows.filter(l => l.ok === false);
+  tbody.innerHTML = filtered.map(l => `
+    <tr>
+      <td>${fmtTime(l.ts)}</td>
+      <td>${esc(l.campus || "UNKNOWN")}</td>
+      <td>${esc(normalizeRole(l))}</td>
+      <td>${l.ok ? "✅" : "❌"}</td>
+      <td>${Number(l.ms || 0)}</td>
+      <td>${esc(normalizeSourceType(l))}</td>
+      <td class="small">${esc(normalizeTitle(l))}</td>
+      <td class="small muted">${esc(normalizeSection(l))}</td>
+      <td class="q">${esc(normalizeQuestion(l))}</td>
+    </tr>
+  `).join("");
 
-  if (q) {
-    rows = rows.filter(l => {
-      const hay = [
-        normalizeQuestion(l),
-        normalizeTitle(l),
-        normalizeSection(l),
-        normalizeRole(l),
-        normalizeSourceType(l),
-        String(l.campus || "")
-      ].join(" ").toLowerCase();
-      return hay.includes(q);
-    });
-  }
-
-  countPill.textContent = `${rows.length} logs`;
-
-  tbody.innerHTML = rows.map(l => {
-    const okCell = l.ok
-      ? `<span class="ok">OK</span>`
-      : `<span class="bad">BAD</span>`;
-
-    return `
-      <tr>
-        <td class="small muted">${esc(fmtTime(l.ts))}</td>
-        <td>${esc(l.campus || "UNKNOWN")}</td>
-        <td><span class="role-chip">${esc(normalizeRole(l))}</span></td>
-        <td>${okCell}</td>
-        <td class="right">${esc(String(l.ms || 0))}</td>
-        <td>${esc(normalizeSourceType(l))}</td>
-        <td class="small">${esc(normalizeTitle(l))}</td>
-        <td class="small muted">${esc(normalizeSection(l))}</td>
-        <td class="q">${esc(normalizeQuestion(l))}</td>
-      </tr>
-    `;
-  }).join("");
-
-  setStatus(`Showing ${rows.length} / ${ALL_LOGS.length} logs`);
+  setStatus(`Showing ${filtered.length} / ${ALL_LOGS.length} logs`);
+  countPill.textContent = `${filtered.length} Logs`;
 }
 
 // ================= LOAD =================
+/**
+ * Loads logs from API.
+ */
 async function loadLogs() {
   clearError();
   refreshBtn.disabled = true;
@@ -193,24 +226,18 @@ async function loadLogs() {
   }
 
   try {
-    const res = await fetch(LOGS_URL, {
-      headers: { Authorization: `Bearer ${getAdminToken()}` }
-    });
-    const data = await res.json().catch(() => ({}));
+    const data = await adminFetch("/admin/logs?limit=200");
+    if (!data) throw new Error("Failed to load logs");
 
-    if (!res.ok || !data.ok) {
-      throw new Error(data?.error || "Failed to load logs");
-    }
-
-    ALL_LOGS = Array.isArray(data.logs) ? data.logs : [];
-    ALL_LOGS.sort((a,b) => Number(b.ts||0) - Number(a.ts||0));
+    ALL_LOGS = data.logs || [];
+    ALL_LOGS.sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)); // Descending
 
     rebuildCampusOptions(ALL_LOGS);
     rebuildRoleOptions(ALL_LOGS);
     render();
 
-  } catch (e) {
-    showError(e.message || "Network error");
+  } catch (err) {
+    showError(err.message || "Network error");
     setStatus("Error loading logs");
   } finally {
     refreshBtn.disabled = false;
@@ -225,4 +252,7 @@ roleSelect.addEventListener("change", render);
 onlyErrors.addEventListener("change", render);
 
 // ================= INIT =================
-loadLogs();
+(function init() {
+  requireAdminOrRedirect(); // From admin.js
+  loadLogs();
+})();

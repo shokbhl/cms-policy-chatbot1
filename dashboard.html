@@ -3,600 +3,241 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="CMS Admin Dashboard for Policy Chatbot: View stats, KPIs, and logs.">
   <title>CMS Admin Dashboard</title>
-
+  <link rel="stylesheet" href="style.css"> <!-- Assuming shared style.css -->
+  <link rel="icon" href="/favicon.ico">
+  <!-- Inline style for dashboard-specific (from original, professionalized) -->
   <style>
-    :root{
-      --bg:#f5f7fb;
-      --card:#ffffff;
-      --text:#0f172a;
-      --muted:#64748b;
-      --border:#e5e7eb;
-      --shadow:0 10px 30px rgba(2,6,23,.08);
-      --btn:#0b1f3a;
-      --btnText:#fff;
-      --danger:#b91c1c;
-      --ok:#065f46;
-      --warn:#92400e;
-      --chip:#eef2ff;
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e5e7eb;
+      --shadow: 0 10px 30px rgba(2,6,23,.08);
+      --btn: #0b1f3a;
+      --btnText: #fff;
+      --danger: #b91c1c;
+      --ok: #065f46;
+      --warn: #92400e;
+      --chip: #eef2ff;
     }
-    html,body{height:100%}
-    body{
-      margin:0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
-      background:var(--bg);
-      color:var(--text);
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--text);
     }
-    a{color:inherit}
-    .topbar{
-      position:sticky; top:0; z-index:10;
-      background:rgba(255,255,255,.9);
-      backdrop-filter:saturate(180%) blur(10px);
-      border-bottom:1px solid var(--border);
+    a { color: inherit; text-decoration: none; }
+    .topbar {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(255,255,255,.9);
+      backdrop-filter: saturate(180%) blur(10px);
+      border-bottom: 1px solid var(--border);
     }
-    .topbar-inner{
-      max-width:1100px;
-      margin:0 auto;
-      padding:14px 16px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
+    .topbar-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
-    .brand{
-      display:flex; align-items:center; gap:10px;
-      font-weight:800;
+    .brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 800;
     }
-    .brand small{display:block; font-weight:500; color:var(--muted); margin-top:2px}
-    .nav{
-      display:flex; gap:10px; align-items:center;
-      font-size:14px;
+    .brand small { display: block; font-weight: 500; color: var(--muted); margin-top: 2px; }
+    .nav {
+      display: flex; gap: 10px; align-items: center;
+      font-size: 14px;
     }
-    .nav a{
-      text-decoration:none;
-      padding:8px 10px;
-      border-radius:10px;
-      border:1px solid transparent;
-      color:var(--muted);
+    .nav a {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      transition: background 0.2s;
     }
-    .nav a.active{
-      color:var(--text);
-      border-color:var(--border);
-      background:#fff;
-      box-shadow:0 1px 0 rgba(2,6,23,.03);
+    .nav a:hover {
+      background: var(--chip);
     }
-
-    .wrap{
-      max-width:1100px;
-      margin:18px auto;
-      padding:0 16px 40px;
+    /* KPI cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin: 20px auto;
+      max-width: 1100px;
     }
-
-    .grid{
-      display:grid;
-      grid-template-columns: repeat(12, 1fr);
-      gap:12px;
+    .kpi-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      text-align: center;
     }
-
-    .card{
-      background:var(--card);
-      border:1px solid var(--border);
-      border-radius:16px;
-      box-shadow:var(--shadow);
-      overflow:hidden;
+    .kpi-value {
+      font-size: 2em;
+      font-weight: 800;
     }
-    .card-head{
-      padding:14px 16px;
-      border-bottom:1px solid var(--border);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      flex-wrap:wrap;
-      background:#fbfdff;
+    .kpi-label {
+      font-size: 0.875em;
+      color: var(--muted);
     }
-    .title{
-      font-weight:900;
-      display:flex;
-      flex-direction:column;
-      gap:2px;
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
     }
-    .subtitle{
-      color:var(--muted);
-      font-weight:500;
-      font-size:13px;
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
     }
-
-    .btn{
-      background:var(--btn);
-      color:var(--btnText);
-      border:0;
-      padding:10px 14px;
-      border-radius:12px;
-      cursor:pointer;
-      font-weight:800;
+    th {
+      background: var(--chip);
+      font-weight: 700;
     }
-    .btn:disabled{opacity:.6; cursor:not-allowed}
-
-    .kpi{
-      padding:14px 16px;
-      display:flex;
-      flex-direction:column;
-      gap:6px;
+    /* Badge */
+    .badge {
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-weight: bold;
+      color: #fff;
     }
-    .kpi .label{color:var(--muted); font-size:12px; letter-spacing:.04em; text-transform:uppercase}
-    .kpi .value{font-size:24px; font-weight:900}
-    .kpi .hint{color:var(--muted); font-size:12px}
-
-    .badge{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding:6px 10px;
-      border-radius:999px;
-      font-weight:900;
-      font-size:12px;
-      border:1px solid var(--border);
-      background:#fff;
+    .badge-ok { background: var(--ok); }
+    .badge-warn { background: var(--warn); }
+    .badge-bad { background: var(--danger); }
+    /* Refresh button */
+    .refresh-btn {
+      background: var(--btn);
+      color: var(--btnText);
+      border: none;
+      cursor: pointer;
     }
-    .badge.ok{color:var(--ok); background:#f0fdf4; border-color:#bbf7d0}
-    .badge.warn{color:var(--warn); background:#fffbeb; border-color:#fde68a}
-    .badge.bad{color:var(--danger); background:#fff5f5; border-color:#fecaca}
-
-    .table-wrap{overflow:auto}
-    table{width:100%; border-collapse:separate; border-spacing:0; font-size:14px}
-    thead th{
-      text-align:left;
-      font-size:12px;
-      letter-spacing:.04em;
-      text-transform:uppercase;
-      color:var(--muted);
-      padding:12px 14px;
-      border-bottom:1px solid var(--border);
-      white-space:nowrap;
+    /* Error box */
+    .error-box {
+      background: rgba(var(--danger), 0.1);
+      color: var(--danger);
+      padding: 12px;
+      border-radius: 8px;
+      margin: 12px 0;
     }
-    tbody td{
-      padding:12px 14px;
-      border-bottom:1px solid var(--border);
-      vertical-align:top;
+    /* Predictive box */
+    .predictive-box {
+      background: var(--chip);
+      padding: 16px;
+      border-radius: 12px;
+      margin-top: 20px;
     }
-    tbody tr:hover{background:#fafcff}
-    .muted{color:var(--muted)}
-    .right{text-align:right}
-
-    .error-box{
-      margin-top:12px;
-      padding:14px 16px;
-      color:var(--danger);
-      background:#fff5f5;
-      border:1px solid #fecaca;
-      border-radius:16px;
-    }
-
-    .span-3{grid-column: span 3}
-    .span-4{grid-column: span 4}
-    .span-6{grid-column: span 6}
-    .span-12{grid-column: span 12}
-
-    @media (max-width: 980px){
-      .span-3,.span-4,.span-6{grid-column: span 12}
-    }
-
-    .mini{
-      font-size:12px;
-      color:var(--muted);
-    }
-
-    .chip{
-      display:inline-flex;
-      align-items:center;
-      padding:4px 8px;
-      border-radius:999px;
-      border:1px solid var(--border);
-      background:#fff;
-      font-size:12px;
-      font-weight:800;
-      color:#111827;
-      text-transform:lowercase;
+    /* Responsive */
+    @media (max-width: 768px) {
+      .topbar-inner { flex-direction: column; }
+      .kpi-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
-
 <body>
+  <!-- Topbar -->
   <div class="topbar">
     <div class="topbar-inner">
       <div class="brand">
+        <img src="/cms-logo.png" alt="CMS Logo" width="32">
         <div>
           CMS Admin Dashboard
-          <small>Quick health + breakdown by campus / role / source type</small>
+          <small>Policy Chatbot Stats & Logs</small>
         </div>
       </div>
-
       <div class="nav">
-        <a href="index.html">Main App</a>
-        <a class="active" href="dashboard.html">Dashboard</a>
+        <a href="dashboard.html">Dashboard</a>
         <a href="logs.html">Logs</a>
+        <a href="index.html">Back to App</a>
       </div>
     </div>
   </div>
 
-  <div class="wrap">
-    <div class="grid">
-      <!-- KPI cards -->
-      <div class="card span-3">
-        <div class="card-head">
-          <div class="title">Total<span class="subtitle">requests analyzed</span></div>
-        </div>
-        <div class="kpi">
-          <div class="label">Total</div>
-          <div class="value" id="kpiTotal">–</div>
-          <div class="hint mini" id="kpiRange">–</div>
-        </div>
-      </div>
+  <!-- Main Content -->
+  <div class="main" style="max-width: 1100px; margin: 20px auto; padding: 0 16px;">
+    <!-- Status Line -->
+    <div id="status-line" class="status-line">
+      <span id="last-refresh">Last refresh: --</span>
+      <span id="auto-refresh-state">Auto-refresh: ON</span>
+      <button id="refresh-btn" class="refresh-btn">Refresh</button>
+      <span id="badge" class="badge badge-ok">OK</span>
+    </div>
 
-      <div class="card span-3">
-        <div class="card-head">
-          <div class="title">OK<span class="subtitle">successful answers</span></div>
-        </div>
-        <div class="kpi">
-          <div class="label">OK</div>
-          <div class="value" id="kpiOk">–</div>
-          <div class="hint mini" id="kpiOkRate">–</div>
-        </div>
-      </div>
+    <!-- Error Box -->
+    <div id="errorBox" class="error-box hidden"></div>
 
-      <div class="card span-3">
-        <div class="card-head">
-          <div class="title">BAD<span class="subtitle">errors / failures</span></div>
-        </div>
-        <div class="kpi">
-          <div class="label">Bad</div>
-          <div class="value" id="kpiBad">–</div>
-          <div class="hint mini">Includes non-OK logs</div>
-        </div>
+    <!-- KPI Grid -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-value" id="kpi-total">0</div>
+        <div class="kpi-label">Total Queries</div>
       </div>
-
-      <div class="card span-3">
-        <div class="card-head">
-          <div class="title">Latency<span class="subtitle">avg ms</span></div>
-        </div>
-        <div class="kpi">
-          <div class="label">Avg ms</div>
-          <div class="value" id="kpiMs">–</div>
-          <div class="hint mini" id="kpiBadgeWrap">–</div>
-        </div>
+      <div class="kpi-card">
+        <div class="kpi-value" id="kpi-ok">0</div>
+        <div class="kpi-label">Successful (OK)</div>
       </div>
-
-      <!-- Breakdown tables -->
-      <div class="card span-4">
-        <div class="card-head">
-          <div class="title">By Campus<span class="subtitle">volume & error rate</span></div>
-          <button class="btn" id="refreshBtn">Refresh</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Campus</th>
-                <th class="right">Total</th>
-                <th class="right">OK</th>
-                <th class="right">Bad</th>
-              </tr>
-            </thead>
-            <tbody id="byCampusBody"></tbody>
-          </table>
-        </div>
+      <div class="kpi-card">
+        <div class="kpi-value" id="kpi-bad">0</div>
+        <div class="kpi-label">Failed (BAD)</div>
       </div>
-
-      <div class="card span-4">
-        <div class="card-head">
-          <div class="title">By Role<span class="subtitle">staff / parent / admin</span></div>
-          <div class="mini">Always shows parent even if 0</div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Role</th>
-                <th class="right">Total</th>
-                <th class="right">OK</th>
-                <th class="right">Bad</th>
-              </tr>
-            </thead>
-            <tbody id="byRoleBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card span-4">
-        <div class="card-head">
-          <div class="title">By Source Type<span class="subtitle">policy / protocol / handbook</span></div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th class="right">Total</th>
-                <th class="right">OK</th>
-                <th class="right">Bad</th>
-              </tr>
-            </thead>
-            <tbody id="bySourceBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Latest examples -->
-      <div class="card span-12">
-        <div class="card-head">
-          <div class="title">Latest Examples<span class="subtitle">last 30 questions</span></div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Campus</th>
-                <th>Role</th>
-                <th>OK</th>
-                <th class="right">MS</th>
-                <th>Source</th>
-                <th>Title</th>
-                <th>Section</th>
-                <th>Question</th>
-              </tr>
-            </thead>
-            <tbody id="latestBody"></tbody>
-          </table>
-        </div>
+      <div class="kpi-card">
+        <div class="kpi-value" id="kpi-avgms">0 ms</div>
+        <div class="kpi-label">Avg Response Time</div>
       </div>
     </div>
 
-    <div id="errorBox" class="error-box" style="display:none;"></div>
+    <!-- Tables Section -->
+    <h3>By Campus</h3>
+    <table>
+      <thead>
+        <tr><th>Campus</th><th>Total</th><th>OK</th><th>BAD</th></tr>
+      </thead>
+      <tbody id="campus-body"></tbody>
+    </table>
+
+    <h3>By Role</h3>
+    <table>
+      <thead>
+        <tr><th>Role</th><th>Total</th><th>OK</th><th>BAD</th></tr>
+      </thead>
+      <tbody id="role-body"></tbody>
+    </table>
+
+    <h3>By Source Type</h3>
+    <table>
+      <thead>
+        <tr><th>Source</th><th>Total</th><th>OK</th><th>BAD</th></tr>
+      </thead>
+      <tbody id="source-body"></tbody>
+    </table>
+
+    <!-- Predictive Alert -->
+    <div id="predictive-box" class="predictive-box hidden">
+      <h4>Predictive Alert</h4>
+      <p id="predictive-text"></p>
+    </div>
+
+    <!-- Charts (assuming canvas for campus and trend) -->
+    <h3>Campus Distribution</h3>
+    <canvas id="campusChart" width="400" height="200"></canvas>
+
+    <h3>Trend Over Time</h3>
+    <canvas id="trendChart" width="400" height="200"></canvas>
   </div>
 
-  <script>
-    // ===== CONFIG =====
-    const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
-    const STATS_URL = `${WORKER_BASE}/admin/stats?limit=200`;
-    const LOGS_URL  = `${WORKER_BASE}/admin/logs?limit=30`;
-
-    const LS = {
-      adminToken: "cms_admin_token",
-      adminUntil: "cms_admin_until"
-    };
-
-    // ===== DOM =====
-    const kpiTotal = document.getElementById("kpiTotal");
-    const kpiOk = document.getElementById("kpiOk");
-    const kpiBad = document.getElementById("kpiBad");
-    const kpiMs = document.getElementById("kpiMs");
-    const kpiOkRate = document.getElementById("kpiOkRate");
-    const kpiBadgeWrap = document.getElementById("kpiBadgeWrap");
-    const kpiRange = document.getElementById("kpiRange");
-
-    const byCampusBody = document.getElementById("byCampusBody");
-    const byRoleBody = document.getElementById("byRoleBody");
-    const bySourceBody = document.getElementById("bySourceBody");
-    const latestBody = document.getElementById("latestBody");
-
-    const refreshBtn = document.getElementById("refreshBtn");
-    const errorBox = document.getElementById("errorBox");
-
-    // ===== HELPERS =====
-    function isAdminActive() {
-      const token = localStorage.getItem(LS.adminToken);
-      const until = Number(localStorage.getItem(LS.adminUntil) || "0");
-      return !!token && Date.now() < until;
-    }
-    function getAdminToken() {
-      return localStorage.getItem(LS.adminToken) || "";
-    }
-    function esc(s) {
-      return String(s ?? "")
-        .replaceAll("&","&amp;")
-        .replaceAll("<","&lt;")
-        .replaceAll(">","&gt;")
-        .replaceAll('"',"&quot;")
-        .replaceAll("'","&#039;");
-    }
-    function showError(msg) {
-      errorBox.style.display = "block";
-      errorBox.textContent = msg || "Error";
-    }
-    function clearError() {
-      errorBox.style.display = "none";
-      errorBox.textContent = "";
-    }
-    function fmtTime(ts) {
-      const d = new Date(Number(ts || 0));
-      if (Number.isNaN(d.getTime())) return "";
-      return d.toLocaleString();
-    }
-    function badgeHtml(badge) {
-      const b = String(badge || "OK").toUpperCase();
-      const cls = b === "OK" ? "badge ok" : b === "WARN" ? "badge warn" : "badge bad";
-      return `<span class="${cls}">${esc(b)}</span>`;
-    }
-    function sourceChip(type) {
-      const t = (type || "unknown").toLowerCase();
-      const cls =
-        t === "policy" ? "chip" :
-        t === "protocol" ? "chip" :
-        t === "handbook" ? "chip" :
-        "chip";
-      return `<span class="${cls}">${esc(t)}</span>`;
-    }
-
-    function normalizeRole(l) {
-      const r = (l.user_role || l.role || "").trim().toLowerCase();
-      return r || "unknown";
-    }
-    function normalizeSourceType(l) {
-      return (l.source_type || "").trim().toLowerCase() || "unknown";
-    }
-    function normalizeTitle(l) {
-      return (l.handbook_title || l.source_title || l.source_id || "").trim();
-    }
-    function normalizeSection(l) {
-      return (l.section_key || "").trim();
-    }
-    function normalizeQuestion(l) {
-      return (l.query || l.question || "").trim();
-    }
-
-    function sortKeysAlpha(obj) {
-      return Object.keys(obj || {}).sort((a,b)=>String(a).localeCompare(String(b)));
-    }
-
-    function ensureRoleBuckets(byRole) {
-      // Ensure parent appears even if 0
-      const fixed = ["staff","parent","admin","unknown"];
-      const out = { ...(byRole || {}) };
-      for (const r of fixed) {
-        if (!out[r]) out[r] = { total: 0, ok: 0, bad: 0 };
-      }
-      return out;
-    }
-
-    // ===== RENDERERS =====
-    function renderByCampus(byCampus) {
-      const keys = sortKeysAlpha(byCampus);
-      byCampusBody.innerHTML = keys.map(k => {
-        const row = byCampus[k] || { total:0, ok:0, bad:0 };
-        return `
-          <tr>
-            <td>${esc(k)}</td>
-            <td class="right">${esc(row.total || 0)}</td>
-            <td class="right">${esc(row.ok || 0)}</td>
-            <td class="right">${esc(row.bad || 0)}</td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="4" class="muted">No data</td></tr>`;
-    }
-
-    function renderByRole(byRoleRaw) {
-      const byRole = ensureRoleBuckets(byRoleRaw);
-      const keys = sortKeysAlpha(byRole);
-      byRoleBody.innerHTML = keys.map(k => {
-        const row = byRole[k] || { total:0, ok:0, bad:0 };
-        return `
-          <tr>
-            <td><span class="chip">${esc(k)}</span></td>
-            <td class="right">${esc(row.total || 0)}</td>
-            <td class="right">${esc(row.ok || 0)}</td>
-            <td class="right">${esc(row.bad || 0)}</td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="4" class="muted">No data</td></tr>`;
-    }
-
-    function renderBySource(bySource) {
-      const keys = sortKeysAlpha(bySource);
-      bySourceBody.innerHTML = keys.map(k => {
-        const row = bySource[k] || { total:0, ok:0, bad:0 };
-        return `
-          <tr>
-            <td>${sourceChip(k)}</td>
-            <td class="right">${esc(row.total || 0)}</td>
-            <td class="right">${esc(row.ok || 0)}</td>
-            <td class="right">${esc(row.bad || 0)}</td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="4" class="muted">No data</td></tr>`;
-    }
-
-    function renderLatest(logs) {
-      const arr = Array.isArray(logs) ? logs : [];
-      latestBody.innerHTML = arr.map(l => {
-        const ok = l.ok === true;
-        const okCell = ok ? `<span style="color:var(--ok);font-weight:900">OK</span>`
-                          : `<span style="color:var(--danger);font-weight:900">BAD</span>`;
-        const st = normalizeSourceType(l);
-        return `
-          <tr>
-            <td class="muted" style="font-size:12px">${esc(fmtTime(l.ts))}</td>
-            <td>${esc(String(l.campus || "UNKNOWN"))}</td>
-            <td><span class="chip">${esc(normalizeRole(l))}</span></td>
-            <td>${okCell}</td>
-            <td class="right">${esc(Number(l.ms || 0))}</td>
-            <td>${sourceChip(st)}</td>
-            <td class="muted" style="font-size:12px">${esc(normalizeTitle(l))}</td>
-            <td class="muted" style="font-size:12px">${esc(normalizeSection(l))}</td>
-            <td>${esc(normalizeQuestion(l))}</td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="9" class="muted">No logs yet</td></tr>`;
-    }
-
-    function setKpis(stats) {
-      const total = Number(stats.total || 0);
-      const ok = Number(stats.ok || 0);
-      const bad = Number(stats.bad || 0);
-      const avg = Number(stats.avg_ms || 0);
-      const badge = String(stats.badge || "OK").toUpperCase();
-
-      kpiTotal.textContent = total;
-      kpiOk.textContent = ok;
-      kpiBad.textContent = bad;
-      kpiMs.textContent = avg;
-
-      const rate = total ? Math.round((ok/total)*100) : 100;
-      kpiOkRate.textContent = `OK rate: ${rate}%`;
-      kpiBadgeWrap.innerHTML = `Badge: ${badgeHtml(badge)}`;
-
-      kpiRange.textContent = "Using last 200 logs (worker /admin/stats)";
-    }
-
-    // ===== LOADERS =====
-    async function loadAll() {
-      clearError();
-      refreshBtn.disabled = true;
-
-      if (!isAdminActive()) {
-        showError("Admin session not found or expired. Go to Main App and enable Admin mode again.");
-        refreshBtn.disabled = false;
-        return;
-      }
-
-      try {
-        const token = getAdminToken();
-
-        const [statsRes, logsRes] = await Promise.all([
-          fetch(STATS_URL, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(LOGS_URL,  { headers: { Authorization: `Bearer ${token}` } })
-        ]);
-
-        const stats = await statsRes.json().catch(()=>({}));
-        const logs  = await logsRes.json().catch(()=>({}));
-
-        if (!statsRes.ok || !stats.ok) {
-          throw new Error(stats?.error || "Failed to load stats");
-        }
-        if (!logsRes.ok || !logs.ok) {
-          throw new Error(logs?.error || "Failed to load logs");
-        }
-
-        setKpis(stats);
-
-        renderByCampus(stats.byCampus || {});
-        renderByRole(stats.byRole || {});
-        renderBySource(stats.bySourceType || {});
-
-        const arr = Array.isArray(logs.logs) ? logs.logs : [];
-        arr.sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
-        renderLatest(arr);
-
-      } catch (e) {
-        showError(e?.message || "Network error");
-      } finally {
-        refreshBtn.disabled = false;
-      }
-    }
-
-    refreshBtn.addEventListener("click", loadAll);
-    loadAll();
-  </script>
+  <!-- Scripts -->
+  <script src="admin.js"></script>
+  <script src="dashboard.js"></script>
 </body>
 </html>

@@ -3,545 +3,193 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="CMS Admin Logs: View detailed query logs for the Policy Chatbot.">
   <title>CMS Admin Logs</title>
-
+  <link rel="stylesheet" href="style.css"> <!-- Assuming shared style.css -->
+  <link rel="icon" href="/favicon.ico">
+  <!-- Inline style for logs-specific (professionalized, similar to dashboard) -->
   <style>
-    :root{
-      --bg:#f5f7fb;
-      --card:#ffffff;
-      --text:#0f172a;
-      --muted:#64748b;
-      --border:#e5e7eb;
-      --shadow:0 10px 30px rgba(2,6,23,.08);
-      --btn:#0b1f3a;
-      --btnText:#fff;
-      --danger:#b91c1c;
-      --ok:#065f46;
-      --warn:#92400e;
-      --chip:#eef2ff;
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e5e7eb;
+      --shadow: 0 10px 30px rgba(2,6,23,.08);
+      --btn: #0b1f3a;
+      --btnText: #fff;
+      --danger: #b91c1c;
+      --ok: #065f46;
+      --warn: #92400e;
+      --chip: #eef2ff;
     }
-    html,body{height:100%}
-    body{
-      margin:0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
-      background:var(--bg);
-      color:var(--text);
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--text);
     }
-    a{color:inherit}
-    .topbar{
-      position:sticky; top:0; z-index:10;
-      background:rgba(255,255,255,.9);
-      backdrop-filter:saturate(180%) blur(10px);
-      border-bottom:1px solid var(--border);
+    a { color: inherit; text-decoration: none; }
+    .topbar {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(255,255,255,.9);
+      backdrop-filter: saturate(180%) blur(10px);
+      border-bottom: 1px solid var(--border);
     }
-    .topbar-inner{
-      max-width:1100px;
-      margin:0 auto;
-      padding:14px 16px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
+    .topbar-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
-    .brand{
-      display:flex; align-items:center; gap:10px;
-      font-weight:700;
+    .brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 800;
     }
-    .brand small{display:block; font-weight:500; color:var(--muted); margin-top:2px}
-    .nav{
-      display:flex; gap:10px; align-items:center;
-      font-size:14px;
+    .brand small { display: block; font-weight: 500; color: var(--muted); margin-top: 2px; }
+    .nav {
+      display: flex; gap: 10px; align-items: center;
+      font-size: 14px;
     }
-    .nav a{
-      text-decoration:none;
-      padding:8px 10px;
-      border-radius:10px;
-      border:1px solid transparent;
-      color:var(--muted);
+    .nav a {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      transition: background 0.2s;
     }
-    .nav a.active{
-      color:var(--text);
-      border-color:var(--border);
-      background:#fff;
-      box-shadow:0 1px 0 rgba(2,6,23,.03);
+    .nav a:hover {
+      background: var(--chip);
     }
-
-    .wrap{
-      max-width:1100px;
-      margin:18px auto;
-      padding:0 16px 40px;
+    /* Filters */
+    .filters {
+      display: flex;
+      gap: 12px;
+      margin: 20px 0;
+      flex-wrap: wrap;
     }
-    .card{
-      background:var(--card);
-      border:1px solid var(--border);
-      border-radius:16px;
-      box-shadow:var(--shadow);
-      overflow:hidden;
+    .filter-input {
+      flex: 1;
+      min-width: 200px;
     }
-    .card-head{
-      padding:14px 16px;
-      border-bottom:1px solid var(--border);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      flex-wrap:wrap;
+    /* Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
     }
-    .title{
-      font-weight:800;
-      display:flex;
-      flex-direction:column;
-      gap:2px;
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
     }
-    .subtitle{
-      color:var(--muted);
-      font-weight:500;
-      font-size:13px;
+    th {
+      background: var(--chip);
+      font-weight: 700;
     }
-
-    .filters{
-      padding:12px 16px;
-      display:flex;
-      gap:10px;
-      align-items:center;
-      flex-wrap:wrap;
-      border-bottom:1px solid var(--border);
-      background:#fbfdff;
+    td.small { font-size: 0.875em; }
+    td.q { white-space: pre-wrap; word-break: break-word; }
+    /* Status text */
+    .status-text {
+      margin: 12px 0;
+      color: var(--muted);
     }
-    .filters input[type="text"]{
-      padding:10px 12px;
-      border:1px solid var(--border);
-      border-radius:12px;
-      min-width:220px;
-      outline:none;
-      background:#fff;
+    /* Error box */
+    .error-box {
+      background: rgba(var(--danger), 0.1);
+      color: var(--danger);
+      padding: 12px;
+      border-radius: 8px;
+      margin: 12px 0;
     }
-    .filters select{
-      padding:10px 12px;
-      border:1px solid var(--border);
-      border-radius:12px;
-      background:#fff;
-      outline:none;
+    /* Refresh button */
+    .refresh-btn {
+      background: var(--btn);
+      color: var(--btnText);
+      border: none;
+      cursor: pointer;
     }
-    .filters label{
-      display:flex;
-      align-items:center;
-      gap:8px;
-      color:var(--muted);
-      font-size:14px;
-      user-select:none;
-    }
-    .btn{
-      background:var(--btn);
-      color:var(--btnText);
-      border:0;
-      padding:10px 14px;
-      border-radius:12px;
-      cursor:pointer;
-      font-weight:700;
-    }
-    .btn:disabled{opacity:.6; cursor:not-allowed}
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding:6px 10px;
-      border-radius:999px;
-      background:var(--chip);
-      border:1px solid rgba(99,102,241,.18);
-      color:#3730a3;
-      font-size:12px;
-      font-weight:700;
-    }
-
-    .table-wrap{overflow:auto}
-    table{
-      width:100%;
-      border-collapse:separate;
-      border-spacing:0;
-      font-size:14px;
-    }
-    thead th{
-      text-align:left;
-      font-size:12px;
-      letter-spacing:.04em;
-      text-transform:uppercase;
-      color:var(--muted);
-      padding:12px 14px;
-      border-bottom:1px solid var(--border);
-      white-space:nowrap;
-    }
-    tbody td{
-      padding:12px 14px;
-      border-bottom:1px solid var(--border);
-      vertical-align:top;
-    }
-    tbody tr:hover{background:#fafcff}
-    .muted{color:var(--muted)}
-    .ok{color:var(--ok); font-weight:800}
-    .bad{color:var(--danger); font-weight:800}
-    .role-chip{
-      display:inline-block;
-      padding:4px 8px;
-      border-radius:999px;
-      border:1px solid var(--border);
-      background:#fff;
-      font-size:12px;
-      color:var(--muted);
-      font-weight:700;
-      text-transform:lowercase;
-    }
-    .src-chip{
-      display:inline-block;
-      padding:4px 8px;
-      border-radius:999px;
-      background:#fff;
-      border:1px solid var(--border);
-      font-size:12px;
-      font-weight:800;
-      color:#111827;
-    }
-    .src-policy{background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8}
-    .src-protocol{background:#ecfeff; border-color:#a5f3fc; color:#0e7490}
-    .src-handbook{background:#f0fdf4; border-color:#bbf7d0; color:#166534}
-
-    .q{
-      max-width:520px;
-      white-space:normal;
-      line-height:1.35;
-    }
-    .small{font-size:12px}
-    .right{ text-align:right }
-    .error-box{
-      padding:14px 16px;
-      color:var(--danger);
-      background:#fff5f5;
-      border-top:1px solid #fecaca;
+    /* Responsive */
+    @media (max-width: 768px) {
+      .filters { flex-direction: column; }
+      table { font-size: 0.875em; }
     }
   </style>
 </head>
-
 <body>
+  <!-- Topbar -->
   <div class="topbar">
     <div class="topbar-inner">
       <div class="brand">
+        <img src="/cms-logo.png" alt="CMS Logo" width="32">
         <div>
           CMS Admin Logs
-          <small>View latest questions & sources (staff / parent / admin)</small>
+          <small>Detailed Query Logs for Policy Chatbot</small>
         </div>
       </div>
-
       <div class="nav">
-        <a href="index.html">Main App</a>
         <a href="dashboard.html">Dashboard</a>
-        <a class="active" href="logs.html">Logs</a>
+        <a href="logs.html">Logs</a>
+        <a href="index.html">Back to App</a>
       </div>
     </div>
   </div>
 
-  <div class="wrap">
-    <div class="card">
-      <div class="card-head">
-        <div class="title">
-          Logs
-          <div class="subtitle" id="statusText">Loading…</div>
-        </div>
-
-        <div class="pill" id="countPill">0 logs</div>
-      </div>
-
-      <div class="filters">
-        <input id="searchInput" type="text" placeholder="Search in questions…" />
-
-        <select id="campusSelect">
-          <option value="">All campuses</option>
-        </select>
-
-        <select id="roleSelect">
-          <option value="">All roles</option>
-          <!-- roles added dynamically -->
-        </select>
-
-        <label>
-          <input id="onlyErrors" type="checkbox" />
-          Only errors
-        </label>
-
-        <button id="refreshBtn" class="btn">Refresh</button>
-      </div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Campus</th>
-              <th>Role</th>
-              <th>OK</th>
-              <th>MS</th>
-              <th>Source</th>
-              <th>Title</th>
-              <th>Section</th>
-              <th>Question</th>
-            </tr>
-          </thead>
-          <tbody id="tbody">
-            <!-- rows -->
-          </tbody>
-        </table>
-      </div>
-
-      <div id="errorBox" class="error-box" style="display:none;"></div>
+  <!-- Main Content -->
+  <div class="main" style="max-width: 1100px; margin: 20px auto; padding: 0 16px;">
+    <!-- Filters -->
+    <div class="filters">
+      <input id="searchInput" type="text" placeholder="Search logs..." class="filter-input">
+      <select id="campusSelect" class="filter-input">
+        <option value="">All Campuses</option>
+        <!-- Populated by JS -->
+      </select>
+      <select id="roleSelect" class="filter-input">
+        <option value="">All Roles</option>
+        <!-- Populated by JS -->
+      </select>
+      <label>
+        <input id="onlyErrors" type="checkbox"> Only Errors
+      </label>
+      <button id="refreshBtn" class="refresh-btn">Refresh</button>
     </div>
+
+    <!-- Status Text -->
+    <div id="statusText" class="status-text">Loading logs...</div>
+
+    <!-- Count Pill -->
+    <span id="countPill" class="badge badge-ok">0 Logs</span>
+
+    <!-- Error Box -->
+    <div id="errorBox" class="error-box hidden"></div>
+
+    <!-- Logs Table -->
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Campus</th>
+          <th>Role</th>
+          <th>OK</th>
+          <th>MS</th>
+          <th>Source Type</th>
+          <th>Title</th>
+          <th>Section</th>
+          <th>Query</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
   </div>
 
-  <script>
-    // ===== CONFIG =====
-    const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
-    const LOGS_URL = `${WORKER_BASE}/admin/logs?limit=200`;
-
-    const LS = {
-      adminToken: "cms_admin_token",
-      adminUntil: "cms_admin_until"
-    };
-
-    // ===== DOM =====
-    const tbody = document.getElementById("tbody");
-    const statusText = document.getElementById("statusText");
-    const countPill = document.getElementById("countPill");
-    const errorBox = document.getElementById("errorBox");
-
-    const searchInput = document.getElementById("searchInput");
-    const campusSelect = document.getElementById("campusSelect");
-    const roleSelect = document.getElementById("roleSelect");
-    const onlyErrors = document.getElementById("onlyErrors");
-    const refreshBtn = document.getElementById("refreshBtn");
-
-    // ===== STATE =====
-    let allLogs = [];
-
-    // ===== HELPERS =====
-    function isAdminActive() {
-      const token = localStorage.getItem(LS.adminToken);
-      const until = Number(localStorage.getItem(LS.adminUntil) || "0");
-      return !!token && Date.now() < until;
-    }
-
-    function getAdminToken() {
-      return localStorage.getItem(LS.adminToken) || "";
-    }
-
-    function esc(s) {
-      return String(s ?? "")
-        .replaceAll("&","&amp;")
-        .replaceAll("<","&lt;")
-        .replaceAll(">","&gt;")
-        .replaceAll('"',"&quot;")
-        .replaceAll("'","&#039;");
-    }
-
-    function fmtTime(ts) {
-      const d = new Date(Number(ts || 0));
-      if (Number.isNaN(d.getTime())) return "";
-      return d.toLocaleString();
-    }
-
-    function sourceChip(type) {
-      const t = (type || "unknown").toLowerCase();
-      const cls =
-        t === "policy" ? "src-chip src-policy" :
-        t === "protocol" ? "src-chip src-protocol" :
-        t === "handbook" ? "src-chip src-handbook" :
-        "src-chip";
-      return `<span class="${cls}">${esc(t)}</span>`;
-    }
-
-    function roleChip(role) {
-      const r = (role || "unknown").toLowerCase();
-      return `<span class="role-chip">${esc(r)}</span>`;
-    }
-
-    function showError(msg) {
-      errorBox.style.display = "block";
-      errorBox.textContent = msg || "Error";
-    }
-
-    function clearError() {
-      errorBox.style.display = "none";
-      errorBox.textContent = "";
-    }
-
-    function setStatus(msg) {
-      statusText.textContent = msg;
-    }
-
-    // Merge roles from data + ensure parent exists
-    function setRoleOptionsFromLogs(logs) {
-      const fixed = ["staff", "parent", "admin", "unknown"];
-      const found = new Set(
-        logs.map(l => String(l.user_role || l.role || "unknown").trim().toLowerCase()).filter(Boolean)
-      );
-      fixed.forEach(r => found.add(r));
-
-      // remember current selection
-      const current = roleSelect.value;
-
-      // rebuild
-      roleSelect.innerHTML = `
-        <option value="">All roles</option>
-        ${Array.from(found)
-          .sort((a,b) => a.localeCompare(b))
-          .map(r => `<option value="${esc(r)}">${esc(r)}</option>`)
-          .join("")}
-      `;
-
-      // restore selection if still exists
-      if (current && Array.from(found).includes(current)) roleSelect.value = current;
-    }
-
-    function setCampusOptionsFromLogs(logs) {
-      const found = new Set(logs.map(l => String(l.campus || "UNKNOWN").trim().toUpperCase()).filter(Boolean));
-      const current = campusSelect.value;
-
-      campusSelect.innerHTML = `
-        <option value="">All campuses</option>
-        ${Array.from(found).sort().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}
-      `;
-
-      if (current && Array.from(found).includes(current)) campusSelect.value = current;
-    }
-
-    function normalizeRole(l) {
-      const r = (l.user_role || l.role || "").trim().toLowerCase();
-      return r || "unknown";
-    }
-
-    function normalizeSourceType(l) {
-      return (l.source_type || "").trim().toLowerCase() || "unknown";
-    }
-
-    function normalizeTitle(l) {
-      // prefer handbook title if exists, else source title if your worker sets it, else id
-      return (l.handbook_title || l.source_title || l.source_id || "").trim();
-    }
-
-    function normalizeSection(l) {
-      return (l.section_key || "").trim();
-    }
-
-    function normalizeQuestion(l) {
-      return (l.query || l.question || "").trim();
-    }
-
-    function render() {
-      const q = (searchInput.value || "").trim().toLowerCase();
-      const campus = (campusSelect.value || "").trim().toUpperCase();
-      const role = (roleSelect.value || "").trim().toLowerCase();
-      const onlyBad = !!onlyErrors.checked;
-
-      let rows = [...allLogs];
-
-      if (campus) rows = rows.filter(l => String(l.campus || "").toUpperCase() === campus);
-      if (role) rows = rows.filter(l => normalizeRole(l) === role);
-      if (onlyBad) rows = rows.filter(l => l.ok === false);
-
-      if (q) {
-        rows = rows.filter(l => {
-          const hay = [
-            normalizeQuestion(l),
-            normalizeTitle(l),
-            normalizeRole(l),
-            String(l.campus || ""),
-            String(l.source_id || ""),
-            String(l.source_type || ""),
-            String(l.section_key || "")
-          ].join(" ").toLowerCase();
-          return hay.includes(q);
-        });
-      }
-
-      countPill.textContent = `${rows.length} logs`;
-
-      tbody.innerHTML = rows.map(l => {
-        const ok = l.ok === true;
-        const okCell = ok ? `<span class="ok">OK</span>` : `<span class="bad">BAD</span>`;
-        const ms = Number(l.ms || 0);
-
-        const st = normalizeSourceType(l);
-        const title = normalizeTitle(l);
-        const section = normalizeSection(l);
-        const question = normalizeQuestion(l);
-
-        return `
-          <tr>
-            <td class="small muted">${esc(fmtTime(l.ts))}</td>
-            <td>${esc(String(l.campus || "UNKNOWN"))}</td>
-            <td>${roleChip(normalizeRole(l))}</td>
-            <td>${okCell}</td>
-            <td class="right">${esc(ms)}</td>
-            <td>${sourceChip(st)}</td>
-            <td class="small">${esc(title)}</td>
-            <td class="small muted">${esc(section)}</td>
-            <td class="q">${esc(question)}</td>
-          </tr>
-        `;
-      }).join("");
-
-      setStatus(`Showing ${rows.length} / ${allLogs.length} logs (latest first)`);
-    }
-
-    async function loadLogs() {
-      clearError();
-      refreshBtn.disabled = true;
-      setStatus("Loading…");
-
-      if (!isAdminActive()) {
-        setStatus("Admin token expired. Please enable Admin mode in the main app.");
-        showError("Admin session not found or expired. Go to Main App and enable Admin mode again.");
-        refreshBtn.disabled = false;
-        return;
-      }
-
-      try {
-        const res = await fetch(LOGS_URL, {
-          headers: { Authorization: `Bearer ${getAdminToken()}` }
-        });
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok || !data.ok) {
-          const msg = data?.error || "Failed to load logs";
-          showError(msg);
-          setStatus("Could not load logs.");
-          refreshBtn.disabled = false;
-          return;
-        }
-
-        allLogs = Array.isArray(data.logs) ? data.logs : [];
-
-        // Ensure sort latest first
-        allLogs.sort((a,b) => Number(b.ts||0) - Number(a.ts||0));
-
-        setCampusOptionsFromLogs(allLogs);
-        setRoleOptionsFromLogs(allLogs);
-
-        render();
-      } catch (e) {
-        showError(e?.message || "Network error");
-        setStatus("Network error.");
-      } finally {
-        refreshBtn.disabled = false;
-      }
-    }
-
-    // ===== EVENTS =====
-    refreshBtn.addEventListener("click", loadLogs);
-    searchInput.addEventListener("input", render);
-    campusSelect.addEventListener("change", render);
-    roleSelect.addEventListener("change", render);
-    onlyErrors.addEventListener("change", render);
-
-    // ===== INIT =====
-    loadLogs();
-  </script>
+  <!-- Scripts -->
+  <script src="admin.js"></script>
+  <script src="logs.js"></script>
 </body>
 </html>
