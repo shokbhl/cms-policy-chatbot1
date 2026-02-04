@@ -89,7 +89,7 @@ const campusSelect = document.getElementById("campus-select"); // login select
 const campusSwitch = document.getElementById("campus-switch"); // header select
 
 const adminModeBtn = document.getElementById("admin-mode-btn");
-const loginAdminBtn = document.getElementById("login-admin-btn"); // login page admin
+const loginAdminBtn = document.getElementById("login-admin-btn"); // login screen admin button
 const modeBadge = document.getElementById("mode-badge");
 const adminModal = document.getElementById("admin-modal");
 const adminPinInput = document.getElementById("admin-pin");
@@ -380,6 +380,12 @@ loginForm?.addEventListener("submit", async (e) => {
   setInlineError("");
 
   const code = (accessCodeInput?.value || "").trim();
+
+  // If someone pastes an admin PIN here, guide them to the Admin Login flow.
+  if (/admin/i.test(code)) {
+    setInlineError('This looks like an Admin PIN. Please use "Admin Login" (Admin mode) instead of the Staff/Parent access code field.');
+    return;
+  }
   const selectedCampus = campusSelect ? normalizeCampus(campusSelect.value) : getCampus();
 
   if (!selectedCampus) {
@@ -406,13 +412,7 @@ loginForm?.addEventListener("submit", async (e) => {
     if (!out.res.ok || !out.data.ok) out = await tryAuth(PARENT_AUTH_URL);
 
     if (!out.res.ok || !out.data.ok) {
-      const codeLower = code.toLowerCase();
-      // Helpful hint: prevent users from trying the admin PIN in the Staff/Parent field
-      if (codeLower.includes("admin")) {
-        setInlineError("That looks like an Admin PIN. Please click Admin Mode and enter the PIN there.");
-      } else {
-        setInlineError(out.data?.error || "Invalid code.");
-      }
+      setInlineError(out.data?.error || "Invalid code.");
       return;
     }
 
@@ -535,22 +535,6 @@ async function enterAdminMode(pin) {
     localStorage.setItem(LS.adminUntil, String(Date.now() + (data.expires_in || 28800) * 1000));
 
     syncModeBadge();
-    setInlineError("");
-
-    // ✅ If user enabled admin from the login screen, switch them into the app immediately
-    const onLoginScreen = loginScreen && !loginScreen.classList.contains("hidden");
-    if (onLoginScreen) {
-      showChatUI();
-      clearChat();
-      addMessage(
-        "assistant",
-        `✅ Admin mode enabled.<br><b>Campus: ${escapeHtml(getCampus() || "(not selected)")}</b><br><br>` +
-          `You can browse <b>Policies</b>, <b>Protocols</b>, and <b>Parent Handbook</b>, and access <b>Dashboard/Logs</b>.<br>` +
-          `To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
-      );
-      return;
-    }
-
     if (chatScreen && !chatScreen.classList.contains("hidden")) {
       addMessage("assistant", "✅ Admin mode enabled (8 hours).");
     }
@@ -584,9 +568,13 @@ adminModeBtn?.addEventListener("click", () => {
 
   const pin = prompt("Enter Admin PIN:");
   if (pin) enterAdminMode(pin);
+});
 
-// Admin mode button on the LOGIN card (so admin can enter without staff/parent login)
-loginAdminBtn?.addEventListener("click", () => {
+// Login-screen Admin button (prevent form submit)
+loginAdminBtn?.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+
   if (isAdminActive()) {
     clearAdminSession();
     syncModeBadge();
@@ -594,6 +582,7 @@ loginAdminBtn?.addEventListener("click", () => {
     return;
   }
 
+  // Prefer modal if present
   if (adminModal && adminPinInput && adminPinSubmit && adminPinCancel) {
     adminPinInput.value = "";
     adminModal.classList.remove("hidden");
@@ -604,6 +593,19 @@ loginAdminBtn?.addEventListener("click", () => {
       const pin = adminPinInput.value.trim();
       adminModal.classList.add("hidden");
       await enterAdminMode(pin);
+
+      // If admin is active now, move to chat UI (dashboard/logs + browse)
+      if (isAdminActive()) {
+        showChatUI();
+        clearChat();
+        addMessage(
+          "assistant",
+          `✅ Admin mode enabled.<br>
+           <b>Campus: ${escapeHtml(getCampus() || "(not selected)")}</b><br><br>
+           You can browse <b>Policies</b>, <b>Protocols</b>, and <b>Parent Handbook</b>, and access <b>Dashboard/Logs</b>.<br>
+           To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
+        );
+      }
     };
     return;
   }
@@ -612,7 +614,6 @@ loginAdminBtn?.addEventListener("click", () => {
   if (pin) enterAdminMode(pin);
 });
 
-});
 
 // ============================
 // MENU PANEL
@@ -629,9 +630,6 @@ async function openMenuPanel(type) {
   }
 
   menuPills.forEach((btn) => btn.classList.toggle("active", btn.dataset.menu === type));
-
-  // expose current panel type for CSS styling
-  try { menuPanel.setAttribute("data-menu", type); } catch {}
 
   menuPanelTitle.textContent =
     type === "policies" ? "Policies" :
@@ -697,7 +695,6 @@ async function openMenuPanel(type) {
 
 function closeMenuPanel() {
   if (menuPanel) menuPanel.classList.add("hidden");
-  try { menuPanel.removeAttribute("data-menu"); } catch {}
   if (menuOverlay) menuOverlay.classList.add("hidden");
   menuPills.forEach((btn) => btn.classList.remove("active"));
 }
@@ -1023,6 +1020,9 @@ chatForm?.addEventListener("submit", (e) => {
 // ============================
 (function init() {
   ensureTopMenuBar();
+
+  // Make sure the login Admin button does NOT submit the login form
+  if (loginAdminBtn) loginAdminBtn.setAttribute("type", "button");
 
   // Clean expired tokens
   if (!isStaffActive()) clearStaffSession();
