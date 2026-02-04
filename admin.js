@@ -1,4 +1,6 @@
-// admin.js (shared for dashboard.html and logs.html)
+// admin.js
+// Shared admin helper for dashboard.html and logs.html
+
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
 
 const LS = {
@@ -6,6 +8,9 @@ const LS = {
   adminUntil: "cms_admin_until"
 };
 
+// -------------------------
+// Admin session helpers
+// -------------------------
 function isAdminActive() {
   const token = localStorage.getItem(LS.adminToken);
   const until = Number(localStorage.getItem(LS.adminUntil) || "0");
@@ -25,9 +30,14 @@ function requireAdminOrRedirect() {
   return true;
 }
 
+// -------------------------
+// Authenticated admin fetch
+// -------------------------
 async function adminFetch(path) {
   const res = await fetch(`${WORKER_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${getAdminToken()}` }
+    headers: {
+      Authorization: `Bearer ${getAdminToken()}`
+    }
   });
 
   const data = await res.json().catch(() => ({}));
@@ -45,6 +55,9 @@ async function adminFetch(path) {
   return data;
 }
 
+// -------------------------
+// Utils
+// -------------------------
 function escapeHtml(s) {
   return String(s ?? "")
     .replaceAll("&", "&amp;")

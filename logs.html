@@ -259,7 +259,6 @@
 
         <select id="roleSelect">
           <option value="">All roles</option>
-          <!-- roles added dynamically -->
         </select>
 
         <label>
@@ -285,9 +284,7 @@
               <th>Question</th>
             </tr>
           </thead>
-          <tbody id="tbody">
-            <!-- rows -->
-          </tbody>
+          <tbody id="tbody"></tbody>
         </table>
       </div>
 
@@ -317,10 +314,8 @@
     const onlyErrors = document.getElementById("onlyErrors");
     const refreshBtn = document.getElementById("refreshBtn");
 
-    // ===== STATE =====
     let allLogs = [];
 
-    // ===== HELPERS =====
     function isAdminActive() {
       const token = localStorage.getItem(LS.adminToken);
       const until = Number(localStorage.getItem(LS.adminUntil) || "0");
@@ -375,7 +370,6 @@
       statusText.textContent = msg;
     }
 
-    // Merge roles from data + ensure parent exists
     function setRoleOptionsFromLogs(logs) {
       const fixed = ["staff", "parent", "admin", "unknown"];
       const found = new Set(
@@ -383,10 +377,8 @@
       );
       fixed.forEach(r => found.add(r));
 
-      // remember current selection
       const current = roleSelect.value;
 
-      // rebuild
       roleSelect.innerHTML = `
         <option value="">All roles</option>
         ${Array.from(found)
@@ -395,7 +387,6 @@
           .join("")}
       `;
 
-      // restore selection if still exists
       if (current && Array.from(found).includes(current)) roleSelect.value = current;
     }
 
@@ -421,7 +412,6 @@
     }
 
     function normalizeTitle(l) {
-      // prefer handbook title if exists, else source title if your worker sets it, else id
       return (l.handbook_title || l.source_title || l.source_id || "").trim();
     }
 
@@ -517,8 +507,6 @@
         }
 
         allLogs = Array.isArray(data.logs) ? data.logs : [];
-
-        // Ensure sort latest first
         allLogs.sort((a,b) => Number(b.ts||0) - Number(a.ts||0));
 
         setCampusOptionsFromLogs(allLogs);
@@ -533,14 +521,12 @@
       }
     }
 
-    // ===== EVENTS =====
     refreshBtn.addEventListener("click", loadLogs);
     searchInput.addEventListener("input", render);
     campusSelect.addEventListener("change", render);
     roleSelect.addEventListener("change", render);
     onlyErrors.addEventListener("change", render);
 
-    // ===== INIT =====
     loadLogs();
   </script>
 </body>

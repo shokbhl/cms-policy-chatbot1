@@ -1,3 +1,4 @@
+// logs.js
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
 const LOGS_URL = `${WORKER_BASE}/admin/logs`;
 
