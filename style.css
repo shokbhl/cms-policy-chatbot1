@@ -934,3 +934,76 @@ a{ color: inherit; }
   .hb-section-btn{ font-size: 12px; padding: 7px 10px; }
   .handbook-btn{ padding: 10px 10px; }
 }
+
+/* =========================
+   PRETTY MENUS: Policies / Protocols
+   - Styles the quick buttons (.menu-item-btn) like modern pills
+   - Adds a subtle tinted background under the menu panel body
+   Paste at the END of style.css
+========================= */
+
+/* Slightly different background under the menus */
+.menu-panel-body{
+  background: linear-gradient(180deg, #fbfdff, #f8fafc);
+}
+
+/* Wrap buttons nicely */
+.menu-panel-body{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* Keep label full width */
+.menu-panel-body .menu-group-label{
+  width: 100%;
+  margin: 0 0 2px;
+}
+
+/* Policies/Protocols buttons */
+.menu-item-btn{
+  appearance: none;
+  border: 1px solid rgba(11,58,122,.16);
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 900;
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1;
+  box-shadow: 0 6px 16px rgba(2,6,23,.06);
+  transition: transform .08s ease, box-shadow .12s ease, border-color .12s ease, background .12s ease;
+}
+
+.menu-item-btn:hover{
+  background: #f8fafc;
+  border-color: rgba(31,95,191,.28);
+  box-shadow: 0 14px 28px rgba(2,6,23,.10);
+  transform: translateY(-1px);
+}
+
+.menu-item-btn:active{
+  transform: translateY(0px);
+  box-shadow: 0 10px 22px rgba(2,6,23,.08);
+}
+
+.menu-item-btn:focus{
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(31,95,191,.10), 0 12px 26px rgba(2,6,23,.10);
+  border-color: rgba(31,95,191,.35);
+}
+
+/* Make the menu panel header a bit more “modal-like” */
+.menu-panel-header{
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
+}
+
+/* Small screens: slightly tighter pills */
+@media (max-width: 560px){
+  .menu-item-btn{
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+}
