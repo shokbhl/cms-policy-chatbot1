@@ -17,7 +17,7 @@
   --brand-2: #1f5fbf;
 
   --pill: #eef2ff;
-  --pill-soft: #eef6ff;         /* ✅ light blue (requested) */
+  --pill-soft: #eef6ff;
   --pill-border: #c7d2fe;
 
   --danger: #b91c1c;
@@ -98,6 +98,35 @@ a{ color: inherit; }
   justify-content:flex-end;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* ✅ NEW: Program dropdown */
+.program-switch{
+  min-width: 150px;
+  height: 40px;
+  padding: 0 44px 0 12px;
+  border: 1px solid rgba(31,95,191,.18);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
+  color: var(--text);
+  outline: none;
+  font-weight: 900;
+  letter-spacing: .2px;
+  box-shadow: 0 10px 24px rgba(2,6,23,.06);
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'><path fill='%231f5fbf' d='M5.6 7.5a1 1 0 0 1 1.4 0L10 10.5l3-3a1 1 0 1 1 1.4 1.4l-3.7 3.7a1 1 0 0 1-1.4 0L5.6 8.9a1 1 0 0 1 0-1.4z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 18px 18px;
+  transition: border-color .12s ease, box-shadow .12s ease, transform .08s ease;
+}
+.program-switch:hover{
+  border-color: rgba(31,95,191,.30);
+  transform: translateY(-1px);
+}
+.program-switch:focus{
+  border-color: rgba(31,95,191,.45);
+  box-shadow: 0 0 0 4px rgba(31,95,191,.10), 0 14px 28px rgba(2,6,23,.08);
 }
 
 .campus-switch{
@@ -322,29 +351,6 @@ a{ color: inherit; }
 .login-row .primary-btn{ flex: 0 0 auto; min-width: 140px; }
 .login-row .secondary-btn{ flex: 0 0 auto; min-width: 160px; }
 
-.campus-reminder{
-  flex: 1 1 320px;
-  display:flex;
-  align-items:center;
-  justify-content:flex-start;
-  gap: 8px;
-  color: var(--muted);
-  font-weight: 800;
-}
-
-.campus-pill{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--pill-soft);
-  border: 1px solid rgba(11,58,122,.15);
-  color: var(--brand);
-  font-weight: 950;
-}
-
 .error-text{
   margin-top: 6px;
   color: var(--danger);
@@ -366,12 +372,6 @@ a{ color: inherit; }
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 16px;
-}
-
-.chat-top-hint{
-  color: var(--muted);
-  font-weight: 800;
-  margin-bottom: 12px;
 }
 
 .chat-window{
@@ -478,30 +478,25 @@ a{ color: inherit; }
   overflow:auto;
 }
 
-/* ================= Policies / Protocols pills ================= */
-/* این همون چیزی هست که الان تو عکسِ درستت می‌بینی */
+/* Policies / Protocols pills */
 .menu-item-btn{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
   margin: 6px 8px 0 0;
   padding: 8px 12px;
   border-radius: 999px;
-
   border: 1px solid var(--line);
   background: #ffffff;
   color: #111827;
-
   font-size: 13px;
   font-weight: 850;
   cursor: pointer;
-
   transition: background .12s ease, border-color .12s ease, transform .08s ease, box-shadow .12s ease;
 }
 
 .menu-item-btn:hover{
-  background: var(--pill-soft);                 /* ✅ light blue hover */
+  background: var(--pill-soft);
   border-color: rgba(31,95,191,.20);
   transform: translateY(-1px);
   box-shadow: 0 8px 18px rgba(2,6,23,.06);
@@ -509,9 +504,7 @@ a{ color: inherit; }
 
 .menu-item-btn:active{ transform: translateY(0); }
 
-/* ================= Handbook (Campus-based) ================= */
-/* دکمه‌های handbook و سکشن‌ها را دست نمی‌زنیم؛ فقط UI مرتب + بک‌گراند آبی کمرنگ زیر سکشن‌ها */
-
+/* Handbook */
 .handbook-wrap{
   display:flex;
   flex-direction:column;
@@ -531,7 +524,6 @@ a{ color: inherit; }
   color: var(--muted);
 }
 
-/* Handbook list "cards" */
 .handbook-btn{
   width: 100%;
   text-align: left;
@@ -564,20 +556,14 @@ a{ color: inherit; }
   font-weight: 700;
 }
 
-/* ✅ فقط بک‌گراند زیر دکمه‌های سکشن‌ها (آبی کمرنگ) */
 .hb-sections{
-  background: linear-gradient(
-    180deg,
-    rgba(238,246,255,.95),
-    rgba(255,255,255,0)
-  );
+  background: linear-gradient(180deg, rgba(238,246,255,.95), rgba(255,255,255,0));
   border: 1px solid rgba(31,95,191,.10);
   border-radius: 14px;
   padding: 10px 10px 6px;
   margin: 8px 0 6px;
 }
 
-/* Section pill buttons (همون دکمه‌های قبلی) */
 .hb-section-btn{
   border: 1px solid var(--line);
   background: #fff;
@@ -596,7 +582,6 @@ a{ color: inherit; }
   transform: translateY(-1px);
 }
 
-/* Section view (وقتی یک سکشن باز میشه) */
 .hb-section-view{
   margin-top: 10px;
   border: 1px solid var(--line);
@@ -661,70 +646,6 @@ a{ color: inherit; }
   white-space: pre-wrap;
 }
 
-/* ================= ADMIN MODAL ================= */
-.modal{
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(17,24,39,.35);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding: 16px;
-}
-
-.modal-card{
-  width: min(460px, calc(100% - 24px));
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 16px;
-}
-
-.modal-title{
-  font-weight: 950;
-  color: var(--brand);
-  font-size: 18px;
-  margin-bottom: 6px;
-}
-
-.modal-hint{
-  color: var(--muted);
-  font-weight: 800;
-  margin-bottom: 12px;
-}
-
-.modal-actions{
-  display:flex;
-  gap: 10px;
-  justify-content:flex-end;
-  margin-top: 12px;
-}
-
-/* ================= TOAST ================= */
-.toast-wrap{
-  position: fixed;
-  z-index: 9999;
-  left: 50%;
-  bottom: 18px;
-  transform: translateX(-50%);
-  width: min(520px, calc(100% - 24px));
-  pointer-events:none;
-}
-
-.toast{
-  pointer-events:none;
-  background: rgba(15,23,42,.92);
-  color: #fff;
-  border: 1px solid rgba(255,255,255,.10);
-  border-radius: 14px;
-  padding: 10px 12px;
-  box-shadow: var(--shadow);
-  font-weight: 850;
-  text-align:center;
-}
-
 /* ================= RESPONSIVE ================= */
 @media (max-width: 720px){
   .header-inner{ padding: 12px 12px; }
@@ -740,56 +661,11 @@ a{ color: inherit; }
   .campus-select{ min-width: 100%; }
 
   .menu-panel{ top: 92px; }
+
+  .program-switch{ min-width: 160px; width: 100%; }
 }
 
 @media (max-width: 560px){
   .hb-section-btn{ font-size: 12px; padding: 7px 10px; }
   .handbook-btn{ padding: 10px 10px; }
 }
-
-/* =========================
-   Modern Campus Select
-   (styles the closed select nicely; dropdown list is OS-controlled)
-========================= */
-
-.campus-select{
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-
-  height: 46px;
-  border-radius: 999px;
-  border: 1px solid rgba(31,95,191,.18);
-  background: linear-gradient(180deg, #ffffff, #fbfdff);
-  padding: 0 44px 0 14px; /* space for arrow */
-
-  font-weight: 900;
-  letter-spacing: .2px;
-  color: var(--text);
-
-  box-shadow: 0 10px 24px rgba(2,6,23,.06);
-  transition: border-color .12s ease, box-shadow .12s ease, transform .08s ease;
-
-  /* custom arrow (inline SVG) */
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'><path fill='%231f5fbf' d='M5.6 7.5a1 1 0 0 1 1.4 0L10 10.5l3-3a1 1 0 1 1 1.4 1.4l-3.7 3.7a1 1 0 0 1-1.4 0L5.6 8.9a1 1 0 0 1 0-1.4z'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 14px center;
-  background-size: 18px 18px;
-}
-
-.campus-select:hover{
-  border-color: rgba(31,95,191,.30);
-  transform: translateY(-1px);
-}
-
-.campus-select:focus{
-  outline: none;
-  border-color: rgba(31,95,191,.45);
-  box-shadow: 0 0 0 4px rgba(31,95,191,.10), 0 14px 28px rgba(2,6,23,.08);
-}
-
-/* Optional: style options (may not fully apply on macOS) */
-.campus-select option{
-  font-weight: 800;
-}
-
