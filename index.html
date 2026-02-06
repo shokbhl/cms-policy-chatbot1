@@ -4,19 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CMS Policy Chatbot</title>
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/cms-180.png">
-  <!-- Favicon -->
+
   <link rel="icon" href="/favicon.ico">
-  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-
-  <!-- Apple (iPhone / iPad) -->
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-
-  <!-- PWA -->
   <link rel="manifest" href="/site.webmanifest">
   <meta name="theme-color" content="#1e3a8a">
- 
+
   <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -24,7 +16,6 @@
   <!-- ================= HEADER ================= -->
   <header class="app-header">
     <div class="header-inner">
-      <!-- Left: Logo + Title -->
       <div class="brand">
         <img class="brand-logo" src="cms-logo.png" alt="CMS" />
         <div class="brand-text">
@@ -33,8 +24,15 @@
         </div>
       </div>
 
-      <!-- Right: Actions -->
       <div id="header-actions" class="header-actions hidden">
+        <!-- ✅ Program switch -->
+        <select id="program-switch" class="program-switch">
+          <option value="ALL">All Programs</option>
+          <option value="Preschool">Preschool</option>
+          <option value="Sr. Casa">Sr. Casa</option>
+          <option value="Elementary">Elementary</option>
+        </select>
+
         <select id="campus-switch" class="campus-switch">
           <option value="">Campus</option>
           <option value="YC">YC</option>
@@ -59,7 +57,6 @@
       <button class="menu-pill" data-menu="protocols" type="button">Protocols</button>
       <button class="menu-pill" data-menu="handbook" type="button">Parent Handbook</button>
 
-      <!-- Admin quick links (shown only if admin token active) -->
       <div id="admin-links" class="admin-links hidden">
         <a class="admin-link" href="dashboard.html">Dashboard</a>
         <a class="admin-link" href="logs.html">Logs</a>
@@ -102,9 +99,7 @@
           </div>
 
           <div class="login-row">
-            <button id="login-admin-btn" class="secondary-btn" type="button">
-              Admin Login
-            </button>
+            <button id="login-admin-btn" class="secondary-btn" type="button">Admin Login</button>
 
             <div class="campus-reminder">
               You will login with campus:
@@ -122,20 +117,14 @@
     <!-- ============ CHAT SCREEN ============ -->
     <section id="chat-screen" class="screen hidden">
       <div class="chat-shell">
-        <div class="chat-top-hint">
+        <div id="chat-top-hint" class="chat-top-hint">
           Ask any CMS policy, protocol, or parent handbook question (campus-based).
         </div>
 
         <div class="chat-window" id="chat-window"></div>
 
         <form id="chat-form" class="chat-form">
-          <input
-            id="user-input"
-            class="text-input"
-            type="text"
-            placeholder="Ask a question..."
-            autocomplete="off"
-          />
+          <input id="user-input" class="text-input" type="text" placeholder="Ask a question..." autocomplete="off" />
           <button class="primary-btn" type="submit">Ask</button>
         </form>
       </div>
@@ -170,20 +159,15 @@
     </div>
   </div>
 
-  <!-- ================= SCRIPT ================= -->
   <script src="app.js"></script>
 
-  <!-- Campus preview helper (no dependency on app.js) -->
   <script>
     (function () {
       const sel = document.getElementById("campus-select");
       const pill = document.getElementById("campus-preview");
       if (!sel || !pill) return;
 
-      const update = () => {
-        pill.textContent = sel.value ? sel.value : "—";
-      };
-
+      const update = () => { pill.textContent = sel.value ? sel.value : "—"; };
       sel.addEventListener("change", update);
       update();
     })();
