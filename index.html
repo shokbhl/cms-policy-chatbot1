@@ -1,131 +1,469 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CMS Policy Chatbot</title>
-  <link rel="stylesheet" href="./style.css" />
-</head>
-<body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo">CMS</div>
-        <div class="brandText">
-          <div class="brandTitle">CMS Policy Chatbot</div>
-          <div class="brandSub" id="brandSub">Policies • Protocols • Handbooks</div>
-        </div>
-      </div>
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
 
-      <div class="topActions">
-        <button class="btn ghost" id="btnRefresh" type="button">Refresh</button>
-        <button class="btn danger" id="btnLogout" type="button">Logout</button>
-      </div>
-    </header>
+    // CORS preflight
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
+    }
 
-    <main class="layout">
-      <!-- LEFT -->
-      <aside class="panel">
-        <div class="card">
-          <div class="cardTitle">Login</div>
+    try {
+      // =========================
+      // HEALTH
+      // =========================
+      if (url.pathname === "/health") {
+        return json(
+          {
+            ok: true,
+            kv: {
+              cms_handbooks: !!env.cms_handbooks,
+              cms_policies: !!env.cms_policies,
+              cms_protocols: !!env.cms_protocols,
+            },
+            ai: {
+              hasKey: !!env.OPENAI_API_KEY,
+              model: env.OPENAI_MODEL || "gpt-4o-mini",
+            },
+          },
+          200,
+          request
+        );
+      }
 
-          <div class="segmented" role="tablist" aria-label="Role">
-            <button class="segBtn active" id="roleParent" type="button">Parent</button>
-            <button class="segBtn" id="roleStaff" type="button">Staff</button>
-          </div>
+      // =========================
+      // LIST: POLICIES
+      // GET /list/policies
+      // =========================
+      if (url.pathname === "/list/policies") {
+        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
+        const items = await getPolicies(env);
+        return json({ ok: true, items }, 200, request);
+      }
 
-          <div class="row gap">
-            <label class="label">Campus</label>
-            <div class="campusGrid" id="campusGrid"></div>
-          </div>
+      // =========================
+      // LIST: PROTOCOLS
+      // GET /list/protocols
+      // =========================
+      if (url.pathname === "/list/protocols") {
+        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
+        const items = await getProtocols(env);
+        return json({ ok: true, items }, 200, request);
+      }
 
-          <div class="row gap" id="staffCodeRow" style="display:none;">
-            <label class="label" for="staffCode">Staff Code</label>
-            <input class="input" id="staffCode" placeholder="Enter staff code" autocomplete="off" />
-            <button class="btn primary" id="btnLogin" type="button">Login</button>
-            <div class="hint">Tip: staff code is required only for Staff.</div>
-          </div>
+      // =========================
+      // GET ONE DOC SECTION
+      // GET /doc?type=policies&id=...
+      // GET /doc?type=protocols&id=...
+      // =========================
+      if (url.pathname === "/doc") {
+        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
 
-          <div class="row gap" id="parentRow">
-            <button class="btn primary full" id="btnContinueParent" type="button">Continue as Parent</button>
-            <div class="hint">Parents can view policies, protocols, and handbook.</div>
-          </div>
+        const type = (url.searchParams.get("type") || "").trim().toLowerCase();
+        const id = (url.searchParams.get("id") || "").trim();
 
-          <div class="divider"></div>
+        if (!type || !id) return json({ ok: false, error: "Missing type or id" }, 400, request);
 
-          <div class="row gap">
-            <div class="mini">
-              <div class="miniLabel">Role</div>
-              <div class="miniValue" id="infoRole">—</div>
-            </div>
-            <div class="mini">
-              <div class="miniLabel">Campus</div>
-              <div class="miniValue" id="infoCampus">—</div>
-            </div>
-          </div>
-        </div>
+        let list = [];
+        if (type === "policies") list = await getPolicies(env);
+        else if (type === "protocols") list = await getProtocols(env);
+        else return json({ ok: false, error: "type must be policies|protocols" }, 400, request);
 
-        <div class="card">
-          <div class="cardTitle">Menu</div>
-          <div class="menu">
-            <button class="menuBtn active" id="menuPolicies" type="button">
-              <span>Policies</span><span class="pill" id="countPolicies">0</span>
-            </button>
-            <button class="menuBtn" id="menuProtocols" type="button">
-              <span>Protocols</span><span class="pill" id="countProtocols">0</span>
-            </button>
-            <button class="menuBtn" id="menuHandbook" type="button">
-              <span>Parent Handbook</span><span class="pill soft" id="countHandbook">0</span>
-            </button>
-          </div>
+        const found = list.find((x) => x.id === id);
+        if (!found) return json({ ok: false, error: "Not found" }, 404, request);
 
-          <div class="divider"></div>
+        return json({ ok: true, item: found }, 200, request);
+      }
 
-          <label class="label" for="searchBox">Search</label>
-          <input class="input" id="searchBox" placeholder="Search by title / keywords..." />
-          <div class="hint">Filters current list only.</div>
-        </div>
-      </aside>
+      // =========================
+      // HANDBOOK LOAD
+      // GET /handbook?campus=MC
+      // reads KV cms_handbooks -> key handbook_MC ...
+      // =========================
+      if (url.pathname === "/handbook") {
+        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
 
-      <!-- RIGHT -->
-      <section class="content">
-        <div class="contentTop">
-          <div class="contentTitle" id="contentTitle">Policies</div>
-          <div class="contentMeta" id="contentMeta">Select a campus then choose a menu.</div>
-        </div>
+        const campus = (url.searchParams.get("campus") || "").trim().toUpperCase();
+        if (!campus) return json({ ok: false, error: "Missing campus" }, 400, request);
 
-        <div class="grid">
-          <div class="card mainCard">
-            <div class="list" id="list"></div>
+        const key = `handbook_${campus}`;
+        const handbook = await kvJson(env.cms_handbooks, key);
 
-            <div class="empty" id="emptyState" style="display:none;">
-              <div class="emptyTitle">No items</div>
-              <div class="emptySub">Try changing the search or menu.</div>
-            </div>
-          </div>
+        if (!handbook) {
+          return json({ ok: false, error: `Handbook not found in KV: ${key}` }, 404, request);
+        }
 
-          <div class="card detailCard">
-            <div class="detailHeader">
-              <div class="detailTitle" id="detailTitle">Select an item</div>
-              <div class="detailActions">
-                <button class="btn ghost" id="btnCopy" type="button">Copy</button>
-              </div>
-            </div>
-            <div class="detailBody" id="detailBody">
-              <div class="muted">
-                Click a policy / protocol / handbook item to see details here.
-              </div>
-            </div>
-          </div>
-        </div>
+        return json({ ok: true, campus, handbook }, 200, request);
+      }
 
-        <footer class="footer">
-          <div class="muted small" id="footerNote">Connected via /api</div>
-        </footer>
-      </section>
-    </main>
-  </div>
+      // =========================
+      // CHAT API
+      // POST /api
+      // body: { question, campus, scope }
+      // scope optional: "handbook" | "policies" | "protocols" | "all"
+      // =========================
+      if (url.pathname === "/api") {
+        if (request.method !== "POST") return json({ ok: false, error: "POST required" }, 405, request);
 
-  <script src="./app.js"></script>
-</body>
-</html>
+        const body = await safeReadJson(request);
+        if (!body.ok) return json({ ok: false, error: "Invalid JSON body" }, 400, request);
+
+        const question = (body.data?.question || body.data?.q || "").toString().trim();
+        const campus = (body.data?.campus || "").toString().trim().toUpperCase();
+        const scope = (body.data?.scope || "all").toString().trim().toLowerCase();
+
+        if (!question) return json({ ok: false, error: "Missing question" }, 400, request);
+
+        // Load sources based on scope
+        const sources = await buildSources(env, { campus, scope });
+
+        // Retrieve relevant excerpts
+        const retrieved = retrieveRelevant(question, sources, 8);
+
+        // Build answer with OpenAI
+        const answer = await generateAnswer(env, {
+          question,
+          campus,
+          scope,
+          retrieved,
+        });
+
+        return json(
+          {
+            ok: true,
+            answer: answer.text,
+            used: {
+              scope,
+              campus: campus || null,
+              matched_items: retrieved.map((r) => ({
+                source: r.source,
+                id: r.id,
+                title: r.title,
+                link: r.link || null,
+                score: r.score,
+              })),
+            },
+          },
+          200,
+          request
+        );
+      }
+
+      return json({ ok: false, error: "Not found" }, 404, request);
+    } catch (err) {
+      return json(
+        { ok: false, error: "Server error", detail: (err && err.message) ? err.message : String(err) },
+        500,
+        request
+      );
+    }
+  },
+};
+
+// =========================
+// KV LOADERS
+// =========================
+async function getPolicies(env) {
+  if (!env.cms_policies) return [];
+  const arr = await kvJson(env.cms_policies, "policies");
+  return normalizeItems(arr, "Policy");
+}
+
+async function getProtocols(env) {
+  if (!env.cms_protocols) return [];
+  const arr = await kvJson(env.cms_protocols, "protocols");
+  return normalizeItems(arr, "Protocol");
+}
+
+function normalizeItems(arr, defaultType) {
+  const items = Array.isArray(arr) ? arr : [];
+  const cleaned = items
+    .map((x) => ({
+      type: x.type || defaultType,
+      id: String(x.id || "").trim(),
+      title: String(x.title || "").trim(),
+      content: Array.isArray(x.content) ? x.content.map(String) : (x.content ? [String(x.content)] : []),
+      keywords: Array.isArray(x.keywords) ? x.keywords.map(String) : [],
+      order: Number.isFinite(x.order) ? x.order : (typeof x.order === "number" ? x.order : 9999),
+      link: x.link ? String(x.link) : "",
+    }))
+    .filter((x) => x.id && x.title);
+
+  cleaned.sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title));
+  return cleaned;
+}
+
+async function kvJson(kv, key) {
+  if (!kv) return null;
+  const raw = await kv.get(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+// =========================
+// BUILD SOURCES
+// =========================
+async function buildSources(env, { campus, scope }) {
+  const sources = [];
+
+  const wantHandbook = scope === "handbook" || scope === "all";
+  const wantPolicies = scope === "policies" || scope === "all";
+  const wantProtocols = scope === "protocols" || scope === "all";
+
+  if (wantHandbook && env.cms_handbooks && campus) {
+    const hb = await kvJson(env.cms_handbooks, `handbook_${campus}`);
+    // handbook structure can be anything; we convert to "sections"
+    // If your handbook is already array of sections: [{id,title,content:[...]}] it works.
+    // If it is nested, we try to flatten.
+    const hbSections = flattenHandbook(hb, campus);
+    sources.push(...hbSections.map((s) => ({ ...s, source: `handbook_${campus}` })));
+  }
+
+  if (wantPolicies) {
+    const policies = await getPolicies(env);
+    sources.push(...policies.map((p) => ({ ...p, source: "policies" })));
+  }
+
+  if (wantProtocols) {
+    const protocols = await getProtocols(env);
+    sources.push(...protocols.map((p) => ({ ...p, source: "protocols" })));
+  }
+
+  return sources;
+}
+
+// tries to make handbook searchable even if nested
+function flattenHandbook(handbookJson, campus) {
+  // If already array of {id,title,content}
+  if (Array.isArray(handbookJson)) {
+    return normalizeItems(handbookJson, `Handbook ${campus}`);
+  }
+
+  // If object with sections
+  // common pattern: { title, sections:[...] } or { sections:{...} }
+  const out = [];
+
+  if (!handbookJson || typeof handbookJson !== "object") return out;
+
+  // sections: array
+  if (Array.isArray(handbookJson.sections)) {
+    const items = handbookJson.sections.map((s, idx) => ({
+      id: s.id || `hb_${campus}_${idx + 1}`,
+      title: s.title || s.heading || `Section ${idx + 1}`,
+      content: Array.isArray(s.content) ? s.content : (s.text ? [s.text] : []),
+      keywords: s.keywords || [],
+      order: s.order ?? (idx + 1),
+      link: s.link || "",
+      type: `Handbook ${campus}`,
+    }));
+    return normalizeItems(items, `Handbook ${campus}`);
+  }
+
+  // sections: object map
+  if (handbookJson.sections && typeof handbookJson.sections === "object") {
+    let idx = 0;
+    for (const [k, v] of Object.entries(handbookJson.sections)) {
+      idx++;
+      out.push({
+        id: (v && v.id) ? v.id : `hb_${campus}_${k}`,
+        title: (v && (v.title || v.heading)) ? (v.title || v.heading) : k,
+        content: Array.isArray(v?.content) ? v.content : (v?.text ? [v.text] : []),
+        keywords: Array.isArray(v?.keywords) ? v.keywords : [],
+        order: Number.isFinite(v?.order) ? v.order : idx,
+        link: v?.link ? String(v.link) : "",
+        type: `Handbook ${campus}`,
+      });
+    }
+    return normalizeItems(out, `Handbook ${campus}`);
+  }
+
+  // fallback: stringify
+  return [
+    {
+      id: `hb_${campus}_full`,
+      title: `Parent Handbook - ${campus}`,
+      content: [JSON.stringify(handbookJson)],
+      keywords: [],
+      order: 1,
+      link: "",
+      type: `Handbook ${campus}`,
+    },
+  ];
+}
+
+// =========================
+// RETRIEVAL (simple + fast)
+// =========================
+function retrieveRelevant(question, sources, topK = 8) {
+  const q = normalize(question);
+  const qTokens = tokenize(q);
+
+  const scored = sources.map((item) => {
+    const hay = normalize(
+      [
+        item.title,
+        (item.keywords || []).join(" "),
+        ...(Array.isArray(item.content) ? item.content : []),
+      ].join(" ")
+    );
+
+    const score = scoreMatch(qTokens, hay, item);
+    return { ...item, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored.filter((x) => x.score > 0).slice(0, topK);
+
+  // If nothing matched, just take first few from requested scope (still answer but will be cautious)
+  return best.length ? best : scored.slice(0, Math.min(topK, scored.length));
+}
+
+function scoreMatch(qTokens, hay, item) {
+  let s = 0;
+
+  // title boost
+  const title = normalize(item.title || "");
+  for (const t of qTokens) {
+    if (!t) continue;
+    if (title.includes(t)) s += 8;
+  }
+
+  // keyword boost
+  const kw = normalize((item.keywords || []).join(" "));
+  for (const t of qTokens) {
+    if (kw.includes(t)) s += 6;
+  }
+
+  // body
+  for (const t of qTokens) {
+    if (hay.includes(t)) s += 2;
+  }
+
+  return s;
+}
+
+function normalize(str) {
+  return String(str || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenize(str) {
+  return normalize(str)
+    .split(" ")
+    .map((t) => t.replace(/[^a-z0-9_-]/g, ""))
+    .filter((t) => t.length >= 3)
+    .slice(0, 30);
+}
+
+// =========================
+// AI ANSWER (not too short)
+// =========================
+async function generateAnswer(env, { question, campus, scope, retrieved }) {
+  if (!env.OPENAI_API_KEY) {
+    // fallback if no AI key
+    return {
+      text:
+        "AI key is missing. Please set OPENAI_API_KEY in Worker environment variables. " +
+        "I can still show the most relevant CMS text excerpts:\n\n" +
+        retrieved
+          .slice(0, 3)
+          .map((r) => `• ${r.title}\n${(r.content || []).slice(0, 6).join("\n")}`)
+          .join("\n\n"),
+    };
+  }
+
+  const model = env.OPENAI_MODEL || "gpt-4o-mini";
+
+  const contextBlocks = retrieved.slice(0, 6).map((r, i) => {
+    const excerpt = (r.content || []).slice(0, 18).join("\n");
+    return `SOURCE ${i + 1} (${r.source})\nTitle: ${r.title}\nID: ${r.id}\nLink: ${r.link || "N/A"}\nContent:\n${excerpt}`;
+  });
+
+  const systemPrompt = `
+You are a CMS Policy/Protocol/Handbook assistant for staff and parents.
+
+HARD RULES:
+- Use ONLY the provided SOURCE texts. Do not invent or guess.
+- If the sources do not contain the answer, say what is missing and suggest what to ask the office/admin.
+- Write in clear English.
+- The answer must NOT be overly short: produce at least 8–10 lines (full sentences). Avoid one-paragraph tiny summaries.
+- If helpful, use short bullet points, but still keep enough detail.
+- When relevant, mention whether this is from Policy, Protocol, or Parent Handbook (naturally).
+`;
+
+  const userPrompt = `
+Campus: ${campus || "N/A"}
+Scope: ${scope}
+
+Question:
+${question}
+
+SOURCES:
+${contextBlocks.join("\n\n")}
+
+Now answer the question using ONLY the sources above. Make it complete and not too short (minimum 8–10 lines).
+`;
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt.trim() },
+        { role: "user", content: userPrompt.trim() },
+      ],
+      temperature: 0.2,
+      max_tokens: Number(env.OPENAI_MAX_TOKENS || 600),
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    return { text: `AI error (${res.status}). ${txt}` };
+  }
+
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content?.trim() || "No answer generated.";
+  return { text };
+}
+
+// =========================
+// HELPERS
+// =========================
+async function safeReadJson(request) {
+  try {
+    const data = await request.json();
+    return { ok: true, data };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function json(obj, status = 200, request) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      ...corsHeaders(request),
+    },
+  });
+}
+
+function corsHeaders(request) {
+  const origin = request?.headers?.get("Origin") || "*";
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+  };
+}

@@ -1,482 +1,469 @@
-/* =========================
-   app.js (FULL)
-   - Uses /api (Cloudflare Pages Function) -> Worker
-   - Fetches Policies/Protocols/Handbooks from KV
-   - KV Keys:
-     cms_policies: key "policies"
-     cms_protocols: key "protocols"
-     cms_handbooks: keys "handbook_YC" "handbook_MC" "handbook_SC" "handbook_TC" "handbook_WC"
-========================= */
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
 
-(() => {
-  const API_URL = "/api";
-  const CAMPUSES = ["YC", "MC", "SC", "TC", "WC"];
-
-  const LS = {
-    role: "cms_role",      // parent | staff
-    campus: "cms_campus",
-    staffToken: "cms_staff_token",
-    staffUntil: "cms_staff_until"
-  };
-
-  // DOM
-  const el = (id) => document.getElementById(id);
-
-  const roleParent = el("roleParent");
-  const roleStaff = el("roleStaff");
-  const campusGrid = el("campusGrid");
-  const staffCodeRow = el("staffCodeRow");
-  const staffCode = el("staffCode");
-  const btnLogin = el("btnLogin");
-  const btnContinueParent = el("btnContinueParent");
-
-  const infoRole = el("infoRole");
-  const infoCampus = el("infoCampus");
-
-  const menuPolicies = el("menuPolicies");
-  const menuProtocols = el("menuProtocols");
-  const menuHandbook = el("menuHandbook");
-
-  const countPolicies = el("countPolicies");
-  const countProtocols = el("countProtocols");
-  const countHandbook = el("countHandbook");
-
-  const btnLogout = el("btnLogout");
-  const btnRefresh = el("btnRefresh");
-
-  const searchBox = el("searchBox");
-  const contentTitle = el("contentTitle");
-  const contentMeta = el("contentMeta");
-  const list = el("list");
-  const emptyState = el("emptyState");
-
-  const detailTitle = el("detailTitle");
-  const detailBody = el("detailBody");
-  const btnCopy = el("btnCopy");
-  const footerNote = el("footerNote");
-
-  // State
-  const state = {
-    role: "parent",
-    campus: "YC",
-    menu: "policies", // policies | protocols | handbook
-    allItems: [],
-    filtered: [],
-    selectedItem: null,
-    caches: {
-      policies: null,
-      protocols: null,
-      handbook: {} // campus -> items
+    // CORS preflight
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
-  };
-
-  // ---------- Helpers ----------
-  function nowSec() { return Math.floor(Date.now() / 1000); }
-  function setLS(k, v) { localStorage.setItem(k, v); }
-  function getLS(k) { return localStorage.getItem(k); }
-  function delLS(k) { localStorage.removeItem(k); }
-
-  function safeText(v) {
-    if (v === null || v === undefined) return "";
-    return String(v);
-  }
-
-  function escapeHtml(str) {
-    return safeText(str)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  function toast(msg) {
-    // simple non-intrusive
-    footerNote.textContent = msg;
-    setTimeout(() => {
-      footerNote.textContent = "Connected via /api";
-    }, 2200);
-  }
-
-  // POST to Pages /api (which proxies to Worker)
-  async function apiPost(payload) {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    let data = null;
-    try { data = await res.json(); } catch { /* ignore */ }
-
-    if (!res.ok) {
-      const err = data?.error || `HTTP ${res.status}`;
-      throw new Error(err);
-    }
-
-    return data;
-  }
-
-  function isStaffAuthed() {
-    const t = getLS(LS.staffToken);
-    const until = parseInt(getLS(LS.staffUntil) || "0", 10);
-    return !!t && until > nowSec();
-  }
-
-  function requireCampus() {
-    if (!state.campus) throw new Error("Select a campus");
-  }
-
-  function activeBtn(btn, on) {
-    btn.classList.toggle("active", !!on);
-  }
-
-  function setRole(role) {
-    state.role = role;
-    setLS(LS.role, role);
-
-    activeBtn(roleParent, role === "parent");
-    activeBtn(roleStaff, role === "staff");
-
-    if (role === "staff") {
-      staffCodeRow.style.display = "";
-      btnContinueParent.parentElement.style.display = "none";
-    } else {
-      staffCodeRow.style.display = "none";
-      btnContinueParent.parentElement.style.display = "";
-    }
-
-    infoRole.textContent = role.toUpperCase();
-  }
-
-  function setCampus(c) {
-    state.campus = c;
-    setLS(LS.campus, c);
-    infoCampus.textContent = c;
-
-    // highlight campus buttons
-    [...campusGrid.querySelectorAll(".campusBtn")].forEach(b => {
-      b.classList.toggle("active", b.dataset.campus === c);
-    });
-  }
-
-  function setMenu(menu) {
-    state.menu = menu;
-
-    activeBtn(menuPolicies, menu === "policies");
-    activeBtn(menuProtocols, menu === "protocols");
-    activeBtn(menuHandbook, menu === "handbook");
-
-    if (menu === "policies") contentTitle.textContent = "Policies";
-    if (menu === "protocols") contentTitle.textContent = "Protocols";
-    if (menu === "handbook") contentTitle.textContent = "Parent Handbook";
-
-    contentMeta.textContent = `Role: ${state.role.toUpperCase()} • Campus: ${state.campus}`;
-
-    searchBox.value = "";
-    render();
-  }
-
-  // ---------- Data Fetch ----------
-  async function loadPolicies() {
-    if (state.caches.policies) return state.caches.policies;
-
-    const data = await apiPost({ op: "list_policies" });
-    const items = Array.isArray(data?.items) ? data.items : [];
-    state.caches.policies = items;
-    countPolicies.textContent = String(items.length);
-    return items;
-  }
-
-  async function loadProtocols() {
-    if (state.caches.protocols) return state.caches.protocols;
-
-    const data = await apiPost({ op: "list_protocols" });
-    const items = Array.isArray(data?.items) ? data.items : [];
-    state.caches.protocols = items;
-    countProtocols.textContent = String(items.length);
-    return items;
-  }
-
-  async function loadHandbook(campus) {
-    if (state.caches.handbook[campus]) return state.caches.handbook[campus];
-
-    const data = await apiPost({ op: "handbook", campus });
-    const items = Array.isArray(data?.items) ? data.items : [];
-    state.caches.handbook[campus] = items;
-    countHandbook.textContent = String(items.length);
-    return items;
-  }
-
-  async function refreshCurrentMenu() {
-    requireCampus();
 
     try {
-      toast("Loading…");
+      // =========================
+      // HEALTH
+      // =========================
+      if (url.pathname === "/health") {
+        return json(
+          {
+            ok: true,
+            kv: {
+              cms_handbooks: !!env.cms_handbooks,
+              cms_policies: !!env.cms_policies,
+              cms_protocols: !!env.cms_protocols,
+            },
+            ai: {
+              hasKey: !!env.OPENAI_API_KEY,
+              model: env.OPENAI_MODEL || "gpt-4o-mini",
+            },
+          },
+          200,
+          request
+        );
+      }
 
-      let items = [];
-      if (state.menu === "policies") items = await loadPolicies();
-      if (state.menu === "protocols") items = await loadProtocols();
-      if (state.menu === "handbook") items = await loadHandbook(state.campus);
+      // =========================
+      // LIST: POLICIES
+      // GET /list/policies
+      // =========================
+      if (url.pathname === "/list/policies") {
+        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
+        const items = await getPolicies(env);
+        return json({ ok: true, items }, 200, request);
+      }
 
-      state.allItems = items;
-      applySearch();
-      toast("Loaded ✅");
-    } catch (e) {
-      toast(`Error: ${e.message}`);
-      state.allItems = [];
-      applySearch();
-    }
-  }
+      // =========================
+      // LIST: PROTOCOLS
+      // GET /list/protocols
+      // =========================
+      if (url.pathname === "/list/protocols") {
+        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
+        const items = await getProtocols(env);
+        return json({ ok: true, items }, 200, request);
+      }
 
-  // ---------- Render ----------
-  function applySearch() {
-    const q = safeText(searchBox.value).trim().toLowerCase();
+      // =========================
+      // GET ONE DOC SECTION
+      // GET /doc?type=policies&id=...
+      // GET /doc?type=protocols&id=...
+      // =========================
+      if (url.pathname === "/doc") {
+        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
 
-    if (!q) {
-      state.filtered = [...state.allItems];
-    } else {
-      state.filtered = state.allItems.filter(it => {
-        const title = safeText(it.title).toLowerCase();
-        const keywords = Array.isArray(it.keywords) ? it.keywords.join(" ").toLowerCase() : safeText(it.keywords).toLowerCase();
-        const program = safeText(it.program).toLowerCase();
-        const campus = safeText(it.campus).toLowerCase();
-        return title.includes(q) || keywords.includes(q) || program.includes(q) || campus.includes(q);
-      });
-    }
+        const type = (url.searchParams.get("type") || "").trim().toLowerCase();
+        const id = (url.searchParams.get("id") || "").trim();
 
-    renderList();
-  }
+        if (!type || !id) return json({ ok: false, error: "Missing type or id" }, 400, request);
 
-  function render() {
-    renderList();
-    renderDetail(null);
-  }
+        let list = [];
+        if (type === "policies") list = await getPolicies(env);
+        else if (type === "protocols") list = await getProtocols(env);
+        else return json({ ok: false, error: "type must be policies|protocols" }, 400, request);
 
-  function renderList() {
-    list.innerHTML = "";
-    emptyState.style.display = (state.filtered.length === 0) ? "" : "none";
+        const found = list.find((x) => x.id === id);
+        if (!found) return json({ ok: false, error: "Not found" }, 404, request);
 
-    state.filtered.forEach((it) => {
-      const div = document.createElement("div");
-      div.className = "item";
-      div.tabIndex = 0;
+        return json({ ok: true, item: found }, 200, request);
+      }
 
-      const title = escapeHtml(it.title || it.id || "Untitled");
-      const metaParts = [];
-      if (it.campus) metaParts.push(`Campus: ${escapeHtml(it.campus)}`);
-      if (it.program) metaParts.push(`Program: ${escapeHtml(it.program)}`);
-      if (it.type) metaParts.push(`${escapeHtml(it.type)}`);
+      // =========================
+      // HANDBOOK LOAD
+      // GET /handbook?campus=MC
+      // reads KV cms_handbooks -> key handbook_MC ...
+      // =========================
+      if (url.pathname === "/handbook") {
+        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
 
-      div.innerHTML = `
-        <div class="itemTitle">${title}</div>
-        <div class="itemMeta">${metaParts.join(" • ") || "—"}</div>
-      `;
+        const campus = (url.searchParams.get("campus") || "").trim().toUpperCase();
+        if (!campus) return json({ ok: false, error: "Missing campus" }, 400, request);
 
-      div.addEventListener("click", () => renderDetail(it));
-      div.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter" || ev.key === " ") {
-          ev.preventDefault();
-          renderDetail(it);
+        const key = `handbook_${campus}`;
+        const handbook = await kvJson(env.cms_handbooks, key);
+
+        if (!handbook) {
+          return json({ ok: false, error: `Handbook not found in KV: ${key}` }, 404, request);
         }
+
+        return json({ ok: true, campus, handbook }, 200, request);
+      }
+
+      // =========================
+      // CHAT API
+      // POST /api
+      // body: { question, campus, scope }
+      // scope optional: "handbook" | "policies" | "protocols" | "all"
+      // =========================
+      if (url.pathname === "/api") {
+        if (request.method !== "POST") return json({ ok: false, error: "POST required" }, 405, request);
+
+        const body = await safeReadJson(request);
+        if (!body.ok) return json({ ok: false, error: "Invalid JSON body" }, 400, request);
+
+        const question = (body.data?.question || body.data?.q || "").toString().trim();
+        const campus = (body.data?.campus || "").toString().trim().toUpperCase();
+        const scope = (body.data?.scope || "all").toString().trim().toLowerCase();
+
+        if (!question) return json({ ok: false, error: "Missing question" }, 400, request);
+
+        // Load sources based on scope
+        const sources = await buildSources(env, { campus, scope });
+
+        // Retrieve relevant excerpts
+        const retrieved = retrieveRelevant(question, sources, 8);
+
+        // Build answer with OpenAI
+        const answer = await generateAnswer(env, {
+          question,
+          campus,
+          scope,
+          retrieved,
+        });
+
+        return json(
+          {
+            ok: true,
+            answer: answer.text,
+            used: {
+              scope,
+              campus: campus || null,
+              matched_items: retrieved.map((r) => ({
+                source: r.source,
+                id: r.id,
+                title: r.title,
+                link: r.link || null,
+                score: r.score,
+              })),
+            },
+          },
+          200,
+          request
+        );
+      }
+
+      return json({ ok: false, error: "Not found" }, 404, request);
+    } catch (err) {
+      return json(
+        { ok: false, error: "Server error", detail: (err && err.message) ? err.message : String(err) },
+        500,
+        request
+      );
+    }
+  },
+};
+
+// =========================
+// KV LOADERS
+// =========================
+async function getPolicies(env) {
+  if (!env.cms_policies) return [];
+  const arr = await kvJson(env.cms_policies, "policies");
+  return normalizeItems(arr, "Policy");
+}
+
+async function getProtocols(env) {
+  if (!env.cms_protocols) return [];
+  const arr = await kvJson(env.cms_protocols, "protocols");
+  return normalizeItems(arr, "Protocol");
+}
+
+function normalizeItems(arr, defaultType) {
+  const items = Array.isArray(arr) ? arr : [];
+  const cleaned = items
+    .map((x) => ({
+      type: x.type || defaultType,
+      id: String(x.id || "").trim(),
+      title: String(x.title || "").trim(),
+      content: Array.isArray(x.content) ? x.content.map(String) : (x.content ? [String(x.content)] : []),
+      keywords: Array.isArray(x.keywords) ? x.keywords.map(String) : [],
+      order: Number.isFinite(x.order) ? x.order : (typeof x.order === "number" ? x.order : 9999),
+      link: x.link ? String(x.link) : "",
+    }))
+    .filter((x) => x.id && x.title);
+
+  cleaned.sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title));
+  return cleaned;
+}
+
+async function kvJson(kv, key) {
+  if (!kv) return null;
+  const raw = await kv.get(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+// =========================
+// BUILD SOURCES
+// =========================
+async function buildSources(env, { campus, scope }) {
+  const sources = [];
+
+  const wantHandbook = scope === "handbook" || scope === "all";
+  const wantPolicies = scope === "policies" || scope === "all";
+  const wantProtocols = scope === "protocols" || scope === "all";
+
+  if (wantHandbook && env.cms_handbooks && campus) {
+    const hb = await kvJson(env.cms_handbooks, `handbook_${campus}`);
+    // handbook structure can be anything; we convert to "sections"
+    // If your handbook is already array of sections: [{id,title,content:[...]}] it works.
+    // If it is nested, we try to flatten.
+    const hbSections = flattenHandbook(hb, campus);
+    sources.push(...hbSections.map((s) => ({ ...s, source: `handbook_${campus}` })));
+  }
+
+  if (wantPolicies) {
+    const policies = await getPolicies(env);
+    sources.push(...policies.map((p) => ({ ...p, source: "policies" })));
+  }
+
+  if (wantProtocols) {
+    const protocols = await getProtocols(env);
+    sources.push(...protocols.map((p) => ({ ...p, source: "protocols" })));
+  }
+
+  return sources;
+}
+
+// tries to make handbook searchable even if nested
+function flattenHandbook(handbookJson, campus) {
+  // If already array of {id,title,content}
+  if (Array.isArray(handbookJson)) {
+    return normalizeItems(handbookJson, `Handbook ${campus}`);
+  }
+
+  // If object with sections
+  // common pattern: { title, sections:[...] } or { sections:{...} }
+  const out = [];
+
+  if (!handbookJson || typeof handbookJson !== "object") return out;
+
+  // sections: array
+  if (Array.isArray(handbookJson.sections)) {
+    const items = handbookJson.sections.map((s, idx) => ({
+      id: s.id || `hb_${campus}_${idx + 1}`,
+      title: s.title || s.heading || `Section ${idx + 1}`,
+      content: Array.isArray(s.content) ? s.content : (s.text ? [s.text] : []),
+      keywords: s.keywords || [],
+      order: s.order ?? (idx + 1),
+      link: s.link || "",
+      type: `Handbook ${campus}`,
+    }));
+    return normalizeItems(items, `Handbook ${campus}`);
+  }
+
+  // sections: object map
+  if (handbookJson.sections && typeof handbookJson.sections === "object") {
+    let idx = 0;
+    for (const [k, v] of Object.entries(handbookJson.sections)) {
+      idx++;
+      out.push({
+        id: (v && v.id) ? v.id : `hb_${campus}_${k}`,
+        title: (v && (v.title || v.heading)) ? (v.title || v.heading) : k,
+        content: Array.isArray(v?.content) ? v.content : (v?.text ? [v.text] : []),
+        keywords: Array.isArray(v?.keywords) ? v.keywords : [],
+        order: Number.isFinite(v?.order) ? v.order : idx,
+        link: v?.link ? String(v.link) : "",
+        type: `Handbook ${campus}`,
       });
-
-      list.appendChild(div);
-    });
-  }
-
-  function renderDetail(it) {
-    state.selectedItem = it;
-
-    if (!it) {
-      detailTitle.textContent = "Select an item";
-      detailBody.innerHTML = `<div class="muted">Click an item to see details here.</div>`;
-      return;
     }
-
-    detailTitle.textContent = it.title || it.id || "Details";
-
-    // Build pretty detail
-    const lines = [];
-
-    // common fields
-    if (it.campus) lines.push(`<div><b>Campus:</b> ${escapeHtml(it.campus)}</div>`);
-    if (it.program) lines.push(`<div><b>Program:</b> ${escapeHtml(it.program)}</div>`);
-    if (it.type) lines.push(`<div><b>Type:</b> ${escapeHtml(it.type)}</div>`);
-    if (it.id) lines.push(`<div><b>ID:</b> ${escapeHtml(it.id)}</div>`);
-
-    if (it.keywords) {
-      const kws = Array.isArray(it.keywords) ? it.keywords : [it.keywords];
-      const chips = kws
-        .filter(Boolean)
-        .map(k => `<span class="pill soft" style="display:inline-block;margin:4px 6px 0 0;">${escapeHtml(k)}</span>`)
-        .join("");
-      lines.push(`<div style="margin-top:10px;"><b>Keywords:</b><div>${chips || `<span class="muted">—</span>`}</div></div>`);
-    }
-
-    // content / sections
-    if (it.content) {
-      lines.push(`<div style="margin-top:12px;"><b>Content:</b><div style="margin-top:6px;">${escapeHtml(it.content).replaceAll("\n", "<br>")}</div></div>`);
-    }
-
-    if (Array.isArray(it.sections) && it.sections.length) {
-      const secHtml = it.sections.map(s => {
-        const st = escapeHtml(s.title || "");
-        const sb = escapeHtml(s.body || "").replaceAll("\n", "<br>");
-        return `
-          <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(229,231,235,0.9);">
-            <div style="font-weight:900;margin-bottom:6px;">${st || "Section"}</div>
-            <div>${sb || `<span class="muted">—</span>`}</div>
-          </div>
-        `;
-      }).join("");
-      lines.push(`<div style="margin-top:12px;"><b>Sections:</b>${secHtml}</div>`);
-    }
-
-    // fallback: show raw JSON
-    lines.push(`
-      <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(229,231,235,0.9);">
-        <div style="font-weight:900;margin-bottom:6px;">Raw</div>
-        <pre style="white-space:pre-wrap;background:#fff;border:1px solid rgba(229,231,235,0.95);padding:10px;border-radius:14px;margin:0;">${escapeHtml(JSON.stringify(it, null, 2))}</pre>
-      </div>
-    `);
-
-    detailBody.innerHTML = lines.join("");
+    return normalizeItems(out, `Handbook ${campus}`);
   }
 
-  async function copySelected() {
-    if (!state.selectedItem) return;
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(state.selectedItem, null, 2));
-      toast("Copied ✅");
-    } catch {
-      toast("Copy failed");
-    }
+  // fallback: stringify
+  return [
+    {
+      id: `hb_${campus}_full`,
+      title: `Parent Handbook - ${campus}`,
+      content: [JSON.stringify(handbookJson)],
+      keywords: [],
+      order: 1,
+      link: "",
+      type: `Handbook ${campus}`,
+    },
+  ];
+}
+
+// =========================
+// RETRIEVAL (simple + fast)
+// =========================
+function retrieveRelevant(question, sources, topK = 8) {
+  const q = normalize(question);
+  const qTokens = tokenize(q);
+
+  const scored = sources.map((item) => {
+    const hay = normalize(
+      [
+        item.title,
+        (item.keywords || []).join(" "),
+        ...(Array.isArray(item.content) ? item.content : []),
+      ].join(" ")
+    );
+
+    const score = scoreMatch(qTokens, hay, item);
+    return { ...item, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored.filter((x) => x.score > 0).slice(0, topK);
+
+  // If nothing matched, just take first few from requested scope (still answer but will be cautious)
+  return best.length ? best : scored.slice(0, Math.min(topK, scored.length));
+}
+
+function scoreMatch(qTokens, hay, item) {
+  let s = 0;
+
+  // title boost
+  const title = normalize(item.title || "");
+  for (const t of qTokens) {
+    if (!t) continue;
+    if (title.includes(t)) s += 8;
   }
 
-  // ---------- Auth ----------
-  async function staffLogin() {
-    requireCampus();
-    const code = safeText(staffCode.value).trim();
-    if (!code) return toast("Enter staff code");
-
-    try {
-      toast("Logging in…");
-      const data = await apiPost({ op: "staff_login", campus: state.campus, code });
-
-      // Expect { ok:true, token, ttl_seconds }
-      if (!data?.ok || !data?.token) throw new Error(data?.error || "Login failed");
-
-      const ttl = parseInt(data.ttl_seconds || "3600", 10);
-      setLS(LS.staffToken, data.token);
-      setLS(LS.staffUntil, String(nowSec() + ttl));
-
-      toast("Staff login ✅");
-      await refreshCurrentMenu();
-    } catch (e) {
-      toast(`Login error: ${e.message}`);
-    }
+  // keyword boost
+  const kw = normalize((item.keywords || []).join(" "));
+  for (const t of qTokens) {
+    if (kw.includes(t)) s += 6;
   }
 
-  function logout() {
-    delLS(LS.staffToken);
-    delLS(LS.staffUntil);
-    toast("Logged out");
+  // body
+  for (const t of qTokens) {
+    if (hay.includes(t)) s += 2;
   }
 
-  // ---------- Init UI ----------
-  function mountCampusButtons() {
-    campusGrid.innerHTML = "";
-    CAMPUSES.forEach((c) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "campusBtn";
-      b.textContent = c;
-      b.dataset.campus = c;
-      b.addEventListener("click", async () => {
-        setCampus(c);
-        // reload handbook count correctly if in handbook menu
-        await refreshCurrentMenu();
-      });
-      campusGrid.appendChild(b);
-    });
+  return s;
+}
+
+function normalize(str) {
+  return String(str || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenize(str) {
+  return normalize(str)
+    .split(" ")
+    .map((t) => t.replace(/[^a-z0-9_-]/g, ""))
+    .filter((t) => t.length >= 3)
+    .slice(0, 30);
+}
+
+// =========================
+// AI ANSWER (not too short)
+// =========================
+async function generateAnswer(env, { question, campus, scope, retrieved }) {
+  if (!env.OPENAI_API_KEY) {
+    // fallback if no AI key
+    return {
+      text:
+        "AI key is missing. Please set OPENAI_API_KEY in Worker environment variables. " +
+        "I can still show the most relevant CMS text excerpts:\n\n" +
+        retrieved
+          .slice(0, 3)
+          .map((r) => `• ${r.title}\n${(r.content || []).slice(0, 6).join("\n")}`)
+          .join("\n\n"),
+    };
   }
 
-  function bindEvents() {
-    roleParent.addEventListener("click", async () => {
-      setRole("parent");
-      await refreshCurrentMenu();
-    });
-    roleStaff.addEventListener("click", async () => {
-      setRole("staff");
-      await refreshCurrentMenu();
-    });
+  const model = env.OPENAI_MODEL || "gpt-4o-mini";
 
-    btnLogin.addEventListener("click", staffLogin);
-    staffCode.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") staffLogin();
-    });
+  const contextBlocks = retrieved.slice(0, 6).map((r, i) => {
+    const excerpt = (r.content || []).slice(0, 18).join("\n");
+    return `SOURCE ${i + 1} (${r.source})\nTitle: ${r.title}\nID: ${r.id}\nLink: ${r.link || "N/A"}\nContent:\n${excerpt}`;
+  });
 
-    btnContinueParent.addEventListener("click", async () => {
-      toast("Parent mode ✅");
-      await refreshCurrentMenu();
-    });
+  const systemPrompt = `
+You are a CMS Policy/Protocol/Handbook assistant for staff and parents.
 
-    menuPolicies.addEventListener("click", async () => {
-      setMenu("policies");
-      await refreshCurrentMenu();
-    });
-    menuProtocols.addEventListener("click", async () => {
-      setMenu("protocols");
-      await refreshCurrentMenu();
-    });
-    menuHandbook.addEventListener("click", async () => {
-      setMenu("handbook");
-      await refreshCurrentMenu();
-    });
+HARD RULES:
+- Use ONLY the provided SOURCE texts. Do not invent or guess.
+- If the sources do not contain the answer, say what is missing and suggest what to ask the office/admin.
+- Write in clear English.
+- The answer must NOT be overly short: produce at least 8–10 lines (full sentences). Avoid one-paragraph tiny summaries.
+- If helpful, use short bullet points, but still keep enough detail.
+- When relevant, mention whether this is from Policy, Protocol, or Parent Handbook (naturally).
+`;
 
-    searchBox.addEventListener("input", applySearch);
+  const userPrompt = `
+Campus: ${campus || "N/A"}
+Scope: ${scope}
 
-    btnLogout.addEventListener("click", () => {
-      logout();
-      // stay in parent mode by default
-      setRole("parent");
-      refreshCurrentMenu();
-    });
+Question:
+${question}
 
-    btnRefresh.addEventListener("click", async () => {
-      // clear caches and reload
-      state.caches.policies = null;
-      state.caches.protocols = null;
-      state.caches.handbook = {};
-      countPolicies.textContent = "0";
-      countProtocols.textContent = "0";
-      countHandbook.textContent = "0";
-      await refreshCurrentMenu();
-    });
+SOURCES:
+${contextBlocks.join("\n\n")}
 
-    btnCopy.addEventListener("click", copySelected);
+Now answer the question using ONLY the sources above. Make it complete and not too short (minimum 8–10 lines).
+`;
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt.trim() },
+        { role: "user", content: userPrompt.trim() },
+      ],
+      temperature: 0.2,
+      max_tokens: Number(env.OPENAI_MAX_TOKENS || 600),
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    return { text: `AI error (${res.status}). ${txt}` };
   }
 
-  async function init() {
-    mountCampusButtons();
-    bindEvents();
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content?.trim() || "No answer generated.";
+  return { text };
+}
 
-    // load saved
-    const savedRole = getLS(LS.role) || "parent";
-    const savedCampus = getLS(LS.campus) || "YC";
-
-    setRole(savedRole === "staff" ? "staff" : "parent");
-    setCampus(CAMPUSES.includes(savedCampus) ? savedCampus : "YC");
-
-    // If staff but token expired, switch to parent quietly
-    if (state.role === "staff" && !isStaffAuthed()) {
-      setRole("parent");
-    }
-
-    setMenu("policies");
-    await refreshCurrentMenu();
+// =========================
+// HELPERS
+// =========================
+async function safeReadJson(request) {
+  try {
+    const data = await request.json();
+    return { ok: true, data };
+  } catch {
+    return { ok: false };
   }
+}
 
-  init();
-})();
+function json(obj, status = 200, request) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      ...corsHeaders(request),
+    },
+  });
+}
+
+function corsHeaders(request) {
+  const origin = request?.headers?.get("Origin") || "*";
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+  };
+}
