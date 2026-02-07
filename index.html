@@ -1,163 +1,122 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>CMS Policy Assistant</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>CMS Policy Chatbot</title>
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-
-  <!-- Top Bar -->
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">
-        <img src="logo.png" alt="CMS Logo" />
-      </div>
-      <div class="txt">
-        <b>CMS Policy Assistant</b>
-        <span>Staff & Parent Support</span>
-      </div>
-    </div>
-
-    <div class="controls">
-      <div class="chip">
-        <span>Campus</span>
-        <select id="campusSelect">
-          <option value="YC">York Mills (YC)</option>
-          <option value="MC">Maplehurst (MC)</option>
-          <option value="SC">Scarborough (SC)</option>
-          <option value="TC">Thornhill (TC)</option>
-          <option value="WC">Willowdale (WC)</option>
-        </select>
-      </div>
-
-      <div class="chip">
-        <span>Role</span>
-        <select id="roleSelect">
-          <option value="parent">Parent</option>
-          <option value="staff">Staff</option>
-        </select>
-      </div>
-
-      <button id="loginBtn" class="btn primary">Login</button>
-      <button id="logoutBtn" class="btn hidden">Logout</button>
-    </div>
-  </header>
-
-  <!-- Tabs -->
-  <nav class="tabs">
-    <button class="tab active" data-tab="policies">
-      Policies <span class="count" id="countPolicies">0</span>
-    </button>
-    <button class="tab" data-tab="protocols">
-      Protocols <span class="count" id="countProtocols">0</span>
-    </button>
-    <button class="tab" data-tab="handbooks">
-      Parent Handbook <span class="count" id="countHandbooks">0</span>
-    </button>
-    <button class="tab" data-tab="chat">
-      Chat
-    </button>
-  </nav>
-
-  <!-- Main content -->
-  <main class="wrap">
-
-    <!-- Policies -->
-    <section id="panel-policies" class="panel">
-      <div class="card">
-        <h3>Policies</h3>
-        <div id="policiesList" class="docGrid"></div>
-      </div>
-    </section>
-
-    <!-- Protocols -->
-    <section id="panel-protocols" class="panel hidden">
-      <div class="card">
-        <h3>Protocols</h3>
-        <div id="protocolsList" class="docGrid"></div>
-      </div>
-    </section>
-
-    <!-- Handbooks -->
-    <section id="panel-handbooks" class="panel hidden">
-      <div class="card">
-        <div class="hbTop">
-          <div class="left">
-            <h3>Parent Handbook</h3>
-          </div>
-          <div class="right">
-            <select id="hbProgramSelect">
-              <option value="">All Programs</option>
-              <option value="preschool">Preschool</option>
-              <option value="sr_casa">Sr. Casa</option>
-              <option value="elementary">Elementary</option>
-            </select>
-          </div>
-        </div>
-        <div id="handbooksList" class="docGrid"></div>
-      </div>
-    </section>
-
-    <!-- Chat -->
-    <section id="panel-chat" class="panel hidden">
-      <div class="card">
-        <h3>Ask a Question</h3>
-
-        <div class="chatBox">
-          <div id="chatOutput" class="chatOutput"></div>
-
-          <div class="chatBar">
-            <textarea
-              id="chatInput"
-              placeholder="Ask about policies, protocols, or the parent handbook…"
-            ></textarea>
-
-            <select id="chatProgram">
-              <option value="">Any Program</option>
-              <option value="preschool">Preschool</option>
-              <option value="sr_casa">Sr. Casa</option>
-              <option value="elementary">Elementary</option>
-            </select>
-
-            <button id="chatSend" class="btn primary">Send</button>
-            <div id="chatSpinner" class="spinner">Thinking…</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- Modal -->
-  <div id="docModal">
-    <div class="modalPanel">
-      <div class="modalTop">
+  <div class="container">
+    <header>
+      <div class="brand">
+        <img src="favicon.svg" alt="CMS"/>
         <div>
-          <h2 id="modalTitle">Title</h2>
-          <div id="modalMeta" class="modalMeta"></div>
-        </div>
-        <div class="closeRow">
-          <button id="modalClose" class="btn">Close</button>
+          <h1>CMS Policy Chatbot</h1>
+          <div class="sub">Internal staff & parent assistant</div>
         </div>
       </div>
 
-      <div class="modalHeaderRow">
-        <div class="left">
-          <strong id="modalSectionTitle"></strong>
-        </div>
-        <div class="right">
-          <a id="modalLink" href="#" target="_blank">Open Full Document</a>
-        </div>
+      <div id="header-actions" class="header-actions hidden">
+        <select id="program-switch" class="select" aria-label="Program">
+          <option value="ALL">All Programs</option>
+          <option value="PRESCHOOL">Preschool</option>
+          <option value="SR_CASA">Sr. Casa</option>
+          <option value="ELEMENTARY">Elementary</option>
+        </select>
+
+        <select id="campus-switch" class="select" aria-label="Campus">
+          <option value="">Campus</option>
+          <option value="YC">YC</option>
+          <option value="MC">MC</option>
+          <option value="SC">SC</option>
+          <option value="TC">TC</option>
+          <option value="WC">WC</option>
+        </select>
+
+        <button id="admin-mode-btn" class="btn">Admin</button>
+        <span id="mode-badge" class="badge-mode">STAFF</span>
+        <button id="logout-btn" class="btn danger">Logout</button>
+      </div>
+    </header>
+
+    <!-- LOGIN SCREEN -->
+    <section id="login-screen" class="panel">
+      <div class="panel-head">
+        <div><b>Login</b></div>
+        <div class="hint">Select campus and enter Staff/Parent code.</div>
       </div>
 
-      <div class="modalBody">
-        <div id="modalActions" class="modalActions"></div>
+      <div class="login-wrap">
+        <form id="login-form">
+          <div class="login-row">
+            <select id="campus-select" class="input" aria-label="Campus">
+              <option value="">Select campus…</option>
+              <option value="YC">YC</option>
+              <option value="MC">MC</option>
+              <option value="SC">SC</option>
+              <option value="TC">TC</option>
+              <option value="WC">WC</option>
+            </select>
+
+            <input id="access-code" class="input" type="password" placeholder="Staff / Parent access code" autocomplete="off"/>
+          </div>
+
+          <div class="login-actions">
+            <button class="btn brand" type="submit">Login</button>
+            <button id="login-admin-btn" class="btn" type="button">Admin Login</button>
+          </div>
+
+          <div id="login-error" class="error"></div>
+        </form>
+      </div>
+    </section>
+
+    <!-- CHAT SCREEN -->
+    <section id="chat-screen" class="panel hidden">
+      <div class="panel-head">
+        <div><b>Ask any CMS policy, protocol, or parent handbook question (campus-based).</b></div>
+        <div class="hint">Tip: If Program is “All Programs”, shared topics may show multiple sources & programs.</div>
       </div>
 
-      <div class="modalScroll" id="modalContent"></div>
+      <div class="chat-wrap">
+        <div id="chat-window" class="chat-window"></div>
+
+        <form id="chat-form" class="chat-form">
+          <input id="user-input" class="text-input" placeholder="Ask a question..." autocomplete="off"/>
+          <button class="primary-btn" type="submit">Ask</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- MENU PANEL -->
+    <div id="menu-overlay" class="overlay hidden"></div>
+    <div id="menu-panel" class="menu-panel hidden">
+      <div class="menu-panel-header">
+        <div id="menu-panel-title" class="menu-panel-title">Menu</div>
+        <button id="menu-panel-close" class="menu-close">Close</button>
+      </div>
+      <div id="menu-panel-body" class="menu-panel-body"></div>
     </div>
+
+    <!-- ADMIN PIN MODAL -->
+    <div id="admin-modal" class="overlay hidden" style="display:flex;align-items:center;justify-content:center;">
+      <div class="panel" style="width:min(520px, calc(100% - 24px));">
+        <div class="panel-head">
+          <div><b>Admin Login</b></div>
+          <div class="hint">Enter Admin PIN.</div>
+        </div>
+        <div class="login-wrap">
+          <input id="admin-pin" class="input" type="password" placeholder="Admin PIN" autocomplete="off"/>
+          <div class="login-actions">
+            <button id="admin-pin-submit" class="btn brand" type="button">Submit</button>
+            <button id="admin-pin-cancel" class="btn" type="button">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>© CMS – Staff internal tool</footer>
   </div>
 
   <script src="app.js"></script>
