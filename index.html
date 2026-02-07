@@ -1,39 +1,31 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>CMS Policy Chatbot</title>
-
-  <link rel="icon" href="/favicon.ico">
-  <link rel="manifest" href="/site.webmanifest">
-  <meta name="theme-color" content="#1e3a8a">
-
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css"/>
 </head>
-
 <body>
-  <!-- ================= HEADER ================= -->
-  <header class="app-header">
-    <div class="header-inner">
+  <div class="container">
+    <header>
       <div class="brand">
-        <img class="brand-logo" src="cms-logo.png" alt="CMS" />
-        <div class="brand-text">
-          <div class="brand-title">CMS Policy Chatbot</div>
-          <div class="brand-subtitle">Internal staff &amp; parent assistant</div>
+        <img src="favicon.svg" alt="CMS"/>
+        <div>
+          <h1>CMS Policy Chatbot</h1>
+          <div class="sub">Internal staff & parent assistant</div>
         </div>
       </div>
 
       <div id="header-actions" class="header-actions hidden">
-        <!-- ✅ Program switch -->
-        <select id="program-switch" class="program-switch">
+        <select id="program-switch" class="select" aria-label="Program">
           <option value="ALL">All Programs</option>
-          <option value="Preschool">Preschool</option>
-          <option value="Sr. Casa">Sr. Casa</option>
-          <option value="Elementary">Elementary</option>
+          <option value="PRESCHOOL">Preschool</option>
+          <option value="SR_CASA">Sr. Casa</option>
+          <option value="ELEMENTARY">Elementary</option>
         </select>
 
-        <select id="campus-switch" class="campus-switch">
+        <select id="campus-switch" class="select" aria-label="Campus">
           <option value="">Campus</option>
           <option value="YC">YC</option>
           <option value="MC">MC</option>
@@ -42,52 +34,24 @@
           <option value="WC">WC</option>
         </select>
 
-        <button id="admin-mode-btn" class="pill-btn" type="button">Admin</button>
-        <span id="mode-badge" class="mode-badge">STAFF</span>
-
-        <button id="logout-btn" class="pill-btn danger" type="button">Logout</button>
+        <button id="admin-mode-btn" class="btn">Admin</button>
+        <span id="mode-badge" class="badge-mode">STAFF</span>
+        <button id="logout-btn" class="btn danger">Logout</button>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <!-- ================= TOP MENU ================= -->
-  <nav id="top-menu-bar" class="top-menu-bar hidden">
-    <div class="top-menu-inner">
-      <button class="menu-pill" data-menu="policies" type="button">Policies</button>
-      <button class="menu-pill" data-menu="protocols" type="button">Protocols</button>
-      <button class="menu-pill" data-menu="handbook" type="button">Parent Handbook</button>
-
-      <div id="admin-links" class="admin-links hidden">
-        <a class="admin-link" href="dashboard.html">Dashboard</a>
-        <a class="admin-link" href="logs.html">Logs</a>
+    <!-- LOGIN SCREEN -->
+    <section id="login-screen" class="panel">
+      <div class="panel-head">
+        <div><b>Login</b></div>
+        <div class="hint">Select campus and enter Staff/Parent code.</div>
       </div>
-    </div>
-  </nav>
 
-  <!-- ================= MAIN ================= -->
-  <main class="app-main">
-    <!-- ============ LOGIN SCREEN ============ -->
-    <section id="login-screen" class="screen">
-      <div class="card login-card">
-        <h2 class="card-title">Login</h2>
-        <p class="card-hint">
-          Enter your <b>Staff</b> or <b>Parent</b> access code and select a campus.
-          <br />
-          <span class="muted">Tip: Campus is required so the handbook matches your campus.</span>
-        </p>
-
-        <form id="login-form" class="login-form">
+      <div class="login-wrap">
+        <form id="login-form">
           <div class="login-row">
-            <input
-              id="access-code"
-              class="text-input"
-              type="password"
-              placeholder="Access Code (Staff or Parent)"
-              autocomplete="off"
-            />
-
-            <select id="campus-select" class="campus-select">
-              <option value="">Select campus</option>
+            <select id="campus-select" class="input" aria-label="Campus">
+              <option value="">Select campus…</option>
               <option value="YC">YC</option>
               <option value="MC">MC</option>
               <option value="SC">SC</option>
@@ -95,82 +59,66 @@
               <option value="WC">WC</option>
             </select>
 
-            <button class="primary-btn" type="submit">Login</button>
+            <input id="access-code" class="input" type="password" placeholder="Staff / Parent access code" autocomplete="off"/>
           </div>
 
-          <div class="login-row">
-            <button id="login-admin-btn" class="secondary-btn" type="button">Admin Login</button>
-
-            <div class="campus-reminder">
-              You will login with campus:
-              <span class="campus-pill" id="campus-preview">—</span>
-            </div>
+          <div class="login-actions">
+            <button class="btn brand" type="submit">Login</button>
+            <button id="login-admin-btn" class="btn" type="button">Admin Login</button>
           </div>
 
-          <div id="login-error" class="error-text"></div>
+          <div id="login-error" class="error"></div>
         </form>
-
-        <div class="footer-note">© CMS – Internal use only</div>
       </div>
     </section>
 
-    <!-- ============ CHAT SCREEN ============ -->
-    <section id="chat-screen" class="screen hidden">
-      <div class="chat-shell">
-        <div id="chat-top-hint" class="chat-top-hint">
-          Ask any CMS policy, protocol, or parent handbook question (campus-based).
-        </div>
+    <!-- CHAT SCREEN -->
+    <section id="chat-screen" class="panel hidden">
+      <div class="panel-head">
+        <div><b>Ask any CMS policy, protocol, or parent handbook question (campus-based).</b></div>
+        <div class="hint">Tip: If Program is “All Programs”, shared topics may show multiple sources & programs.</div>
+      </div>
 
-        <div class="chat-window" id="chat-window"></div>
+      <div class="chat-wrap">
+        <div id="chat-window" class="chat-window"></div>
 
         <form id="chat-form" class="chat-form">
-          <input id="user-input" class="text-input" type="text" placeholder="Ask a question..." autocomplete="off" />
+          <input id="user-input" class="text-input" placeholder="Ask a question..." autocomplete="off"/>
           <button class="primary-btn" type="submit">Ask</button>
         </form>
       </div>
-
-      <div class="footer-note">© CMS – Staff internal tool</div>
     </section>
-  </main>
 
-  <!-- ================= MENU PANEL (Modal) ================= -->
-  <div id="menu-overlay" class="overlay hidden"></div>
-
-  <aside id="menu-panel" class="menu-panel hidden" aria-hidden="true">
-    <div class="menu-panel-header">
-      <div id="menu-panel-title" class="menu-panel-title">Menu</div>
-      <button id="menu-panel-close" class="icon-btn" type="button" aria-label="Close">×</button>
+    <!-- MENU PANEL -->
+    <div id="menu-overlay" class="overlay hidden"></div>
+    <div id="menu-panel" class="menu-panel hidden">
+      <div class="menu-panel-header">
+        <div id="menu-panel-title" class="menu-panel-title">Menu</div>
+        <button id="menu-panel-close" class="menu-close">Close</button>
+      </div>
+      <div id="menu-panel-body" class="menu-panel-body"></div>
     </div>
-    <div id="menu-panel-body" class="menu-panel-body"></div>
-  </aside>
 
-  <!-- ================= ADMIN PIN MODAL ================= -->
-  <div id="admin-modal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card">
-      <div class="modal-title">Admin Login</div>
-      <div class="modal-hint">Enter Admin PIN</div>
-
-      <input id="admin-pin" class="text-input" type="password" placeholder="PIN" autocomplete="off" />
-
-      <div class="modal-actions">
-        <button id="admin-pin-cancel" class="secondary-btn" type="button">Cancel</button>
-        <button id="admin-pin-submit" class="primary-btn" type="button">Submit</button>
+    <!-- ADMIN PIN MODAL -->
+    <div id="admin-modal" class="overlay hidden" style="display:flex;align-items:center;justify-content:center;">
+      <div class="panel" style="width:min(520px, calc(100% - 24px));">
+        <div class="panel-head">
+          <div><b>Admin Login</b></div>
+          <div class="hint">Enter Admin PIN.</div>
+        </div>
+        <div class="login-wrap">
+          <input id="admin-pin" class="input" type="password" placeholder="Admin PIN" autocomplete="off"/>
+          <div class="login-actions">
+            <button id="admin-pin-submit" class="btn brand" type="button">Submit</button>
+            <button id="admin-pin-cancel" class="btn" type="button">Cancel</button>
+          </div>
+        </div>
       </div>
     </div>
+
+    <footer>© CMS – Staff internal tool</footer>
   </div>
 
   <script src="app.js"></script>
-
-  <script>
-    (function () {
-      const sel = document.getElementById("campus-select");
-      const pill = document.getElementById("campus-preview");
-      if (!sel || !pill) return;
-
-      const update = () => { pill.textContent = sel.value ? sel.value : "—"; };
-      sel.addEventListener("change", update);
-      update();
-    })();
-  </script>
 </body>
 </html>
