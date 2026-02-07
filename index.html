@@ -1,124 +1,131 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>CMS Policy Chatbot</title>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <div class="container">
-    <header>
+  <div class="app">
+    <header class="topbar">
       <div class="brand">
-        <img src="favicon.svg" alt="CMS"/>
-        <div>
-          <h1>CMS Policy Chatbot</h1>
-          <div class="sub">Internal staff & parent assistant</div>
+        <div class="logo">CMS</div>
+        <div class="brandText">
+          <div class="brandTitle">CMS Policy Chatbot</div>
+          <div class="brandSub" id="brandSub">Policies • Protocols • Handbooks</div>
         </div>
       </div>
 
-      <div id="header-actions" class="header-actions hidden">
-        <select id="program-switch" class="select" aria-label="Program">
-          <option value="ALL">All Programs</option>
-          <option value="PRESCHOOL">Preschool</option>
-          <option value="SR_CASA">Sr. Casa</option>
-          <option value="ELEMENTARY">Elementary</option>
-        </select>
-
-        <select id="campus-switch" class="select" aria-label="Campus">
-          <option value="">Campus</option>
-          <option value="YC">YC</option>
-          <option value="MC">MC</option>
-          <option value="SC">SC</option>
-          <option value="TC">TC</option>
-          <option value="WC">WC</option>
-        </select>
-
-        <button id="admin-mode-btn" class="btn">Admin</button>
-        <span id="mode-badge" class="badge-mode">STAFF</span>
-        <button id="logout-btn" class="btn danger">Logout</button>
+      <div class="topActions">
+        <button class="btn ghost" id="btnRefresh" type="button">Refresh</button>
+        <button class="btn danger" id="btnLogout" type="button">Logout</button>
       </div>
     </header>
 
-    <!-- LOGIN SCREEN -->
-    <section id="login-screen" class="panel">
-      <div class="panel-head">
-        <div><b>Login</b></div>
-        <div class="hint">Select campus and enter Staff/Parent code.</div>
-      </div>
+    <main class="layout">
+      <!-- LEFT -->
+      <aside class="panel">
+        <div class="card">
+          <div class="cardTitle">Login</div>
 
-      <div class="login-wrap">
-        <form id="login-form">
-          <div class="login-row">
-            <select id="campus-select" class="input" aria-label="Campus">
-              <option value="">Select campus…</option>
-              <option value="YC">YC</option>
-              <option value="MC">MC</option>
-              <option value="SC">SC</option>
-              <option value="TC">TC</option>
-              <option value="WC">WC</option>
-            </select>
-
-            <input id="access-code" class="input" type="password" placeholder="Staff / Parent access code" autocomplete="off"/>
+          <div class="segmented" role="tablist" aria-label="Role">
+            <button class="segBtn active" id="roleParent" type="button">Parent</button>
+            <button class="segBtn" id="roleStaff" type="button">Staff</button>
           </div>
 
-          <div class="login-actions">
-            <button class="btn brand" type="submit">Login</button>
-            <button id="login-admin-btn" class="btn" type="button">Admin Login</button>
+          <div class="row gap">
+            <label class="label">Campus</label>
+            <div class="campusGrid" id="campusGrid"></div>
           </div>
 
-          <div id="login-error" class="error"></div>
-        </form>
-      </div>
-    </section>
+          <div class="row gap" id="staffCodeRow" style="display:none;">
+            <label class="label" for="staffCode">Staff Code</label>
+            <input class="input" id="staffCode" placeholder="Enter staff code" autocomplete="off" />
+            <button class="btn primary" id="btnLogin" type="button">Login</button>
+            <div class="hint">Tip: staff code is required only for Staff.</div>
+          </div>
 
-    <!-- CHAT SCREEN -->
-    <section id="chat-screen" class="panel hidden">
-      <div class="panel-head">
-        <div><b>Ask any CMS policy, protocol, or parent handbook question (campus-based).</b></div>
-        <div class="hint">Tip: If Program is “All Programs”, shared topics may show multiple sources & programs.</div>
-      </div>
+          <div class="row gap" id="parentRow">
+            <button class="btn primary full" id="btnContinueParent" type="button">Continue as Parent</button>
+            <div class="hint">Parents can view policies, protocols, and handbook.</div>
+          </div>
 
-      <div class="chat-wrap">
-        <div id="chat-window" class="chat-window"></div>
+          <div class="divider"></div>
 
-        <form id="chat-form" class="chat-form">
-          <input id="user-input" class="text-input" placeholder="Ask a question..." autocomplete="off"/>
-          <button class="primary-btn" type="submit">Ask</button>
-        </form>
-      </div>
-    </section>
-
-    <!-- MENU PANEL -->
-    <div id="menu-overlay" class="overlay hidden"></div>
-    <div id="menu-panel" class="menu-panel hidden">
-      <div class="menu-panel-header">
-        <div id="menu-panel-title" class="menu-panel-title">Menu</div>
-        <button id="menu-panel-close" class="menu-close">Close</button>
-      </div>
-      <div id="menu-panel-body" class="menu-panel-body"></div>
-    </div>
-
-    <!-- ADMIN PIN MODAL -->
-    <div id="admin-modal" class="overlay hidden" style="display:flex;align-items:center;justify-content:center;">
-      <div class="panel" style="width:min(520px, calc(100% - 24px));">
-        <div class="panel-head">
-          <div><b>Admin Login</b></div>
-          <div class="hint">Enter Admin PIN.</div>
-        </div>
-        <div class="login-wrap">
-          <input id="admin-pin" class="input" type="password" placeholder="Admin PIN" autocomplete="off"/>
-          <div class="login-actions">
-            <button id="admin-pin-submit" class="btn brand" type="button">Submit</button>
-            <button id="admin-pin-cancel" class="btn" type="button">Cancel</button>
+          <div class="row gap">
+            <div class="mini">
+              <div class="miniLabel">Role</div>
+              <div class="miniValue" id="infoRole">—</div>
+            </div>
+            <div class="mini">
+              <div class="miniLabel">Campus</div>
+              <div class="miniValue" id="infoCampus">—</div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <footer>© CMS – Staff internal tool</footer>
+        <div class="card">
+          <div class="cardTitle">Menu</div>
+          <div class="menu">
+            <button class="menuBtn active" id="menuPolicies" type="button">
+              <span>Policies</span><span class="pill" id="countPolicies">0</span>
+            </button>
+            <button class="menuBtn" id="menuProtocols" type="button">
+              <span>Protocols</span><span class="pill" id="countProtocols">0</span>
+            </button>
+            <button class="menuBtn" id="menuHandbook" type="button">
+              <span>Parent Handbook</span><span class="pill soft" id="countHandbook">0</span>
+            </button>
+          </div>
+
+          <div class="divider"></div>
+
+          <label class="label" for="searchBox">Search</label>
+          <input class="input" id="searchBox" placeholder="Search by title / keywords..." />
+          <div class="hint">Filters current list only.</div>
+        </div>
+      </aside>
+
+      <!-- RIGHT -->
+      <section class="content">
+        <div class="contentTop">
+          <div class="contentTitle" id="contentTitle">Policies</div>
+          <div class="contentMeta" id="contentMeta">Select a campus then choose a menu.</div>
+        </div>
+
+        <div class="grid">
+          <div class="card mainCard">
+            <div class="list" id="list"></div>
+
+            <div class="empty" id="emptyState" style="display:none;">
+              <div class="emptyTitle">No items</div>
+              <div class="emptySub">Try changing the search or menu.</div>
+            </div>
+          </div>
+
+          <div class="card detailCard">
+            <div class="detailHeader">
+              <div class="detailTitle" id="detailTitle">Select an item</div>
+              <div class="detailActions">
+                <button class="btn ghost" id="btnCopy" type="button">Copy</button>
+              </div>
+            </div>
+            <div class="detailBody" id="detailBody">
+              <div class="muted">
+                Click a policy / protocol / handbook item to see details here.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="muted small" id="footerNote">Connected via /api</div>
+        </footer>
+      </section>
+    </main>
   </div>
 
-  <script src="app.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
