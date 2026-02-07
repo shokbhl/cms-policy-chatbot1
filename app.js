@@ -1,469 +1,527 @@
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
+/* =========================
+   app.js (FULL)
+   - Works with provided index.html + style.css
+   - Uses /api (Cloudflare Pages Function) to proxy Worker
+   - Tabs: Policies / Protocols / Handbooks / Chat
+   - Loads lists from Worker (KV-backed)
+   - Modal doc viewer
+   - Chat UI (no truncation in UI)
+========================= */
 
-    // CORS preflight
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders(request) });
+(() => {
+  // =============== CONFIG ===============
+  const API_URL = "/api";
+
+  // LocalStorage keys
+  const LS = {
+    campus: "cms_campus",
+    role: "cms_role", // staff | parent
+    token_staff: "cms_staff_token",
+    until_staff: "cms_staff_until",
+    token_parent: "cms_parent_token",
+    until_parent: "cms_parent_until",
+    lastTab: "cms_last_tab",
+    lastProgram: "cms_last_program"
+  };
+
+  // =============== DOM ===============
+  const $ = (id) => document.getElementById(id);
+
+  const campusSelect = $("campusSelect");
+  const roleSelect = $("roleSelect");
+  const loginBtn = $("loginBtn");
+  const logoutBtn = $("logoutBtn");
+
+  const tabs = Array.from(document.querySelectorAll(".tab"));
+  const panels = {
+    policies: $("panel-policies"),
+    protocols: $("panel-protocols"),
+    handbooks: $("panel-handbooks"),
+    chat: $("panel-chat"),
+  };
+
+  const policiesList = $("policiesList");
+  const protocolsList = $("protocolsList");
+  const handbooksList = $("handbooksList");
+
+  const countPolicies = $("countPolicies");
+  const countProtocols = $("countProtocols");
+  const countHandbooks = $("countHandbooks");
+
+  const hbProgramSelect = $("hbProgramSelect");
+
+  const chatOutput = $("chatOutput");
+  const chatInput = $("chatInput");
+  const chatSend = $("chatSend");
+  const chatSpinner = $("chatSpinner");
+  const chatProgram = $("chatProgram");
+
+  // Modal
+  const docModal = $("docModal");
+  const modalClose = $("modalClose");
+  const modalTitle = $("modalTitle");
+  const modalMeta = $("modalMeta");
+  const modalLink = $("modalLink");
+  const modalContent = $("modalContent");
+  const modalSectionTitle = $("modalSectionTitle");
+  const modalActions = $("modalActions");
+
+  // =============== STATE ===============
+  let state = {
+    campus: (localStorage.getItem(LS.campus) || "YC"),
+    role: (localStorage.getItem(LS.role) || "parent"),
+    tab: (localStorage.getItem(LS.lastTab) || "policies"),
+    program: (localStorage.getItem(LS.lastProgram) || ""),
+    lists: {
+      policies: [],
+      protocols: [],
+      handbooks: []
     }
+  };
 
+  // =============== UTIL ===============
+  const nowSec = () => Math.floor(Date.now() / 1000);
+
+  function setCampus(v) {
+    state.campus = v;
+    localStorage.setItem(LS.campus, v);
+  }
+
+  function setRole(v) {
+    state.role = v;
+    localStorage.setItem(LS.role, v);
+  }
+
+  function setTab(v) {
+    state.tab = v;
+    localStorage.setItem(LS.lastTab, v);
+  }
+
+  function setProgram(v) {
+    state.program = v || "";
+    localStorage.setItem(LS.lastProgram, state.program);
+  }
+
+  function getToken() {
+    if (state.role === "staff") {
+      const t = localStorage.getItem(LS.token_staff) || "";
+      const until = parseInt(localStorage.getItem(LS.until_staff) || "0", 10);
+      if (t && until > nowSec()) return t;
+      return "";
+    } else {
+      const t = localStorage.getItem(LS.token_parent) || "";
+      const until = parseInt(localStorage.getItem(LS.until_parent) || "0", 10);
+      if (t && until > nowSec()) return t;
+      return "";
+    }
+  }
+
+  function clearToken() {
+    if (state.role === "staff") {
+      localStorage.removeItem(LS.token_staff);
+      localStorage.removeItem(LS.until_staff);
+    } else {
+      localStorage.removeItem(LS.token_parent);
+      localStorage.removeItem(LS.until_parent);
+    }
+  }
+
+  function isLoggedIn() {
+    return !!getToken();
+  }
+
+  function toast(msg) {
+    // minimal toast via alert for now (simple + reliable)
+    alert(msg);
+  }
+
+  async function apiPost(payload) {
+    const token = getToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    let data = null;
     try {
-      // =========================
-      // HEALTH
-      // =========================
-      if (url.pathname === "/health") {
-        return json(
-          {
-            ok: true,
-            kv: {
-              cms_handbooks: !!env.cms_handbooks,
-              cms_policies: !!env.cms_policies,
-              cms_protocols: !!env.cms_protocols,
-            },
-            ai: {
-              hasKey: !!env.OPENAI_API_KEY,
-              model: env.OPENAI_MODEL || "gpt-4o-mini",
-            },
-          },
-          200,
-          request
-        );
-      }
-
-      // =========================
-      // LIST: POLICIES
-      // GET /list/policies
-      // =========================
-      if (url.pathname === "/list/policies") {
-        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
-        const items = await getPolicies(env);
-        return json({ ok: true, items }, 200, request);
-      }
-
-      // =========================
-      // LIST: PROTOCOLS
-      // GET /list/protocols
-      // =========================
-      if (url.pathname === "/list/protocols") {
-        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
-        const items = await getProtocols(env);
-        return json({ ok: true, items }, 200, request);
-      }
-
-      // =========================
-      // GET ONE DOC SECTION
-      // GET /doc?type=policies&id=...
-      // GET /doc?type=protocols&id=...
-      // =========================
-      if (url.pathname === "/doc") {
-        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
-
-        const type = (url.searchParams.get("type") || "").trim().toLowerCase();
-        const id = (url.searchParams.get("id") || "").trim();
-
-        if (!type || !id) return json({ ok: false, error: "Missing type or id" }, 400, request);
-
-        let list = [];
-        if (type === "policies") list = await getPolicies(env);
-        else if (type === "protocols") list = await getProtocols(env);
-        else return json({ ok: false, error: "type must be policies|protocols" }, 400, request);
-
-        const found = list.find((x) => x.id === id);
-        if (!found) return json({ ok: false, error: "Not found" }, 404, request);
-
-        return json({ ok: true, item: found }, 200, request);
-      }
-
-      // =========================
-      // HANDBOOK LOAD
-      // GET /handbook?campus=MC
-      // reads KV cms_handbooks -> key handbook_MC ...
-      // =========================
-      if (url.pathname === "/handbook") {
-        if (request.method !== "GET") return json({ ok: false, error: "GET required" }, 405, request);
-
-        const campus = (url.searchParams.get("campus") || "").trim().toUpperCase();
-        if (!campus) return json({ ok: false, error: "Missing campus" }, 400, request);
-
-        const key = `handbook_${campus}`;
-        const handbook = await kvJson(env.cms_handbooks, key);
-
-        if (!handbook) {
-          return json({ ok: false, error: `Handbook not found in KV: ${key}` }, 404, request);
-        }
-
-        return json({ ok: true, campus, handbook }, 200, request);
-      }
-
-      // =========================
-      // CHAT API
-      // POST /api
-      // body: { question, campus, scope }
-      // scope optional: "handbook" | "policies" | "protocols" | "all"
-      // =========================
-      if (url.pathname === "/api") {
-        if (request.method !== "POST") return json({ ok: false, error: "POST required" }, 405, request);
-
-        const body = await safeReadJson(request);
-        if (!body.ok) return json({ ok: false, error: "Invalid JSON body" }, 400, request);
-
-        const question = (body.data?.question || body.data?.q || "").toString().trim();
-        const campus = (body.data?.campus || "").toString().trim().toUpperCase();
-        const scope = (body.data?.scope || "all").toString().trim().toLowerCase();
-
-        if (!question) return json({ ok: false, error: "Missing question" }, 400, request);
-
-        // Load sources based on scope
-        const sources = await buildSources(env, { campus, scope });
-
-        // Retrieve relevant excerpts
-        const retrieved = retrieveRelevant(question, sources, 8);
-
-        // Build answer with OpenAI
-        const answer = await generateAnswer(env, {
-          question,
-          campus,
-          scope,
-          retrieved,
-        });
-
-        return json(
-          {
-            ok: true,
-            answer: answer.text,
-            used: {
-              scope,
-              campus: campus || null,
-              matched_items: retrieved.map((r) => ({
-                source: r.source,
-                id: r.id,
-                title: r.title,
-                link: r.link || null,
-                score: r.score,
-              })),
-            },
-          },
-          200,
-          request
-        );
-      }
-
-      return json({ ok: false, error: "Not found" }, 404, request);
-    } catch (err) {
-      return json(
-        { ok: false, error: "Server error", detail: (err && err.message) ? err.message : String(err) },
-        500,
-        request
-      );
+      data = await res.json();
+    } catch {
+      data = { ok: false, error: "Invalid JSON response from /api" };
     }
-  },
-};
-
-// =========================
-// KV LOADERS
-// =========================
-async function getPolicies(env) {
-  if (!env.cms_policies) return [];
-  const arr = await kvJson(env.cms_policies, "policies");
-  return normalizeItems(arr, "Policy");
-}
-
-async function getProtocols(env) {
-  if (!env.cms_protocols) return [];
-  const arr = await kvJson(env.cms_protocols, "protocols");
-  return normalizeItems(arr, "Protocol");
-}
-
-function normalizeItems(arr, defaultType) {
-  const items = Array.isArray(arr) ? arr : [];
-  const cleaned = items
-    .map((x) => ({
-      type: x.type || defaultType,
-      id: String(x.id || "").trim(),
-      title: String(x.title || "").trim(),
-      content: Array.isArray(x.content) ? x.content.map(String) : (x.content ? [String(x.content)] : []),
-      keywords: Array.isArray(x.keywords) ? x.keywords.map(String) : [],
-      order: Number.isFinite(x.order) ? x.order : (typeof x.order === "number" ? x.order : 9999),
-      link: x.link ? String(x.link) : "",
-    }))
-    .filter((x) => x.id && x.title);
-
-  cleaned.sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title));
-  return cleaned;
-}
-
-async function kvJson(kv, key) {
-  if (!kv) return null;
-  const raw = await kv.get(key);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-// =========================
-// BUILD SOURCES
-// =========================
-async function buildSources(env, { campus, scope }) {
-  const sources = [];
-
-  const wantHandbook = scope === "handbook" || scope === "all";
-  const wantPolicies = scope === "policies" || scope === "all";
-  const wantProtocols = scope === "protocols" || scope === "all";
-
-  if (wantHandbook && env.cms_handbooks && campus) {
-    const hb = await kvJson(env.cms_handbooks, `handbook_${campus}`);
-    // handbook structure can be anything; we convert to "sections"
-    // If your handbook is already array of sections: [{id,title,content:[...]}] it works.
-    // If it is nested, we try to flatten.
-    const hbSections = flattenHandbook(hb, campus);
-    sources.push(...hbSections.map((s) => ({ ...s, source: `handbook_${campus}` })));
+    if (!res.ok) {
+      // normalize
+      return { ok: false, error: data?.error || `HTTP ${res.status}` };
+    }
+    return data;
   }
 
-  if (wantPolicies) {
-    const policies = await getPolicies(env);
-    sources.push(...policies.map((p) => ({ ...p, source: "policies" })));
+  function escapeHtml(s) {
+    return (s || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
   }
 
-  if (wantProtocols) {
-    const protocols = await getProtocols(env);
-    sources.push(...protocols.map((p) => ({ ...p, source: "protocols" })));
+  function normalizeContentLines(doc) {
+    // doc.content can be array of strings or a string
+    if (!doc) return [];
+    if (Array.isArray(doc.content)) return doc.content.filter(Boolean);
+    if (typeof doc.content === "string") {
+      return doc.content.split("\n").map(x => x.trim()).filter(Boolean);
+    }
+    return [];
   }
 
-  return sources;
-}
-
-// tries to make handbook searchable even if nested
-function flattenHandbook(handbookJson, campus) {
-  // If already array of {id,title,content}
-  if (Array.isArray(handbookJson)) {
-    return normalizeItems(handbookJson, `Handbook ${campus}`);
+  function buildPreview(doc) {
+    const lines = normalizeContentLines(doc);
+    const preview = lines.slice(0, 2).join(" ");
+    return preview || "Open to view details…";
   }
 
-  // If object with sections
-  // common pattern: { title, sections:[...] } or { sections:{...} }
-  const out = [];
+  function renderDocGrid(container, docs, kind) {
+    container.innerHTML = "";
 
-  if (!handbookJson || typeof handbookJson !== "object") return out;
+    if (!docs || docs.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "docCard";
+      empty.innerHTML = `
+        <div class="docTitle">No items found</div>
+        <div class="docPreview">Check KV keys or try refresh.</div>
+      `;
+      container.appendChild(empty);
+      return;
+    }
 
-  // sections: array
-  if (Array.isArray(handbookJson.sections)) {
-    const items = handbookJson.sections.map((s, idx) => ({
-      id: s.id || `hb_${campus}_${idx + 1}`,
-      title: s.title || s.heading || `Section ${idx + 1}`,
-      content: Array.isArray(s.content) ? s.content : (s.text ? [s.text] : []),
-      keywords: s.keywords || [],
-      order: s.order ?? (idx + 1),
-      link: s.link || "",
-      type: `Handbook ${campus}`,
-    }));
-    return normalizeItems(items, `Handbook ${campus}`);
+    docs.forEach((doc) => {
+      const el = document.createElement("div");
+      el.className = "docCard";
+      el.innerHTML = `
+        <div class="docTitle">${escapeHtml(doc.title || doc.id || "Untitled")}</div>
+        <div class="docPreview">${escapeHtml(buildPreview(doc))}</div>
+      `;
+      el.addEventListener("click", () => openDocModal(doc, kind));
+      container.appendChild(el);
+    });
   }
 
-  // sections: object map
-  if (handbookJson.sections && typeof handbookJson.sections === "object") {
-    let idx = 0;
-    for (const [k, v] of Object.entries(handbookJson.sections)) {
-      idx++;
-      out.push({
-        id: (v && v.id) ? v.id : `hb_${campus}_${k}`,
-        title: (v && (v.title || v.heading)) ? (v.title || v.heading) : k,
-        content: Array.isArray(v?.content) ? v.content : (v?.text ? [v.text] : []),
-        keywords: Array.isArray(v?.keywords) ? v.keywords : [],
-        order: Number.isFinite(v?.order) ? v.order : idx,
-        link: v?.link ? String(v.link) : "",
-        type: `Handbook ${campus}`,
+  function openModal() {
+    docModal.style.display = "block";
+  }
+
+  function closeModal() {
+    docModal.style.display = "none";
+  }
+
+  function openDocModal(doc, kind) {
+    const lines = normalizeContentLines(doc);
+
+    modalTitle.textContent = doc.title || doc.id || "Document";
+    modalMeta.textContent = [
+      kind?.toUpperCase?.() || "",
+      doc.id ? `ID: ${doc.id}` : "",
+      doc.order ? `Order: ${doc.order}` : ""
+    ].filter(Boolean).join(" • ");
+
+    modalSectionTitle.textContent = kind === "handbooks"
+      ? `Campus: ${state.campus}${state.program ? ` • Program: ${state.program}` : ""}`
+      : `Scope: ${kind}`;
+
+    if (doc.link) {
+      modalLink.href = doc.link;
+      modalLink.style.visibility = "visible";
+    } else {
+      modalLink.href = "#";
+      modalLink.style.visibility = "hidden";
+    }
+
+    modalActions.innerHTML = "";
+    if (doc.keywords && Array.isArray(doc.keywords) && doc.keywords.length) {
+      const wrap = document.createElement("div");
+      wrap.style.display = "flex";
+      wrap.style.flexWrap = "wrap";
+      wrap.style.gap = "8px";
+      doc.keywords.slice(0, 12).forEach(k => {
+        const chip = document.createElement("span");
+        chip.style.padding = "6px 10px";
+        chip.style.border = "1px solid var(--line)";
+        chip.style.borderRadius = "999px";
+        chip.style.background = "var(--pill)";
+        chip.style.fontSize = "12px";
+        chip.textContent = k;
+        wrap.appendChild(chip);
+      });
+      modalActions.appendChild(wrap);
+    }
+
+    modalContent.innerHTML = "";
+    if (!lines.length) {
+      const p = document.createElement("div");
+      p.className = "para";
+      p.textContent = "No content available.";
+      modalContent.appendChild(p);
+    } else {
+      // show full content, no truncation
+      lines.forEach((t) => {
+        const p = document.createElement("div");
+        p.className = "para";
+        p.textContent = t;
+        modalContent.appendChild(p);
       });
     }
-    return normalizeItems(out, `Handbook ${campus}`);
+
+    openModal();
   }
 
-  // fallback: stringify
-  return [
-    {
-      id: `hb_${campus}_full`,
-      title: `Parent Handbook - ${campus}`,
-      content: [JSON.stringify(handbookJson)],
-      keywords: [],
-      order: 1,
-      link: "",
-      type: `Handbook ${campus}`,
-    },
-  ];
-}
+  function showPanel(tabName) {
+    Object.keys(panels).forEach(k => {
+      panels[k].classList.toggle("hidden", k !== tabName);
+    });
 
-// =========================
-// RETRIEVAL (simple + fast)
-// =========================
-function retrieveRelevant(question, sources, topK = 8) {
-  const q = normalize(question);
-  const qTokens = tokenize(q);
-
-  const scored = sources.map((item) => {
-    const hay = normalize(
-      [
-        item.title,
-        (item.keywords || []).join(" "),
-        ...(Array.isArray(item.content) ? item.content : []),
-      ].join(" ")
-    );
-
-    const score = scoreMatch(qTokens, hay, item);
-    return { ...item, score };
-  });
-
-  scored.sort((a, b) => b.score - a.score);
-  const best = scored.filter((x) => x.score > 0).slice(0, topK);
-
-  // If nothing matched, just take first few from requested scope (still answer but will be cautious)
-  return best.length ? best : scored.slice(0, Math.min(topK, scored.length));
-}
-
-function scoreMatch(qTokens, hay, item) {
-  let s = 0;
-
-  // title boost
-  const title = normalize(item.title || "");
-  for (const t of qTokens) {
-    if (!t) continue;
-    if (title.includes(t)) s += 8;
+    tabs.forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.tab === tabName);
+    });
   }
 
-  // keyword boost
-  const kw = normalize((item.keywords || []).join(" "));
-  for (const t of qTokens) {
-    if (kw.includes(t)) s += 6;
+  function setAuthButtons() {
+    const logged = isLoggedIn();
+    loginBtn.classList.toggle("hidden", logged);
+    logoutBtn.classList.toggle("hidden", !logged);
   }
 
-  // body
-  for (const t of qTokens) {
-    if (hay.includes(t)) s += 2;
+  // =============== DATA LOADING ===============
+  async function loadPolicies() {
+    const data = await apiPost({ op: "list", kind: "policies" });
+    if (!data.ok) {
+      toast(data.error || "Failed to load policies");
+      state.lists.policies = [];
+      countPolicies.textContent = "0";
+      renderDocGrid(policiesList, [], "policies");
+      return;
+    }
+    const docs = Array.isArray(data.items) ? data.items : [];
+    state.lists.policies = docs;
+    countPolicies.textContent = String(docs.length);
+    renderDocGrid(policiesList, docs, "policies");
   }
 
-  return s;
-}
+  async function loadProtocols() {
+    const data = await apiPost({ op: "list", kind: "protocols" });
+    if (!data.ok) {
+      toast(data.error || "Failed to load protocols");
+      state.lists.protocols = [];
+      countProtocols.textContent = "0";
+      renderDocGrid(protocolsList, [], "protocols");
+      return;
+    }
+    const docs = Array.isArray(data.items) ? data.items : [];
+    state.lists.protocols = docs;
+    countProtocols.textContent = String(docs.length);
+    renderDocGrid(protocolsList, docs, "protocols");
+  }
 
-function normalize(str) {
-  return String(str || "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
+  async function loadHandbooks() {
+    const data = await apiPost({ op: "list", kind: "handbooks", campus: state.campus });
+    if (!data.ok) {
+      toast(data.error || "Failed to load handbooks");
+      state.lists.handbooks = [];
+      countHandbooks.textContent = "0";
+      renderDocGrid(handbooksList, [], "handbooks");
+      return;
+    }
 
-function tokenize(str) {
-  return normalize(str)
-    .split(" ")
-    .map((t) => t.replace(/[^a-z0-9_-]/g, ""))
-    .filter((t) => t.length >= 3)
-    .slice(0, 30);
-}
+    let docs = Array.isArray(data.items) ? data.items : [];
 
-// =========================
-// AI ANSWER (not too short)
-// =========================
-async function generateAnswer(env, { question, campus, scope, retrieved }) {
-  if (!env.OPENAI_API_KEY) {
-    // fallback if no AI key
-    return {
-      text:
-        "AI key is missing. Please set OPENAI_API_KEY in Worker environment variables. " +
-        "I can still show the most relevant CMS text excerpts:\n\n" +
-        retrieved
-          .slice(0, 3)
-          .map((r) => `• ${r.title}\n${(r.content || []).slice(0, 6).join("\n")}`)
-          .join("\n\n"),
+    // optional filter by program
+    const prog = (state.program || "").trim();
+    if (prog) {
+      docs = docs.filter(d => {
+        const p = (d.program || "").toLowerCase();
+        return p === prog.toLowerCase();
+      });
+    }
+
+    state.lists.handbooks = docs;
+    countHandbooks.textContent = String(docs.length);
+    renderDocGrid(handbooksList, docs, "handbooks");
+  }
+
+  async function refreshCurrentTab() {
+    if (state.tab === "policies") return loadPolicies();
+    if (state.tab === "protocols") return loadProtocols();
+    if (state.tab === "handbooks") return loadHandbooks();
+    // chat has no list
+  }
+
+  // =============== CHAT ===============
+  function addMessage(role, text) {
+    const row = document.createElement("div");
+    row.className = `msg ${role === "user" ? "msg-user" : "msg-ai"}`;
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+
+    // Keep newlines visible
+    bubble.style.whiteSpace = "pre-wrap";
+    bubble.textContent = text;
+
+    row.appendChild(bubble);
+    chatOutput.appendChild(row);
+
+    chatOutput.scrollTop = chatOutput.scrollHeight;
+  }
+
+  function setSpinner(on) {
+    chatSpinner.style.display = on ? "block" : "none";
+  }
+
+  async function sendChat() {
+    const q = (chatInput.value || "").trim();
+    if (!q) return;
+
+    addMessage("user", q);
+    chatInput.value = "";
+
+    setSpinner(true);
+
+    const payload = {
+      op: "ask",
+      question: q,
+      campus: state.campus,
+      program: (chatProgram.value || state.program || ""),
+      scope: "all",
+      role: state.role
     };
+
+    const data = await apiPost(payload);
+    setSpinner(false);
+
+    if (!data.ok) {
+      addMessage("ai", `Error: ${data.error || "Failed to get answer"}`);
+      return;
+    }
+
+    // Display full answer as-is (no truncation on UI)
+    const ans = (data.answer || data.text || "").trim();
+    addMessage("ai", ans || "No answer returned.");
   }
 
-  const model = env.OPENAI_MODEL || "gpt-4o-mini";
+  // =============== AUTH ===============
+  async function doLogin() {
+    const role = state.role;
 
-  const contextBlocks = retrieved.slice(0, 6).map((r, i) => {
-    const excerpt = (r.content || []).slice(0, 18).join("\n");
-    return `SOURCE ${i + 1} (${r.source})\nTitle: ${r.title}\nID: ${r.id}\nLink: ${r.link || "N/A"}\nContent:\n${excerpt}`;
-  });
+    const code = prompt(role === "staff" ? "Enter STAFF code:" : "Enter PARENT code:");
+    if (!code) return;
 
-  const systemPrompt = `
-You are a CMS Policy/Protocol/Handbook assistant for staff and parents.
+    const data = await apiPost({ op: "auth", role, code: code.trim() });
+    if (!data.ok) {
+      toast(data.error || "Login failed");
+      return;
+    }
 
-HARD RULES:
-- Use ONLY the provided SOURCE texts. Do not invent or guess.
-- If the sources do not contain the answer, say what is missing and suggest what to ask the office/admin.
-- Write in clear English.
-- The answer must NOT be overly short: produce at least 8–10 lines (full sentences). Avoid one-paragraph tiny summaries.
-- If helpful, use short bullet points, but still keep enough detail.
-- When relevant, mention whether this is from Policy, Protocol, or Parent Handbook (naturally).
-`;
+    const token = data.token || "";
+    const until = data.until || (nowSec() + 60 * 60 * 8); // default 8h if not provided
 
-  const userPrompt = `
-Campus: ${campus || "N/A"}
-Scope: ${scope}
+    if (!token) {
+      toast("Login failed: missing token");
+      return;
+    }
 
-Question:
-${question}
+    if (role === "staff") {
+      localStorage.setItem(LS.token_staff, token);
+      localStorage.setItem(LS.until_staff, String(until));
+    } else {
+      localStorage.setItem(LS.token_parent, token);
+      localStorage.setItem(LS.until_parent, String(until));
+    }
 
-SOURCES:
-${contextBlocks.join("\n\n")}
-
-Now answer the question using ONLY the sources above. Make it complete and not too short (minimum 8–10 lines).
-`;
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt.trim() },
-        { role: "user", content: userPrompt.trim() },
-      ],
-      temperature: 0.2,
-      max_tokens: Number(env.OPENAI_MAX_TOKENS || 600),
-    }),
-  });
-
-  if (!res.ok) {
-    const txt = await res.text();
-    return { text: `AI error (${res.status}). ${txt}` };
+    setAuthButtons();
+    toast("Logged in successfully!");
   }
 
-  const data = await res.json();
-  const text = data?.choices?.[0]?.message?.content?.trim() || "No answer generated.";
-  return { text };
-}
-
-// =========================
-// HELPERS
-// =========================
-async function safeReadJson(request) {
-  try {
-    const data = await request.json();
-    return { ok: true, data };
-  } catch {
-    return { ok: false };
+  function doLogout() {
+    clearToken();
+    setAuthButtons();
+    toast("Logged out.");
   }
-}
 
-function json(obj, status = 200, request) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      ...corsHeaders(request),
-    },
-  });
-}
+  // =============== EVENTS ===============
+  function bindEvents() {
+    campusSelect.addEventListener("change", async () => {
+      setCampus(campusSelect.value);
+      if (state.tab === "handbooks" || state.tab === "chat") {
+        await refreshCurrentTab();
+      }
+    });
 
-function corsHeaders(request) {
-  const origin = request?.headers?.get("Origin") || "*";
-  return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Max-Age": "86400",
-  };
-}
+    roleSelect.addEventListener("change", () => {
+      setRole(roleSelect.value);
+      setAuthButtons();
+    });
+
+    loginBtn.addEventListener("click", doLogin);
+    logoutBtn.addEventListener("click", doLogout);
+
+    tabs.forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const t = btn.dataset.tab;
+        setTab(t);
+        showPanel(t);
+        await refreshCurrentTab();
+      });
+    });
+
+    hbProgramSelect.addEventListener("change", async () => {
+      setProgram(hbProgramSelect.value);
+      // sync with chat program dropdown too
+      chatProgram.value = hbProgramSelect.value || "";
+      if (state.tab === "handbooks") await loadHandbooks();
+    });
+
+    chatProgram.addEventListener("change", () => {
+      // keep selection
+      setProgram(chatProgram.value);
+      hbProgramSelect.value = chatProgram.value || "";
+    });
+
+    chatSend.addEventListener("click", sendChat);
+
+    chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+      }
+    });
+
+    modalClose.addEventListener("click", closeModal);
+    docModal.addEventListener("click", (e) => {
+      if (e.target === docModal) closeModal();
+    });
+  }
+
+  // =============== INIT ===============
+  async function init() {
+    // set initial selects
+    campusSelect.value = state.campus;
+    roleSelect.value = state.role;
+
+    hbProgramSelect.value = state.program || "";
+    chatProgram.value = state.program || "";
+
+    setAuthButtons();
+    bindEvents();
+
+    // show current tab
+    showPanel(state.tab);
+
+    // preload lists for all tabs (fast + keeps counts updated)
+    await Promise.allSettled([loadPolicies(), loadProtocols(), loadHandbooks()]);
+  }
+
+  init();
+})();
