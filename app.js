@@ -56,7 +56,7 @@ const MENU_ITEMS = {
     { "id": "health_policy", "title": "Health, Safety & Infection Prevention", "kv_key": "health_policy" }
  
   ],
-  
+
   protocols: [
     { id: "program_statement1", label: "CMS Program Statement and Implementation" },
     { id: "non_discrimination", label: "CMS Policies & Procedures and Non-Discrimination / Anti-Racism Policy" },
