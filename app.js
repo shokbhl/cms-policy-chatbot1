@@ -37,10 +37,23 @@ const PROGRAMS = [
 // NOTE: policies/protocols quick prompts (you add manually)
 const MENU_ITEMS = {
   policies: [
-    { id: "safe_arrival", label: "Safe Arrival & Dismissal" },
+    { id: "safe_arrival", label: "Arrival & Dismissal" },
     { id: "playground_safety", label: "Playground Safety" },
     { id: "anaphylaxis_policy", label: "Anaphylaxis Policy" },
-    { id: "medication_administration", label: "Medication Administration" }
+    { id: "medication_administration", label: "Medication Administration" },
+    { id: "sleep_toddlers", label: "sleep toddlers" },
+    { id: "sleep_infants", label: "sleep infants" },
+    { id: "serious_occurrence", label: "serious occurrence" },
+    { id: "students_volunteers", label: "students volunteers" },
+    { id: "waiting_list", label: "waiting list" },
+    { id: "staff_development", label: "staff development" },
+    { id: "program_statement", label: "program statement" },
+    { id: "parent_issues_concerns", label: "parent issues concerns" },
+    { id: "behaviour_management_monitoring", label: "behaviour management monitoring" },
+    { id: "fire_safety", label: "fire safety" },
+    { id: "emergency_management", label: "emergency management" },
+    { id: "criminal_reference_vsc_policy", label: "criminal reference & policy" }
+    
   ],
   protocols: [
     { id: "program_statement1", label: "CMS Program Statement and Implementation" },
