@@ -52,7 +52,9 @@ const MENU_ITEMS = {
     { id: "behaviour_management_monitoring", label: "behaviour management monitoring" },
     { id: "fire_safety", label: "fire safety" },
     { id: "emergency_management", label: "emergency management" },
-    { id: "criminal_reference_vsc_policy", label: "criminal reference & policy" }
+    { id: "criminal_reference_vsc_policy", label: "criminal reference & policy" },
+    { id: "health_policy", label: "Health & Infection Prevention" }
+
     
   ],
   protocols: [
