@@ -57,7 +57,18 @@ const MENU_ITEMS = {
   ],
   protocols: [
     { id: "program_statement1", label: "CMS Program Statement and Implementation" },
-    { id: "non_discrimination", label: "CMS Policies & Procedures and Non-Discrimination / Anti-Racism Policy" }
+    { id: "non_discrimination", label: "CMS Policies & Procedures and Non-Discrimination / Anti-Racism Policy" },
+    { id: "safety_security", label: "safety security" },
+    { id: "start_school_year", label: "start school year" },
+    { id: "employee_conduct", label: "employee conduct" },
+    { id: "classroom_management", label: "classroom management" },
+    { id: "caring_students", label: "caring students" },
+    { id: "afterschool_routines", label: "afterschool routines" },
+    { id: "special_events", label: "special events" },
+    { id: "reports_forms", label: "reports forms" },
+    { id: "other", label: "other" },
+    { id: "closing", label: "closing" }
+
   ],
   handbook: [] // loaded dynamically from /handbooks
 };
