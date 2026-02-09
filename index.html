@@ -1,154 +1,150 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>CMS Policy Chatbot</title>
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CMS Policy Chatbot</title>
 
-  <!-- CSS -->
-  <link rel="stylesheet" href="style.css?v=10" />
+  <link rel="icon" href="favicon.svg" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
+
 <body>
+  <div class="container">
 
-<div class="container">
-
-  <!-- HEADER -->
-  <header>
-    <div class="brand">
-      <img src="favicon.svg" alt="CMS">
-      <div>
-        <h1>CMS Policy Chatbot</h1>
-        <div class="sub">Internal staff & parent assistant</div>
-      </div>
-    </div>
-
-    <div id="header-actions" class="header-actions hidden">
-
-      <!-- PROGRAM SWITCH -->
-      <select id="program-switch" class="select">
-        <option value="ALL">All Programs</option>
-        <option value="PRESCHOOL">Preschool</option>
-        <option value="SR_CASA">Sr. Casa</option>
-        <option value="ELEMENTARY">Elementary</option>
-      </select>
-
-      <!-- CAMPUS SWITCH -->
-      <select id="campus-switch" class="select">
-        <option value="">Campus</option>
-        <option value="YC">YC</option>
-        <option value="MC">MC</option>
-        <option value="SC">SC</option>
-        <option value="TC">TC</option>
-        <option value="WC">WC</option>
-      </select>
-
-      <!-- ADMIN -->
-      <button id="admin-mode-btn" class="btn">Admin</button>
-
-      <!-- MODE BADGE -->
-      <span id="mode-badge" class="badge-mode">STAFF</span>
-
-      <!-- LOGOUT -->
-      <button id="logout-btn" class="btn danger">Logout</button>
-    </div>
-  </header>
-
-  <!-- LOGIN SCREEN -->
-  <div id="login-screen" class="panel">
-    <div class="panel-head">
-      <div><b>Login</b></div>
-      <div class="hint">Enter staff or parent access code</div>
-    </div>
-
-    <div class="login-wrap">
-      <form id="login-form">
-        <div class="login-row">
-
-          <select id="campus-select" class="select">
-            <option value="">Select campus</option>
-            <option value="YC">YC</option>
-            <option value="MC">MC</option>
-            <option value="SC">SC</option>
-            <option value="TC">TC</option>
-            <option value="WC">WC</option>
-          </select>
-
-          <input
-            id="access-code"
-            class="input"
-            placeholder="Access code"
-            autocomplete="off"
-          />
+    <!-- HEADER -->
+    <header>
+      <div class="brand">
+        <img src="favicon.svg" alt="CMS" />
+        <div>
+          <h1>CMS Policy Chatbot</h1>
+          <div class="sub">Internal staff &amp; parent assistant</div>
         </div>
+      </div>
 
-        <div class="login-actions">
-          <button class="primary-btn" type="submit">Login</button>
-          <button id="login-admin-btn" class="btn" type="button">
-            Admin Login
-          </button>
+      <!-- header actions (shown after login in app.js) -->
+      <div id="header-actions" class="header-actions hidden">
+        <!-- Program select -->
+        <select id="program-switch" class="select" aria-label="Program">
+          <option value="ALL">All Programs</option>
+          <option value="PRESCHOOL">Preschool</option>
+          <option value="SR_CASA">Sr. Casa</option>
+          <option value="ELEMENTARY">Elementary</option>
+        </select>
+
+        <!-- Campus switch -->
+        <select id="campus-switch" class="select" aria-label="Campus">
+          <option value="">Campus</option>
+          <option value="MC">MC</option>
+          <option value="YC">YC</option>
+          <option value="SC">SC</option>
+          <option value="TC">TC</option>
+          <option value="WC">WC</option>
+        </select>
+
+        <!-- Admin mode button -->
+        <button id="admin-mode-btn" class="btn" type="button">Admin</button>
+
+        <!-- Mode badge -->
+        <span id="mode-badge" class="badge-mode">STAFF</span>
+
+        <!-- Logout -->
+        <button id="logout-btn" class="btn danger" type="button">Logout</button>
+      </div>
+    </header>
+
+    <!-- TOP MENU BAR (created dynamically in app.js if not found) -->
+    <!-- You can keep this empty; app.js will create it automatically. -->
+    <!-- If you want it in HTML anyway, uncomment below:
+    <nav id="top-menu-bar" class="top-menu-bar hidden"></nav>
+    -->
+
+    <!-- LOGIN SCREEN -->
+    <section id="login-screen" class="panel">
+      <div class="panel-head">
+        <div style="font-weight:950;">Login</div>
+        <div class="hint">Enter staff or parent access code</div>
+      </div>
+
+      <div class="login-wrap">
+        <form id="login-form">
+          <div class="login-row">
+            <select id="campus-select" class="select" aria-label="Campus">
+              <option value="">Select campus</option>
+              <option value="MC">MC</option>
+              <option value="YC">YC</option>
+              <option value="SC">SC</option>
+              <option value="TC">TC</option>
+              <option value="WC">WC</option>
+            </select>
+
+            <!-- IMPORTANT: password type so code is hidden -->
+            <input
+              id="access-code"
+              class="input"
+              type="password"
+              placeholder="Staff or parent access code"
+              autocomplete="current-password"
+            />
+          </div>
+
+          <div class="login-actions">
+            <button class="primary-btn" type="submit">Login</button>
+            <button id="login-admin-btn" class="btn" type="button">Admin Login</button>
+          </div>
+
+          <div id="login-error" class="error"></div>
+        </form>
+      </div>
+    </section>
+
+    <!-- CHAT SCREEN -->
+    <section id="chat-screen" class="panel hidden">
+      <div class="panel-head">
+        <div style="font-weight:950;">Chat</div>
+        <div class="hint">Ask any CMS policy, protocol, or parent handbook question (campus-based).</div>
+      </div>
+
+      <div class="chat-wrap">
+        <div id="chat-window" class="chat-window"></div>
+
+        <form id="chat-form" class="chat-form">
+          <input id="user-input" class="text-input" type="text" placeholder="Ask a question..." />
+          <button class="primary-btn" type="submit">Ask</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- MENU OVERLAY + PANEL -->
+    <div id="menu-overlay" class="overlay hidden"></div>
+
+    <div id="menu-panel" class="menu-panel hidden" role="dialog" aria-modal="true" aria-label="Menu">
+      <div class="menu-panel-header">
+        <div id="menu-panel-title" class="menu-panel-title">Menu</div>
+        <button id="menu-panel-close" class="menu-close" type="button">Close</button>
+      </div>
+      <div id="menu-panel-body" class="menu-panel-body"></div>
+    </div>
+
+    <!-- ADMIN MODAL (optional; app.js uses this if present) -->
+    <div id="admin-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Admin PIN">
+      <div class="modal-card">
+        <div class="modal-title">Admin Login</div>
+        <div class="modal-sub">Enter Admin PIN</div>
+
+        <input id="admin-pin" class="input" type="password" placeholder="Admin PIN" autocomplete="one-time-code" />
+
+        <div class="modal-actions">
+          <button id="admin-pin-cancel" class="btn" type="button">Cancel</button>
+          <button id="admin-pin-submit" class="primary-btn" type="button">Login</button>
         </div>
-
-        <div id="login-error" class="error"></div>
-      </form>
-    </div>
-  </div>
-
-  <!-- CHAT SCREEN -->
-  <div id="chat-screen" class="panel hidden">
-    <div class="panel-head">
-      <div><b>Chat</b></div>
-      <div class="hint">
-        Ask any CMS policy, protocol, or parent handbook question.
       </div>
     </div>
 
-    <div class="chat-wrap">
-      <div id="chat-window" class="chat-window"></div>
+    <footer>© CMS – Staff internal tool</footer>
 
-      <form id="chat-form" class="chat-form">
-        <input
-          id="user-input"
-          class="text-input"
-          placeholder="Ask a question..."
-          autocomplete="off"
-        />
-        <button class="primary-btn">Ask</button>
-      </form>
-    </div>
   </div>
 
-  <footer>© CMS – Staff internal tool</footer>
-</div>
-
-<!-- overlay for menu -->
-<div id="menu-overlay" class="overlay hidden"></div>
-
-<!-- menu panel -->
-<div id="menu-panel" class="menu-panel hidden">
-  <div class="menu-panel-header">
-    <div id="menu-panel-title" class="menu-panel-title">Menu</div>
-    <button id="menu-panel-close" class="menu-close">Close</button>
-  </div>
-  <div id="menu-panel-body" class="menu-panel-body"></div>
-</div>
-
-<!-- ADMIN PIN MODAL -->
-<div id="admin-modal" class="overlay hidden">
-  <div class="menu-panel" style="top:160px;">
-    <div class="menu-panel-header">
-      <div class="menu-panel-title">Admin PIN</div>
-    </div>
-    <div class="menu-panel-body">
-      <input id="admin-pin" class="input" placeholder="Enter admin PIN" />
-      <div style="margin-top:10px; display:flex; gap:10px;">
-        <button id="admin-pin-submit" class="primary-btn">Enter</button>
-        <button id="admin-pin-cancel" class="btn">Cancel</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- APP JS -->
-<script src="app.js"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
