@@ -53,10 +53,10 @@ const MENU_ITEMS = {
     { id: "fire_safety", label: "fire safety" },
     { id: "emergency_management", label: "emergency management" },
     { id: "criminal_reference_vsc_policy", label: "criminal reference & policy" },
-    { id: "health_policy", label: "Health policy" }
-
-    
+    { "id": "health_policy", "title": "Health, Safety & Infection Prevention", "kv_key": "health_policy" }
+ 
   ],
+  
   protocols: [
     { id: "program_statement1", label: "CMS Program Statement and Implementation" },
     { id: "non_discrimination", label: "CMS Policies & Procedures and Non-Discrimination / Anti-Racism Policy" },
