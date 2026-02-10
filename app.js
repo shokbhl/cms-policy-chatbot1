@@ -7,6 +7,11 @@
 // - Staff role sees Policies/Protocols/Handbook
 // - Admin-only can browse + Dashboard/Logs (but cannot chat without staff/parent)
 // - Chat returns MULTI matches across categories (A + B) and shows cards with category labels
+//
+// ✅ NEW (Requested):
+// - Policies/Protocols Browse like Handbook:
+//   Policies/Protocols → Docs → Sections → (Subsections) → Content
+//   + "Ask this section in chat"
 // ============================
 
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
@@ -15,6 +20,10 @@ const STAFF_AUTH_URL = `${WORKER_BASE}/auth/staff`;
 const PARENT_AUTH_URL = `${WORKER_BASE}/auth/parent`;
 const ADMIN_AUTH_URL = `${WORKER_BASE}/auth/admin`;
 const HANDBOOKS_URL = `${WORKER_BASE}/handbooks`;
+
+// ✅ NEW browse endpoints (must be added to Worker)
+const POLICIES_URL = `${WORKER_BASE}/policies`;
+const PROTOCOLS_URL = `${WORKER_BASE}/protocols`;
 
 const LS = {
   staffToken: "cms_staff_token",
@@ -33,48 +42,6 @@ const PROGRAMS = [
   { value: "SR_CASA", label: "Sr. Casa" },
   { value: "ELEMENTARY", label: "Elementary" }
 ];
-
-// NOTE: policies/protocols quick prompts (you add manually)
-const MENU_ITEMS = {
-  policies: [
-    { id: "safe_arrival", label: "Arrival & Dismissal" },
-    { id: "playground_safety", label: "Playground Safety" },
-    { id: "anaphylaxis_policy", label: "Anaphylaxis Policy" },
-    { id: "medication_administration", label: "Medication Administration" },
-    { id: "sleep_toddlers", label: "sleep toddlers" },
-    { id: "sleep_infants", label: "sleep infants" },
-    { id: "serious_occurrence", label: "serious occurrence" },
-    { id: "students_volunteers", label: "students volunteers" },
-    { id: "waiting_list", label: "waiting list" },
-    { id: "staff_development", label: "staff development" },
-    { id: "program_statement", label: "program statement" },
-    { id: "parent_issues_concerns", label: "parent issues concerns" },
-    { id: "behaviour_management_monitoring", label: "behaviour management monitoring" },
-    { id: "fire_safety", label: "fire safety" },
-    { id: "emergency_management", label: "emergency management" },
-    { id: "criminal_reference_vsc_policy", label: "criminal reference & policy" },
-    { id: "health_policy", label: "Health & Infection Prevention" },
-    { id: "sanitary_practices", label: "sanitary practices" }
- 
-  ],
-
-  protocols: [
-    { id: "program_statement1", label: "CMS Program Statement and Implementation" },
-    { id: "non_discrimination", label: "CMS Policies & Procedures and Non-Discrimination / Anti-Racism Policy" },
-    { id: "safety_security", label: "safety security" },
-    { id: "start_school_year", label: "start school year" },
-    { id: "employee_conduct", label: "employee conduct" },
-    { id: "classroom_management", label: "classroom management" },
-    { id: "caring_students", label: "caring students" },
-    { id: "afterschool_routines", label: "afterschool routines" },
-    { id: "special_events", label: "special events" },
-    { id: "reports_forms", label: "reports forms" },
-    { id: "other", label: "other" },
-    { id: "closing", label: "closing" }
-
-  ],
-  handbook: [] // loaded dynamically from /handbooks
-};
 
 // ============================
 // DOM
@@ -123,6 +90,10 @@ let typingBubble = null;
 let handbookListCache = [];
 let handbookOpenId = null;
 
+// ✅ NEW: policy/protocol browse state
+let docListCache = { policies: [], protocols: [] };
+let docOpenId = { policies: null, protocols: null };
+
 // ============================
 // UI HELPERS
 // ============================
@@ -136,7 +107,6 @@ function escapeHtml(s) {
 }
 
 function toHtmlTextPreserveNewlines(text) {
-  // escape then convert \n to <br>
   return escapeHtml(text).replace(/\n/g, "<br>");
 }
 
@@ -364,7 +334,6 @@ function showChatUI() {
   if (headerActions) headerActions.classList.remove("hidden");
   forceShowTopMenu();
 
-  // ensure program dropdown (if exists)
   if (programSwitch) programSwitch.value = getProgram();
 
   syncModeBadge();
@@ -428,6 +397,12 @@ loginForm?.addEventListener("submit", async (e) => {
     setCampus(selectedCampus);
     if (!localStorage.getItem(LS.program)) setProgram("ALL");
 
+    // reset browse caches
+    handbookListCache = [];
+    handbookOpenId = null;
+    docListCache = { policies: [], protocols: [] };
+    docOpenId = { policies: null, protocols: null };
+
     if (accessCodeInput) accessCodeInput.value = "";
 
     showChatUI();
@@ -458,11 +433,15 @@ logoutBtn?.addEventListener("click", () => {
   clearParentSession();
   clearAdminSession();
 
+  handbookListCache = [];
+  handbookOpenId = null;
+  docListCache = { policies: [], protocols: [] };
+  docOpenId = { policies: null, protocols: null };
+
   if (accessCodeInput) accessCodeInput.value = "";
   setInlineError("");
 
   setCampus("");
-  // keep program remembered (optional)
   showLoginUI();
 });
 
@@ -478,6 +457,8 @@ campusSwitch?.addEventListener("change", async () => {
   if (!c) return;
 
   setCampus(c);
+
+  // reset handbook only (campus-based)
   handbookListCache = [];
   handbookOpenId = null;
 
@@ -494,7 +475,7 @@ campusSwitch?.addEventListener("change", async () => {
 });
 
 // ============================
-// PROGRAM CHANGE (NEW)
+// PROGRAM CHANGE
 // ============================
 programSwitch?.addEventListener("change", () => {
   setProgram(programSwitch.value);
@@ -603,35 +584,12 @@ async function openMenuPanel(type) {
     return;
   }
 
-  const items = MENU_ITEMS[type] || [];
-
-  if (!items.length) {
-    menuPanelBody.innerHTML = `<p class="muted">Content coming soon.</p>`;
-  } else {
-    const label = document.createElement("div");
-    label.className = "menu-group-label";
-    label.textContent = "Tap an item to ask in chat";
-    menuPanelBody.appendChild(label);
-
-    items.forEach((item) => {
-      const btn = document.createElement("button");
-      btn.className = "menu-item-btn";
-      btn.textContent = item.label;
-
-      btn.onclick = () => {
-        closeMenuPanel();
-
-        if (!getActiveUserRole()) {
-          addMessage("assistant", `You’re in <b>Admin mode</b> (dashboard/logs).<br>To ask in chat, login with a <b>Staff</b> or <b>Parent</b> code.`);
-          return;
-        }
-
-        const qPrefix = type === "protocols" ? "Protocol: " : "Policy: ";
-        askPolicy(qPrefix + item.label);
-      };
-
-      menuPanelBody.appendChild(btn);
-    });
+  // ✅ NEW: Policies/Protocols Browse view
+  if (type === "policies" || type === "protocols") {
+    await renderDocBrowser(type);
+    menuPanel.classList.remove("hidden");
+    if (menuOverlay) menuOverlay.classList.remove("hidden");
+    return;
   }
 
   menuPanel.classList.remove("hidden");
@@ -843,6 +801,250 @@ async function showHandbookSectionInPanel(campus, handbookId, sectionKey, hbMeta
 }
 
 // ============================
+// ✅ POLICIES / PROTOCOLS BROWSER
+// ============================
+async function fetchDocList(type) {
+  const token = getAnyBearerToken();
+  if (!token) throw new Error("Not logged in");
+
+  const base = type === "protocols" ? PROTOCOLS_URL : POLICIES_URL;
+
+  const res = await fetch(`${base}?list=1`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data?.error || "Failed to load list");
+  return Array.isArray(data.items) ? data.items : [];
+}
+
+async function fetchDocById(type, id) {
+  const token = getAnyBearerToken();
+  if (!token) throw new Error("Not logged in");
+
+  const base = type === "protocols" ? PROTOCOLS_URL : POLICIES_URL;
+
+  const res = await fetch(`${base}?id=${encodeURIComponent(id)}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data?.error || "Failed to load doc");
+
+  return data.doc || null;
+}
+
+async function renderDocBrowser(type) {
+  if (!menuPanelBody) return;
+
+  const role = getActiveUserRole();
+  if (role === "parent" && (type === "policies" || type === "protocols")) {
+    menuPanelBody.innerHTML = `<p class="muted">Parents can only access the Parent Handbook.</p>`;
+    return;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "handbook-wrap"; // reuse styling
+
+  wrap.innerHTML = `
+    <div class="handbook-top">
+      <div><b>${type === "protocols" ? "Protocols" : "Policies"} (Browse)</b></div>
+      <div class="handbook-meta">Tap a document to view sections</div>
+    </div>
+    <div class="muted">Loading...</div>
+  `;
+
+  menuPanelBody.innerHTML = "";
+  menuPanelBody.appendChild(wrap);
+
+  try {
+    if (!docListCache[type]?.length) {
+      docListCache[type] = await fetchDocList(type);
+    }
+
+    const items = docListCache[type] || [];
+
+    wrap.innerHTML = `
+      <div class="handbook-top">
+        <div><b>${type === "protocols" ? "Protocols" : "Policies"} (Browse)</b></div>
+        <div class="handbook-meta">Tap a document to expand sections</div>
+      </div>
+    `;
+
+    if (!items.length) {
+      wrap.innerHTML += `<p class="muted">No items found.</p>`;
+      return;
+    }
+
+    for (const it of items) {
+      const id = String(it?.id || "").trim();
+      if (!id) continue;
+
+      const isOpen = docOpenId[type] === id;
+
+      const btn = document.createElement("button");
+      btn.className = "handbook-btn";
+      btn.innerHTML = `
+        <div class="hb-title">${escapeHtml(it.title || it.label || id)}</div>
+        <div class="hb-sub">${escapeHtml(it.version ? `v${it.version}` : "")}</div>
+      `;
+
+      btn.onclick = async () => {
+        docOpenId[type] = isOpen ? null : id;
+        await openMenuPanel(type);
+      };
+
+      wrap.appendChild(btn);
+
+      if (isOpen) {
+        const doc = await fetchDocById(type, id).catch(() => null);
+
+        const secWrap = document.createElement("div");
+        secWrap.className = "hb-sections";
+
+        const secs = Array.isArray(doc?.sections) ? doc.sections : [];
+        if (!secs.length) {
+          secWrap.innerHTML = `<div class="muted">No sections in this document.</div>`;
+        } else {
+          secs.forEach((sec) => {
+            const hasSubs = Array.isArray(sec?.subsections) && sec.subsections.length;
+
+            const sBtn = document.createElement("button");
+            sBtn.className = "hb-section-btn";
+            sBtn.textContent = sec?.title || sec?.id || "Section";
+
+            sBtn.onclick = async () => {
+              if (!hasSubs) {
+                await showDocContentInPanel(type, id, sec?.id, null);
+                return;
+              }
+              await showDocSubsectionsInPanel(type, id, sec);
+            };
+
+            secWrap.appendChild(sBtn);
+          });
+        }
+
+        wrap.appendChild(secWrap);
+      }
+    }
+  } catch (err) {
+    wrap.innerHTML += `<p class="muted">${escapeHtml(err?.message || "Could not load.")}</p>`;
+  }
+}
+
+async function showDocSubsectionsInPanel(type, docId, sectionObj) {
+  if (!menuPanelBody) return;
+
+  const secTitle = sectionObj?.title || sectionObj?.id || "Section";
+  const subs = Array.isArray(sectionObj?.subsections) ? sectionObj.subsections : [];
+
+  menuPanelBody.innerHTML = `
+    <div class="handbook-wrap">
+      <div class="handbook-top">
+        <div><b>${escapeHtml(secTitle)}</b></div>
+        <div class="handbook-meta">Select a subsection</div>
+      </div>
+
+      <div class="hb-sections" id="subsec-list"></div>
+
+      <div style="margin-top:10px;">
+        <button class="mini-btn" id="doc-back">Back</button>
+      </div>
+    </div>
+  `;
+
+  const list = document.getElementById("subsec-list");
+  subs.forEach((sub) => {
+    const b = document.createElement("button");
+    b.className = "hb-section-btn";
+    b.textContent = sub?.title || sub?.id || "Subsection";
+    b.onclick = async () => {
+      await showDocContentInPanel(type, docId, sectionObj?.id, sub?.id);
+    };
+    list.appendChild(b);
+  });
+
+  document.getElementById("doc-back")?.addEventListener("click", async () => openMenuPanel(type));
+}
+
+async function showDocContentInPanel(type, docId, sectionId, subsectionId) {
+  if (!menuPanelBody) return;
+
+  menuPanelBody.innerHTML = `
+    <div class="handbook-wrap">
+      <div class="muted">Loading content...</div>
+      <button class="mini-btn" id="doc-back" style="margin-top:10px;">Back</button>
+    </div>
+  `;
+
+  try {
+    const doc = await fetchDocById(type, docId);
+    const secs = Array.isArray(doc?.sections) ? doc.sections : [];
+
+    const sec = secs.find((s) => String(s?.id || "") === String(sectionId || "")) || {};
+    let title = sec?.title || sec?.id || "Section";
+    let content = sec?.content || "";
+
+    if (subsectionId) {
+      const sub = (Array.isArray(sec?.subsections) ? sec.subsections : []).find((x) => String(x?.id || "") === String(subsectionId || "")) || {};
+      title = sub?.title || sub?.id || title;
+      content = sub?.content || "";
+    }
+
+    const contentHtml = toHtmlTextPreserveNewlines(content || "No content yet.");
+
+    menuPanelBody.innerHTML = `
+      <div class="handbook-wrap">
+        <div class="handbook-top">
+          <div><b>${escapeHtml(doc?.title || docId)}</b></div>
+          <div class="handbook-meta">${escapeHtml(type === "protocols" ? "Protocol" : "Policy")}</div>
+        </div>
+
+        <div class="hb-section-view">
+          <div class="hb-section-head">
+            <div class="hb-section-title">${escapeHtml(title)}</div>
+            <div class="hb-section-actions">
+              <button class="mini-btn" id="doc-back">Back</button>
+              ${doc?.link ? `<a class="mini-link" href="${escapeHtml(doc.link)}" target="_blank" rel="noopener">Open full document</a>` : ""}
+            </div>
+          </div>
+
+          <div class="hb-section-content">${contentHtml}</div>
+
+          <div class="hb-ask">
+            ${
+              getActiveUserRole()
+                ? `<button class="primary-btn" id="doc-ask-btn">Ask this section in chat</button>`
+                : `<div class="muted">To ask in chat, login with Staff/Parent code.</div>`
+            }
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById("doc-back")?.addEventListener("click", async () => openMenuPanel(type));
+
+    document.getElementById("doc-ask-btn")?.addEventListener("click", () => {
+      closeMenuPanel();
+      const docTitle = doc?.title || docId;
+      const q = `Using ${type === "protocols" ? "Protocol" : "Policy"} (${docTitle}) section "${title}", please answer: `;
+      askPolicy(q);
+    });
+  } catch (err) {
+    menuPanelBody.innerHTML = `
+      <div class="handbook-wrap">
+        <div class="muted">${escapeHtml(err?.message || "Could not load content.")}</div>
+        <button class="mini-btn" id="doc-back">Back</button>
+      </div>
+    `;
+    document.getElementById("doc-back")?.addEventListener("click", async () => openMenuPanel(type));
+  }
+}
+
+// ============================
 // CHAT / API (MULTI RESULTS)
 // ============================
 function badgeForType(t) {
@@ -902,7 +1104,7 @@ async function askPolicy(question) {
     return;
   }
 
-  const program = getProgram(); // NEW
+  const program = getProgram();
 
   addMessage("user", escapeHtml(trimmed));
   showTyping();
@@ -932,7 +1134,6 @@ async function askPolicy(question) {
       return;
     }
 
-    // ✅ MULTI matches
     const matches = Array.isArray(data.matches) ? data.matches : [];
     if (!matches.length) {
       addMessage("assistant", "No results returned.");
@@ -970,7 +1171,6 @@ chatForm?.addEventListener("submit", (e) => {
 
   if (!localStorage.getItem(LS.program)) setProgram("ALL");
   if (programSwitch) {
-    // ensure options exist even if index.html didn't prefill
     if (!programSwitch.options.length) {
       programSwitch.innerHTML = PROGRAMS.map((p) => `<option value="${p.value}">${p.label}</option>`).join("");
     }
