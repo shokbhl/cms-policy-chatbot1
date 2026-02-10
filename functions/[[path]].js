@@ -1,76 +1,77 @@
-// /functions/[[path]].js
-// One catch-all proxy from Pages -> Worker
-// Supports: GET/POST/OPTIONS for /api, /auth/*, /handbooks, /policies, /protocols, ...
+// functions/[[path]].js
+// Catch-all proxy: forwards ANY route/method to your Worker, preserving path + query.
+// Requires Pages env var: WORKER_BASE_URL = https://your-worker.yourname.workers.dev
 
 const corsHeaders = (origin = "*") => ({
   "Access-Control-Allow-Origin": origin,
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400",
+  "Vary": "Origin",
 });
 
 function json(data, status = 200, origin = "*") {
-  return new Response(JSON.stringify(data, null, 2), {
+  return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+    headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
   });
 }
 
 export async function onRequest(context) {
   const { request, env, params } = context;
-  const origin = request.headers.get("Origin") || "*";
 
-  const WORKER_BASE_URL = env.WORKER_BASE_URL;
-  if (!WORKER_BASE_URL) {
-    return json({ ok: false, error: "Missing WORKER_BASE_URL in Pages env." }, 500, origin);
-  }
+  const origin = request.headers.get("Origin") || "*";
 
   // Preflight
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
   }
 
-  // Build upstream path
-  // params.path is array or string depending on routing
-  const pathParts = Array.isArray(params?.path) ? params.path : [params?.path].filter(Boolean);
-  const upstreamPath = "/" + pathParts.join("/");
+  const WORKER_BASE = env.WORKER_BASE_URL;
+  if (!WORKER_BASE) {
+    return json({ ok: false, error: "Missing WORKER_BASE_URL in Pages env." }, 500, origin);
+  }
 
-  const url = new URL(request.url);
-  const upstreamUrl = new URL(upstreamPath + url.search, WORKER_BASE_URL).toString();
+  // Build upstream URL:
+  // params.path is an array of path segments captured by [[path]]
+  const path = Array.isArray(params?.path) ? params.path.join("/") : "";
+  const incomingUrl = new URL(request.url);
 
-  // Copy headers (keep Authorization)
-  const headers = new Headers();
-  headers.set("Accept", request.headers.get("Accept") || "application/json");
+  // Forward to: WORKER_BASE + "/" + path + "?sameQuery"
+  const upstreamUrl = new URL(`/${path}`, WORKER_BASE);
+  upstreamUrl.search = incomingUrl.search;
 
-  const auth = request.headers.get("Authorization");
-  if (auth) headers.set("Authorization", auth);
+  // Copy request headers (keep Authorization!)
+  const headers = new Headers(request.headers);
 
-  // Content-Type only when needed
-  const ct = request.headers.get("Content-Type") || "";
-  if (ct) headers.set("Content-Type", ct);
+  // Ensure Host doesn't confuse upstream
+  headers.delete("host");
 
   let body = undefined;
+  // Only forward body on non-GET/HEAD
   if (request.method !== "GET" && request.method !== "HEAD") {
-    // Pass-through body (JSON or others)
     body = await request.arrayBuffer();
   }
 
   let upstreamRes;
   try {
-    upstreamRes = await fetch(upstreamUrl, {
+    upstreamRes = await fetch(upstreamUrl.toString(), {
       method: request.method,
       headers,
       body,
     });
   } catch (e) {
-    return json({ ok: false, error: "Upstream fetch failed", detail: String(e?.message || e) }, 502, origin);
+    return json({ ok: false, error: `Upstream fetch failed: ${String(e.message || e)}` }, 502, origin);
   }
 
-  const resHeaders = new Headers(corsHeaders(origin));
-  const upstreamCT = upstreamRes.headers.get("Content-Type") || "application/json";
-  resHeaders.set("Content-Type", upstreamCT);
+  // Read upstream response as bytes and pass through
+  const resHeaders = new Headers(upstreamRes.headers);
 
-  // Return raw text (so JSON stays JSON even if worker returns non-JSON in edge cases)
-  const text = await upstreamRes.text();
-  return new Response(text, { status: upstreamRes.status, headers: resHeaders });
+  // Add CORS on top
+  for (const [k, v] of Object.entries(corsHeaders(origin))) resHeaders.set(k, v);
+
+  return new Response(upstreamRes.body, {
+    status: upstreamRes.status,
+    headers: resHeaders,
+  });
 }
