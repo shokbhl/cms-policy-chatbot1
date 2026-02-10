@@ -1,110 +1,76 @@
-// functions/[[path]].js
-// Catch-all proxy: forwards ANY path (/api, /auth/*, /handbooks, /policies, /protocols, /admin/* ...)
-// to your Worker base URL in env.WORKER_BASE_URL
+// /functions/[[path]].js
+// One catch-all proxy from Pages -> Worker
+// Supports: GET/POST/OPTIONS for /api, /auth/*, /handbooks, /policies, /protocols, ...
 
 const corsHeaders = (origin = "*") => ({
   "Access-Control-Allow-Origin": origin,
-  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400",
-  "Vary": "Origin",
 });
 
-function pickOrigin(req) {
-  return req.headers.get("Origin") || "*";
-}
-
-function isBodyAllowed(method) {
-  return !["GET", "HEAD"].includes(String(method || "").toUpperCase());
-}
-
-function filterUpstreamHeaders(request) {
-  // Forward only what we need; avoid hop-by-hop headers
-  const h = new Headers();
-
-  const contentType = request.headers.get("Content-Type");
-  if (contentType) h.set("Content-Type", contentType);
-
-  const auth = request.headers.get("Authorization");
-  if (auth) h.set("Authorization", auth);
-
-  // Optional forwarding
-  const accept = request.headers.get("Accept");
-  if (accept) h.set("Accept", accept);
-
-  // Helpful debug / origin
-  const origin = request.headers.get("Origin");
-  if (origin) h.set("Origin", origin);
-
-  // You can forward host info if you want
-  const xfHost = request.headers.get("Host");
-  if (xfHost) h.set("X-Forwarded-Host", xfHost);
-
-  return h;
-}
-
-async function proxy(context) {
-  const { request, env } = context;
-
-  const WORKER_BASE = env.WORKER_BASE_URL;
-  if (!WORKER_BASE) {
-    return new Response(JSON.stringify({ ok: false, error: "Missing WORKER_BASE_URL in Pages env." }, null, 2), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  // Build upstream URL: keep pathname + search
-  const incomingUrl = new URL(request.url);
-  const upstreamUrl = new URL(incomingUrl.pathname + incomingUrl.search, WORKER_BASE).toString();
-
-  const origin = pickOrigin(request);
-
-  // Handle OPTIONS (preflight)
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders(origin) });
-  }
-
-  // Forward request to Worker
-  let body = undefined;
-  if (isBodyAllowed(request.method)) {
-    // We keep raw body to support JSON and anything else
-    const ab = await request.arrayBuffer();
-    body = ab.byteLength ? ab : undefined;
-  }
-
-  const upstreamRes = await fetch(upstreamUrl, {
-    method: request.method,
-    headers: filterUpstreamHeaders(request),
-    body,
-  });
-
-  // Copy response (keep content-type if present)
-  const resHeaders = new Headers(corsHeaders(origin));
-
-  const ct = upstreamRes.headers.get("Content-Type");
-  if (ct) resHeaders.set("Content-Type", ct);
-
-  // Optional: pass cache headers etc.
-  const cacheControl = upstreamRes.headers.get("Cache-Control");
-  if (cacheControl) resHeaders.set("Cache-Control", cacheControl);
-
-  const text = await upstreamRes.text();
-
-  return new Response(text, {
-    status: upstreamRes.status,
-    headers: resHeaders,
+function json(data, status = 200, origin = "*") {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
   });
 }
 
 export async function onRequest(context) {
-  try {
-    return await proxy(context);
-  } catch (err) {
-    const origin = pickOrigin(context.request);
-    return new Response(
-      JSON.stringify({ ok: false, error: "Proxy error", detail: err?.message || String(err) }, null, 2),
-      { status: 500, headers: { ...corsHeaders(origin), "Content-Type": "application/json" } }
-    );
+  const { request, env, params } = context;
+  const origin = request.headers.get("Origin") || "*";
+
+  const WORKER_BASE_URL = env.WORKER_BASE_URL;
+  if (!WORKER_BASE_URL) {
+    return json({ ok: false, error: "Missing WORKER_BASE_URL in Pages env." }, 500, origin);
   }
+
+  // Preflight
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+  }
+
+  // Build upstream path
+  // params.path is array or string depending on routing
+  const pathParts = Array.isArray(params?.path) ? params.path : [params?.path].filter(Boolean);
+  const upstreamPath = "/" + pathParts.join("/");
+
+  const url = new URL(request.url);
+  const upstreamUrl = new URL(upstreamPath + url.search, WORKER_BASE_URL).toString();
+
+  // Copy headers (keep Authorization)
+  const headers = new Headers();
+  headers.set("Accept", request.headers.get("Accept") || "application/json");
+
+  const auth = request.headers.get("Authorization");
+  if (auth) headers.set("Authorization", auth);
+
+  // Content-Type only when needed
+  const ct = request.headers.get("Content-Type") || "";
+  if (ct) headers.set("Content-Type", ct);
+
+  let body = undefined;
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    // Pass-through body (JSON or others)
+    body = await request.arrayBuffer();
+  }
+
+  let upstreamRes;
+  try {
+    upstreamRes = await fetch(upstreamUrl, {
+      method: request.method,
+      headers,
+      body,
+    });
+  } catch (e) {
+    return json({ ok: false, error: "Upstream fetch failed", detail: String(e?.message || e) }, 502, origin);
+  }
+
+  const resHeaders = new Headers(corsHeaders(origin));
+  const upstreamCT = upstreamRes.headers.get("Content-Type") || "application/json";
+  resHeaders.set("Content-Type", upstreamCT);
+
+  // Return raw text (so JSON stays JSON even if worker returns non-JSON in edge cases)
+  const text = await upstreamRes.text();
+  return new Response(text, { status: upstreamRes.status, headers: resHeaders });
 }
