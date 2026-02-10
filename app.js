@@ -54,6 +54,7 @@ const MENU_ITEMS = {
     { id: "emergency_management", label: "emergency management" },
     { id: "criminal_reference_vsc_policy", label: "criminal reference & policy" },
     { id: "health_policy", label: "Health & Infection Prevention" },
+    { id: "sanitary_practices", label: "sanitary practices" }
  
   ],
 
