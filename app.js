@@ -1,12 +1,17 @@
 // ============================
-// CMS Policy Chatbot - app.js (FULL)
+// CMS Policy Chatbot - app.js (FULL / FIXED)
 // - Staff/Parent login + Admin-only mode
-// - Campus required on login (blank default)
-// - Program selector (All Programs / Preschool / Sr. Casa / Elementary)
-// - Parent role can ONLY see Parent Handbook (UI + hard guard)
-// - Staff role sees Policies/Protocols/Handbook
-// - Admin-only can browse + Dashboard/Logs (but cannot chat without staff/parent)
-// - Chat returns MULTI matches across categories (A + B) and shows cards with category labels
+// - Campus required on login
+// - Program selector
+// - Parent can ONLY see Parent Handbook
+// - Staff sees Policies / Protocols / Handbook
+// - Admin can browse + Dashboard/Logs (but cannot chat without staff/parent)
+// - Scoped menu clicks:
+//    policy click   -> only that policy
+//    protocol click -> only that protocol
+//    handbook click -> handbook browser
+//    section click  -> only that handbook section
+// - Free typed question -> all allowed docs for that role
 // ============================
 
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
@@ -24,7 +29,7 @@ const LS = {
   adminToken: "cms_admin_token",
   adminUntil: "cms_admin_until",
   campus: "cms_selected_campus",
-  program: "cms_selected_program" // NEW
+  program: "cms_selected_program"
 };
 
 const PROGRAMS = [
@@ -34,46 +39,42 @@ const PROGRAMS = [
   { value: "ELEMENTARY", label: "Elementary" }
 ];
 
-// NOTE: policies/protocols quick prompts (you add manually)
+// Quick menu prompts
 const MENU_ITEMS = {
   policies: [
     { id: "safe_arrival", label: "Arrival & Dismissal" },
     { id: "playground_safety", label: "Playground Safety" },
     { id: "anaphylaxis_policy", label: "Anaphylaxis Policy" },
     { id: "medication_administration", label: "Medication Administration" },
-    { id: "sleep_toddlers", label: "sleep toddlers" },
-    { id: "sleep_infants", label: "sleep infants" },
-    { id: "serious_occurrence", label: "serious occurrence" },
-    { id: "students_volunteers", label: "students volunteers" },
-    { id: "waiting_list", label: "waiting list" },
-    { id: "staff_development", label: "staff development" },
-    { id: "program_statement", label: "program statement" },
-    { id: "parent_issues_concerns", label: "parent issues concerns" },
-    { id: "behaviour_management_monitoring", label: "behaviour management monitoring" },
-    { id: "fire_safety", label: "fire safety" },
-    { id: "emergency_management", label: "emergency management" },
-    { id: "criminal_reference_vsc_policy", label: "criminal reference & policy" },
+    { id: "sleep_toddlers", label: "Sleep – Toddler & Preschool" },
+    { id: "sleep_infants", label: "Sleep – Infants" },
+    { id: "students_volunteers", label: "Students & Volunteers" },
+    { id: "waiting_list", label: "Waiting List" },
+    { id: "staff_development", label: "Staff Development" },
+    { id: "program_statement", label: "Program Statement" },
+    { id: "parent_issues_concerns", label: "Parent Issues & Concerns" },
+    { id: "behaviour_management_monitoring", label: "Behaviour Management Monitoring" },
+    { id: "fire_safety", label: "Fire Safety" },
+    { id: "emergency_management", label: "Emergency Management" },
+    { id: "criminal_reference_vsc_policy", label: "Criminal Reference / VSC" },
     { id: "health_policy", label: "Health & Infection Prevention" },
-    { id: "sanitary_practices", label: "sanitary practices" }
- 
+    { id: "sanitary_practices", label: "Sanitary Practices" }
   ],
-
   protocols: [
     { id: "program_statement1", label: "CMS Program Statement and Implementation" },
-    { id: "non_discrimination", label: "CMS Policies & Procedures and Non-Discrimination / Anti-Racism Policy" },
-    { id: "safety_security", label: "safety security" },
-    { id: "start_school_year", label: "start school year" },
-    { id: "employee_conduct", label: "employee conduct" },
-    { id: "classroom_management", label: "classroom management" },
-    { id: "caring_students", label: "caring students" },
-    { id: "afterschool_routines", label: "afterschool routines" },
-    { id: "special_events", label: "special events" },
-    { id: "reports_forms", label: "reports forms" },
-    { id: "other", label: "other" },
-    { id: "closing", label: "closing" }
-
+    { id: "non_discrimination", label: "Non-Discrimination / Anti-Racism" },
+    { id: "safety_security", label: "Safety & Security" },
+    { id: "start_school_year", label: "Start of School Year" },
+    { id: "employee_conduct", label: "Employee Conduct" },
+    { id: "classroom_management", label: "Classroom Management" },
+    { id: "caring_students", label: "Caring for Students" },
+    { id: "afterschool_routines", label: "Afterschool Routines" },
+    { id: "special_events", label: "Special Events" },
+    { id: "reports_forms", label: "Reports & Forms" },
+    { id: "other", label: "Other" },
+    { id: "closing", label: "Closing" }
   ],
-  handbook: [] // loaded dynamically from /handbooks
+  handbook: []
 };
 
 // ============================
@@ -99,10 +100,8 @@ const menuPanelBody = document.getElementById("menu-panel-body");
 const menuPanelClose = document.getElementById("menu-panel-close");
 const menuOverlay = document.getElementById("menu-overlay");
 
-const campusSelect = document.getElementById("campus-select"); // login select
-const campusSwitch = document.getElementById("campus-switch"); // header select
-
-// NEW: program dropdown in header (must exist in index.html)
+const campusSelect = document.getElementById("campus-select");
+const campusSwitch = document.getElementById("campus-switch");
 const programSwitch = document.getElementById("program-switch");
 
 const adminModeBtn = document.getElementById("admin-mode-btn");
@@ -118,8 +117,6 @@ let topMenuBar = document.getElementById("top-menu-bar");
 let menuPills = document.querySelectorAll(".menu-pill");
 
 let typingBubble = null;
-
-// handbook state
 let handbookListCache = [];
 let handbookOpenId = null;
 
@@ -136,8 +133,7 @@ function escapeHtml(s) {
 }
 
 function toHtmlTextPreserveNewlines(text) {
-  // escape then convert \n to <br>
-  return escapeHtml(text).replace(/\n/g, "<br>");
+  return escapeHtml(text ?? "").replace(/\n/g, "<br>");
 }
 
 function addMessage(role, htmlText) {
@@ -176,7 +172,9 @@ function showTyping() {
 }
 
 function hideTyping() {
-  if (typingBubble && typingBubble.parentNode) typingBubble.parentNode.removeChild(typingBubble);
+  if (typingBubble && typingBubble.parentNode) {
+    typingBubble.parentNode.removeChild(typingBubble);
+  }
   typingBubble = null;
 }
 
@@ -184,7 +182,6 @@ function setInlineError(text) {
   if (loginError) loginError.textContent = text || "";
 }
 
-// Parent must ONLY see handbook menu
 function applyRoleUI(role) {
   const isParent = role === "parent";
 
@@ -194,7 +191,7 @@ function applyRoleUI(role) {
 
   if (btnPolicies) btnPolicies.style.display = isParent ? "none" : "";
   if (btnProtocols) btnProtocols.style.display = isParent ? "none" : "";
-  if (btnHandbook) btnHandbook.style.display = ""; // always show
+  if (btnHandbook) btnHandbook.style.display = "";
 
   if (isParent) {
     const activeType = document.querySelector(".menu-pill.active")?.dataset?.menu;
@@ -208,6 +205,7 @@ function applyRoleUI(role) {
 function normalizeCampus(code) {
   return String(code || "").trim().toUpperCase();
 }
+
 function setCampus(code) {
   const c = normalizeCampus(code);
   if (c) localStorage.setItem(LS.campus, c);
@@ -216,6 +214,7 @@ function setCampus(code) {
   if (campusSelect) campusSelect.value = c || "";
   if (campusSwitch) campusSwitch.value = c || "";
 }
+
 function getCampus() {
   return normalizeCampus(localStorage.getItem(LS.campus) || "");
 }
@@ -226,14 +225,17 @@ function normalizeProgram(value) {
   if (v === "ALL PROGRAMS") return "ALL";
   return v;
 }
+
 function setProgram(value) {
   const v = normalizeProgram(value);
   localStorage.setItem(LS.program, v);
   if (programSwitch) programSwitch.value = v;
 }
+
 function getProgram() {
   return normalizeProgram(localStorage.getItem(LS.program) || "ALL");
 }
+
 function programLabel(v) {
   const x = PROGRAMS.find((p) => p.value === v);
   return x ? x.label : "All Programs";
@@ -244,24 +246,38 @@ function isTokenActive(tokenKey, untilKey) {
   const until = Number(localStorage.getItem(untilKey) || "0");
   return !!token && Date.now() < until;
 }
+
 function isStaffActive() { return isTokenActive(LS.staffToken, LS.staffUntil); }
 function isParentActive() { return isTokenActive(LS.parentToken, LS.parentUntil); }
 function isAdminActive() { return isTokenActive(LS.adminToken, LS.adminUntil); }
 
-function clearStaffSession() { localStorage.removeItem(LS.staffToken); localStorage.removeItem(LS.staffUntil); }
-function clearParentSession() { localStorage.removeItem(LS.parentToken); localStorage.removeItem(LS.parentUntil); }
-function clearAdminSession() { localStorage.removeItem(LS.adminToken); localStorage.removeItem(LS.adminUntil); }
+function clearStaffSession() {
+  localStorage.removeItem(LS.staffToken);
+  localStorage.removeItem(LS.staffUntil);
+}
+
+function clearParentSession() {
+  localStorage.removeItem(LS.parentToken);
+  localStorage.removeItem(LS.parentUntil);
+}
+
+function clearAdminSession() {
+  localStorage.removeItem(LS.adminToken);
+  localStorage.removeItem(LS.adminUntil);
+}
 
 function getActiveUserRole() {
   if (isStaffActive()) return "staff";
   if (isParentActive()) return "parent";
   return "";
 }
+
 function getActiveBearerTokenForChat() {
   if (isStaffActive()) return localStorage.getItem(LS.staffToken) || "";
   if (isParentActive()) return localStorage.getItem(LS.parentToken) || "";
   return "";
 }
+
 function getAnyBearerToken() {
   if (isStaffActive()) return localStorage.getItem(LS.staffToken) || "";
   if (isParentActive()) return localStorage.getItem(LS.parentToken) || "";
@@ -270,17 +286,29 @@ function getAnyBearerToken() {
 }
 
 function setModeStaff() {
-  if (modeBadge) { modeBadge.textContent = "STAFF"; modeBadge.classList.remove("admin"); }
+  if (modeBadge) {
+    modeBadge.textContent = "STAFF";
+    modeBadge.classList.remove("admin");
+  }
   if (adminLinks) adminLinks.classList.add("hidden");
 }
+
 function setModeParent() {
-  if (modeBadge) { modeBadge.textContent = "PARENT"; modeBadge.classList.remove("admin"); }
+  if (modeBadge) {
+    modeBadge.textContent = "PARENT";
+    modeBadge.classList.remove("admin");
+  }
   if (adminLinks) adminLinks.classList.add("hidden");
 }
+
 function setModeAdmin() {
-  if (modeBadge) { modeBadge.textContent = "ADMIN"; modeBadge.classList.add("admin"); }
+  if (modeBadge) {
+    modeBadge.textContent = "ADMIN";
+    modeBadge.classList.add("admin");
+  }
   if (adminLinks) adminLinks.classList.remove("hidden");
 }
+
 function syncModeBadge() {
   if (isAdminActive()) setModeAdmin();
   else if (isStaffActive()) setModeStaff();
@@ -310,6 +338,7 @@ function ensureTopMenuBar() {
         </div>
       </div>
     `;
+
     const header = document.querySelector("header");
     if (header && header.parentNode) header.parentNode.insertBefore(nav, header.nextSibling);
     else document.body.insertBefore(nav, document.body.firstChild);
@@ -355,6 +384,15 @@ function showLoginUI() {
   syncModeBadge();
 }
 
+function renderStatusLine() {
+  const el = document.getElementById("status-line");
+  if (!el) return;
+
+  const campus = escapeHtml(getCampus() || "(not selected)");
+  const prog = escapeHtml(programLabel(getProgram()));
+  el.innerHTML = `Campus: <b>${campus}</b> • Program: <b>${prog}</b>`;
+}
+
 function showChatUI() {
   if (loginScreen) loginScreen.classList.add("hidden");
   if (chatScreen) chatScreen.classList.remove("hidden");
@@ -364,21 +402,11 @@ function showChatUI() {
   if (headerActions) headerActions.classList.remove("hidden");
   forceShowTopMenu();
 
-  // ensure program dropdown (if exists)
   if (programSwitch) programSwitch.value = getProgram();
 
   syncModeBadge();
   applyRoleUI(getActiveUserRole());
   renderStatusLine();
-}
-
-function renderStatusLine() {
-  const el = document.getElementById("status-line");
-  if (!el) return;
-
-  const campus = escapeHtml(getCampus() || "(not selected)");
-  const prog = escapeHtml(programLabel(getProgram()));
-  el.innerHTML = `Campus: <b>${campus}</b> • Program: <b>${prog}</b>`;
 }
 
 // ============================
@@ -391,8 +419,15 @@ loginForm?.addEventListener("submit", async (e) => {
   const code = (accessCodeInput?.value || "").trim();
   const selectedCampus = campusSelect ? normalizeCampus(campusSelect.value) : getCampus();
 
-  if (!selectedCampus) { setInlineError("Please select a campus."); return; }
-  if (!code) { setInlineError("Please enter Staff or Parent access code."); return; }
+  if (!selectedCampus) {
+    setInlineError("Please select a campus.");
+    return;
+  }
+
+  if (!code) {
+    setInlineError("Please enter Staff or Parent access code.");
+    return;
+  }
 
   const tryAuth = async (url) => {
     const res = await fetch(url, {
@@ -408,7 +443,10 @@ loginForm?.addEventListener("submit", async (e) => {
     let out = await tryAuth(STAFF_AUTH_URL);
     if (!out.res.ok || !out.data.ok) out = await tryAuth(PARENT_AUTH_URL);
 
-    if (!out.res.ok || !out.data.ok) { setInlineError(out.data?.error || "Invalid code."); return; }
+    if (!out.res.ok || !out.data.ok) {
+      setInlineError(out.data?.error || "Invalid code.");
+      return;
+    }
 
     const role = out.data.role;
     const token = out.data.token;
@@ -462,12 +500,11 @@ logoutBtn?.addEventListener("click", () => {
   setInlineError("");
 
   setCampus("");
-  // keep program remembered (optional)
   showLoginUI();
 });
 
 // ============================
-// CAMPUS CHANGE
+// CAMPUS / PROGRAM CHANGE
 // ============================
 campusSelect?.addEventListener("change", () => {
   setCampus(normalizeCampus(campusSelect.value));
@@ -482,10 +519,7 @@ campusSwitch?.addEventListener("change", async () => {
   handbookOpenId = null;
 
   renderStatusLine();
-
-  if (chatScreen && !chatScreen.classList.contains("hidden")) {
-    addMessage("assistant", `✅ Campus switched to <b>${escapeHtml(getCampus())}</b>.`);
-  }
+  addMessage("assistant", `✅ Campus switched to <b>${escapeHtml(getCampus())}</b>.`);
 
   const activeHandbookBtn = document.querySelector('.menu-pill[data-menu="handbook"]');
   if (activeHandbookBtn?.classList.contains("active")) {
@@ -493,9 +527,6 @@ campusSwitch?.addEventListener("change", async () => {
   }
 });
 
-// ============================
-// PROGRAM CHANGE (NEW)
-// ============================
 programSwitch?.addEventListener("change", () => {
   setProgram(programSwitch.value);
   renderStatusLine();
@@ -579,7 +610,6 @@ loginAdminBtn?.addEventListener("click", (e) => {
 async function openMenuPanel(type) {
   if (!menuPanel || !menuPanelBody || !menuPanelTitle) return;
 
-  // Parent hard guard
   const role = getActiveUserRole();
   if (role === "parent" && (type === "policies" || type === "protocols")) {
     closeMenuPanel();
@@ -604,7 +634,6 @@ async function openMenuPanel(type) {
   }
 
   const items = MENU_ITEMS[type] || [];
-
   if (!items.length) {
     menuPanelBody.innerHTML = `<p class="muted">Content coming soon.</p>`;
   } else {
@@ -622,7 +651,10 @@ async function openMenuPanel(type) {
         closeMenuPanel();
 
         if (!getActiveUserRole()) {
-          addMessage("assistant", `You’re in <b>Admin mode</b> (dashboard/logs).<br>To ask in chat, login with a <b>Staff</b> or <b>Parent</b> code.`);
+          addMessage(
+            "assistant",
+            `You’re in <b>Admin mode</b> (dashboard/logs).<br>To ask in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
+          );
           return;
         }
 
@@ -685,7 +717,6 @@ async function renderHandbookBrowser() {
 
   const wrap = document.createElement("div");
   wrap.className = "handbook-wrap";
-
   wrap.innerHTML = `
     <div class="handbook-top">
       <div><b>Parent Handbook (Campus-based)</b></div>
@@ -714,7 +745,6 @@ async function renderHandbookBrowser() {
   try {
     if (!handbookListCache.length) handbookListCache = await fetchHandbookListForCampus(campus);
 
-    // Clear then render
     wrap.innerHTML = `
       <div class="handbook-top">
         <div><b>Parent Handbook (Campus-based)</b></div>
@@ -739,7 +769,6 @@ async function renderHandbookBrowser() {
       `;
 
       const isOpen = handbookOpenId === hbId;
-
       hbBtn.onclick = async () => {
         handbookOpenId = isOpen ? null : hbId;
         await openMenuPanel("handbook");
@@ -832,7 +861,15 @@ async function showHandbookSectionInPanel(campus, handbookId, sectionKey, hbMeta
       closeMenuPanel();
       const title = section.title || section.key || "this section";
       const hbTitle = handbook.title || hbMeta?.title || "Parent Handbook";
-      askPolicy(`Using Parent Handbook (${hbTitle}) section "${title}", please answer: `);
+
+      askPolicy(
+        `Using Parent Handbook (${hbTitle}) section "${title}", please answer: `,
+        {
+          type: "handbook",
+          id: handbookId,
+          section_key: sectionKey
+        }
+      );
     });
   } catch (err) {
     menuPanelBody.innerHTML = `
@@ -846,76 +883,9 @@ async function showHandbookSectionInPanel(campus, handbookId, sectionKey, hbMeta
 }
 
 // ============================
-// CHAT / API (MULTI RESULTS)
+// CHAT / API
 // ============================
-function badgeForType(t) {
-  const x = String(t || "").toLowerCase();
-  if (x === "policy") return "Policy";
-  if (x === "protocol") return "Protocol";
-  if (x === "handbook") return "Handbook";
-  return "Result";
-}
-
-function renderMatches(matches, note) {
-  const wrap = document.createElement("div");
-  wrap.className = "multi-wrap";
-
-  if (note) {
-    wrap.innerHTML += `<div class="muted" style="margin-bottom:8px;">${escapeHtml(note)}</div>`;
-  }
-
-  (matches || []).forEach((m) => {
-    const type = badgeForType(m.type);
-    const title = m.title || "Answer";
-    const program = m.program ? ` • <span class="muted">Program:</span> <b>${escapeHtml(m.program)}</b>` : "";
-    const link = m.link ? `<div style="margin-top:10px;"><a href="${escapeHtml(m.link)}" target="_blank" rel="noopener">Open full document</a></div>` : "";
-    const why = m.why ? `<div class="muted" style="margin-top:8px;"><b>Why:</b> ${escapeHtml(m.why)}</div>` : "";
-
-    const card = document.createElement("div");
-    card.className = "result-card";
-    card.innerHTML = `
-      <div class="result-head">
-        <span class="result-badge">${escapeHtml(type)}</span>
-        <div class="result-title">${escapeHtml(title)}</div>
-      </div>
-      <div class="result-meta">
-        <span class="muted">Campus:</span> <b>${escapeHtml(getCampus())}</b>${program}
-      </div>
-      <div class="result-body">${toHtmlTextPreserveNewlines(m.answer || "")}</div>
-      ${why}
-      ${link}
-    `;
-    wrap.appendChild(card);
-  });
-
-  addMessage("assistant", wrap.outerHTML);
-}
-
-
-
-// ============================
-// INIT
-// ============================
-(function init() {
-  ensureTopMenuBar();
-
-  if (loginAdminBtn) loginAdminBtn.setAttribute("type", "button");
-
-  if (!isStaffActive()) clearStaffSession();
-  if (!isParentActive()) clearParentSession();
-  if (!isAdminActive()) clearAdminSession();
-
-  if (!getCampus()) setCampus("");
-
-  if (!localStorage.getItem(LS.program)) setProgram("ALL");
-  if (programSwitch) {
-    // ensure options exist even if index.html didn't prefill
-    if (!programSwitch.options.length) {
-      programSwitch.innerHTML = PROGRAMS.map((p) => `<option value="${p.value}">${p.label}</option>`).join("");
-    }
-    programSwitch.value = getProgram();
-  }
-  async function askPolicy(question, scope = null) {
+async function askPolicy(question, scope = null) {
   const trimmed = String(question || "").trim();
   if (!trimmed) return;
 
@@ -950,6 +920,7 @@ function renderMatches(matches, note) {
       body: JSON.stringify({
         query: trimmed,
         campus,
+        program: getProgram(),
         scope
       })
     });
@@ -988,12 +959,43 @@ function renderMatches(matches, note) {
         ? `<br><br><div class="muted"><b>Handbook section:</b> ${escapeHtml(sec.section_title || sec.section_key || "")}</div>`
         : "";
 
-    addMessage("assistant", `<b>${escapeHtml(title)}</b><br><br>${escapeHtml(answer)}${secPart}${linkPart}`);
+    addMessage("assistant", `<b>${escapeHtml(title)}</b><br><br>${toHtmlTextPreserveNewlines(answer)}${secPart}${linkPart}`);
   } catch {
     hideTyping();
     addMessage("assistant", "Error connecting to server.");
   }
 }
+
+chatForm?.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = (userInput?.value || "").trim();
+  if (!q) return;
+  userInput.value = "";
+  askPolicy(q);
+});
+
+// ============================
+// INIT
+// ============================
+(function init() {
+  ensureTopMenuBar();
+
+  if (loginAdminBtn) loginAdminBtn.setAttribute("type", "button");
+
+  if (!isStaffActive()) clearStaffSession();
+  if (!isParentActive()) clearParentSession();
+  if (!isAdminActive()) clearAdminSession();
+
+  if (!getCampus()) setCampus("");
+
+  if (!localStorage.getItem(LS.program)) setProgram("ALL");
+
+  if (programSwitch) {
+    if (!programSwitch.options.length) {
+      programSwitch.innerHTML = PROGRAMS.map((p) => `<option value="${p.value}">${p.label}</option>`).join("");
+    }
+    programSwitch.value = getProgram();
+  }
 
   if (isStaffActive() || isParentActive()) {
     showChatUI();
@@ -1019,7 +1021,11 @@ function renderMatches(matches, note) {
     clearChat();
     syncModeBadge();
     applyRoleUI(getActiveUserRole());
-    addMessage("assistant", `✅ Admin mode enabled.<br><b>Campus: ${escapeHtml(getCampus() || "(not selected)")}</b><br><br>You can browse <b>Policies</b>, <b>Protocols</b>, and <b>Parent Handbook</b>, and access <b>Dashboard/Logs</b>.<br>To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`);
+
+    addMessage(
+      "assistant",
+      `✅ Admin mode enabled.<br><b>Campus: ${escapeHtml(getCampus() || "(not selected)")}</b><br><br>You can browse <b>Policies</b>, <b>Protocols</b>, and <b>Parent Handbook</b>, and access <b>Dashboard/Logs</b>.<br>To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
+    );
     return;
   }
 
