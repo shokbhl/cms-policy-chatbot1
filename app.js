@@ -627,7 +627,10 @@ async function openMenuPanel(type) {
         }
 
         const qPrefix = type === "protocols" ? "Protocol: " : "Policy: ";
-        askPolicy(qPrefix + item.label);
+        askPolicy(qPrefix + item.label, {
+          type: type === "protocols" ? "protocol" : "policy",
+          id: item.id
+        });
       };
 
       menuPanelBody.appendChild(btn);
@@ -888,71 +891,7 @@ function renderMatches(matches, note) {
   addMessage("assistant", wrap.outerHTML);
 }
 
-async function askPolicy(question) {
-  const trimmed = String(question || "").trim();
-  if (!trimmed) return;
 
-  const campus = getCampus();
-  if (!campus) { addMessage("assistant", "Please select a campus first."); return; }
-
-  const role = getActiveUserRole();
-  const token = getActiveBearerTokenForChat();
-  if (!role || !token) {
-    addMessage("assistant", `You’re in <b>Admin mode</b> (dashboard/logs).<br>To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`);
-    return;
-  }
-
-  const program = getProgram(); // NEW
-
-  addMessage("user", escapeHtml(trimmed));
-  showTyping();
-
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ query: trimmed, campus, program })
-    });
-
-    hideTyping();
-
-    if (res.status === 429) { addMessage("assistant", "Too many requests. Please wait a moment and try again."); return; }
-
-    const data = await res.json().catch(() => ({}));
-
-    if (res.status === 401) {
-      addMessage("assistant", escapeHtml(data.error || "Unauthorized. Please login again."));
-      clearStaffSession(); clearParentSession();
-      showLoginUI();
-      return;
-    }
-
-    if (!res.ok || !data.ok) {
-      addMessage("assistant", escapeHtml(data.error || "Network error — please try again."));
-      return;
-    }
-
-    // ✅ MULTI matches
-    const matches = Array.isArray(data.matches) ? data.matches : [];
-    if (!matches.length) {
-      addMessage("assistant", "No results returned.");
-      return;
-    }
-
-    renderMatches(matches, data.note || "");
-  } catch {
-    hideTyping();
-    addMessage("assistant", "Error connecting to server.");
-  }
-}
-
-chatForm?.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const q = (userInput?.value || "").trim();
-  if (!q) return;
-  userInput.value = "";
-  askPolicy(q);
-});
 
 // ============================
 // INIT
@@ -976,6 +915,85 @@ chatForm?.addEventListener("submit", (e) => {
     }
     programSwitch.value = getProgram();
   }
+  async function askPolicy(question, scope = null) {
+  const trimmed = String(question || "").trim();
+  if (!trimmed) return;
+
+  const campus = getCampus();
+  if (!campus) {
+    addMessage("assistant", "Please select a campus first.");
+    return;
+  }
+
+  const role = getActiveUserRole();
+  const token = getActiveBearerTokenForChat();
+
+  if (!role || !token) {
+    addMessage(
+      "assistant",
+      `You’re in <b>Admin mode</b> (dashboard/logs).<br>
+       To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
+    );
+    return;
+  }
+
+  addMessage("user", escapeHtml(trimmed));
+  showTyping();
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        query: trimmed,
+        campus,
+        scope
+      })
+    });
+
+    hideTyping();
+
+    if (res.status === 429) {
+      addMessage("assistant", "Too many requests. Please wait a moment and try again.");
+      return;
+    }
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 401) {
+      addMessage("assistant", escapeHtml(data.error || "Unauthorized. Please login again."));
+      clearStaffSession();
+      clearParentSession();
+      showLoginUI();
+      return;
+    }
+
+    if (!res.ok) {
+      addMessage("assistant", escapeHtml(data.error || "Network error — please try again."));
+      return;
+    }
+
+    const title = data.source?.title || "Answer:";
+    const answer = data.answer || "";
+    const linkPart = data.source?.link
+      ? `<br><br><a href="${escapeHtml(data.source.link)}" target="_blank" rel="noopener">Open full document</a>`
+      : "";
+
+    const sec = data.handbook_section;
+    const secPart =
+      sec?.section_title || sec?.section_content
+        ? `<br><br><div class="muted"><b>Handbook section:</b> ${escapeHtml(sec.section_title || sec.section_key || "")}</div>`
+        : "";
+
+    addMessage("assistant", `<b>${escapeHtml(title)}</b><br><br>${escapeHtml(answer)}${secPart}${linkPart}`);
+  } catch {
+    hideTyping();
+    addMessage("assistant", "Error connecting to server.");
+  }
+}
 
   if (isStaffActive() || isParentActive()) {
     showChatUI();
