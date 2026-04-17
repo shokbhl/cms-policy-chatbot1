@@ -1,17 +1,6 @@
 // ============================
-// CMS Policy Chatbot - app.js (FULL / FIXED)
-// - Staff/Parent login + Admin-only mode
-// - Campus required on login
-// - Program selector
-// - Parent can ONLY see Parent Handbook
-// - Staff sees Policies / Protocols / Handbook
-// - Admin can browse + Dashboard/Logs (but cannot chat without staff/parent)
-// - Scoped menu clicks:
-//    policy click   -> only that policy
-//    protocol click -> only that protocol
-//    handbook click -> handbook browser
-//    section click  -> only that handbook section
-// - Free typed question -> all allowed docs for that role
+// CMS Policy Chatbot - app.js
+// Final version aligned with worker
 // ============================
 
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
@@ -20,6 +9,7 @@ const STAFF_AUTH_URL = `${WORKER_BASE}/auth/staff`;
 const PARENT_AUTH_URL = `${WORKER_BASE}/auth/parent`;
 const ADMIN_AUTH_URL = `${WORKER_BASE}/auth/admin`;
 const HANDBOOKS_URL = `${WORKER_BASE}/handbooks`;
+const HEALTH_URL = `${WORKER_BASE}/health`;
 
 const LS = {
   staffToken: "cms_staff_token",
@@ -39,7 +29,6 @@ const PROGRAMS = [
   { value: "ELEMENTARY", label: "Elementary" }
 ];
 
-// Quick menu prompts
 const MENU_ITEMS = {
   policies: [
     { id: "safe_arrival", label: "Arrival & Dismissal" },
@@ -58,7 +47,7 @@ const MENU_ITEMS = {
     { id: "emergency_management", label: "Emergency Management" },
     { id: "criminal_reference_vsc_policy", label: "Criminal Reference / VSC" },
     { id: "health_policy", label: "Health & Infection Prevention" },
-    { id: "sanitary_practices", label: "Sanitary Practices" }
+    { id: "sanitary_practices", label: "Sanitary Practices & Illness Procedures" }
   ],
   protocols: [
     { id: "program_statement1", label: "CMS Program Statement and Implementation" },
@@ -67,12 +56,12 @@ const MENU_ITEMS = {
     { id: "start_school_year", label: "Start of School Year" },
     { id: "employee_conduct", label: "Employee Conduct" },
     { id: "classroom_management", label: "Classroom Management" },
-    { id: "caring_students", label: "Caring for Students" },
+    { id: "caring_students", label: "Caring for Our Students" },
     { id: "afterschool_routines", label: "Afterschool Routines" },
     { id: "special_events", label: "Special Events" },
     { id: "reports_forms", label: "Reports & Forms" },
     { id: "other", label: "Other" },
-    { id: "closing", label: "Closing" }
+    { id: "closing", label: "In Closing" }
   ],
   handbook: []
 };
@@ -121,7 +110,7 @@ let handbookListCache = [];
 let handbookOpenId = null;
 
 // ============================
-// UI HELPERS
+// HELPERS
 // ============================
 function escapeHtml(s) {
   return String(s ?? "")
@@ -182,28 +171,19 @@ function setInlineError(text) {
   if (loginError) loginError.textContent = text || "";
 }
 
-function applyRoleUI(role) {
-  const isParent = role === "parent";
-
-  const btnPolicies = document.querySelector('.menu-pill[data-menu="policies"]');
-  const btnProtocols = document.querySelector('.menu-pill[data-menu="protocols"]');
-  const btnHandbook = document.querySelector('.menu-pill[data-menu="handbook"]');
-
-  if (btnPolicies) btnPolicies.style.display = isParent ? "none" : "";
-  if (btnProtocols) btnProtocols.style.display = isParent ? "none" : "";
-  if (btnHandbook) btnHandbook.style.display = "";
-
-  if (isParent) {
-    const activeType = document.querySelector(".menu-pill.active")?.dataset?.menu;
-    if (activeType === "policies" || activeType === "protocols") closeMenuPanel();
-  }
-}
-
-// ============================
-// SESSION / CAMPUS / PROGRAM
-// ============================
 function normalizeCampus(code) {
   return String(code || "").trim().toUpperCase();
+}
+
+function normalizeProgram(value) {
+  const v = String(value || "").trim().toUpperCase();
+  if (!v || v === "ALL PROGRAMS") return "ALL";
+  return v;
+}
+
+function programLabel(v) {
+  const x = PROGRAMS.find((p) => p.value === v);
+  return x ? x.label : "All Programs";
 }
 
 function setCampus(code) {
@@ -219,13 +199,6 @@ function getCampus() {
   return normalizeCampus(localStorage.getItem(LS.campus) || "");
 }
 
-function normalizeProgram(value) {
-  const v = String(value || "").trim().toUpperCase();
-  if (!v) return "ALL";
-  if (v === "ALL PROGRAMS") return "ALL";
-  return v;
-}
-
 function setProgram(value) {
   const v = normalizeProgram(value);
   localStorage.setItem(LS.program, v);
@@ -234,11 +207,6 @@ function setProgram(value) {
 
 function getProgram() {
   return normalizeProgram(localStorage.getItem(LS.program) || "ALL");
-}
-
-function programLabel(v) {
-  const x = PROGRAMS.find((p) => p.value === v);
-  return x ? x.label : "All Programs";
 }
 
 function isTokenActive(tokenKey, untilKey) {
@@ -316,6 +284,32 @@ function syncModeBadge() {
   else setModeStaff();
 }
 
+function applyRoleUI(role) {
+  const isParent = role === "parent";
+
+  const btnPolicies = document.querySelector('.menu-pill[data-menu="policies"]');
+  const btnProtocols = document.querySelector('.menu-pill[data-menu="protocols"]');
+  const btnHandbook = document.querySelector('.menu-pill[data-menu="handbook"]');
+
+  if (btnPolicies) btnPolicies.style.display = isParent ? "none" : "";
+  if (btnProtocols) btnProtocols.style.display = isParent ? "none" : "";
+  if (btnHandbook) btnHandbook.style.display = "";
+
+  if (isParent) {
+    const activeType = document.querySelector(".menu-pill.active")?.dataset?.menu;
+    if (activeType === "policies" || activeType === "protocols") closeMenuPanel();
+  }
+}
+
+function renderStatusLine() {
+  const el = document.getElementById("status-line");
+  if (!el) return;
+
+  const campus = escapeHtml(getCampus() || "(not selected)");
+  const prog = escapeHtml(programLabel(getProgram()));
+  el.innerHTML = `Campus: <b>${campus}</b> • Program: <b>${prog}</b>`;
+}
+
 // ============================
 // TOP MENU
 // ============================
@@ -370,7 +364,7 @@ function forceShowTopMenu() {
 }
 
 // ============================
-// SCREEN TOGGLES
+// SCREENS
 // ============================
 function showLoginUI() {
   closeMenuPanel();
@@ -384,15 +378,6 @@ function showLoginUI() {
   syncModeBadge();
 }
 
-function renderStatusLine() {
-  const el = document.getElementById("status-line");
-  if (!el) return;
-
-  const campus = escapeHtml(getCampus() || "(not selected)");
-  const prog = escapeHtml(programLabel(getProgram()));
-  el.innerHTML = `Campus: <b>${campus}</b> • Program: <b>${prog}</b>`;
-}
-
 function showChatUI() {
   if (loginScreen) loginScreen.classList.add("hidden");
   if (chatScreen) chatScreen.classList.remove("hidden");
@@ -402,7 +387,12 @@ function showChatUI() {
   if (headerActions) headerActions.classList.remove("hidden");
   forceShowTopMenu();
 
-  if (programSwitch) programSwitch.value = getProgram();
+  if (programSwitch) {
+    if (!programSwitch.options.length) {
+      programSwitch.innerHTML = PROGRAMS.map((p) => `<option value="${p.value}">${p.label}</option>`).join("");
+    }
+    programSwitch.value = getProgram();
+  }
 
   syncModeBadge();
   applyRoleUI(getActiveUserRole());
@@ -504,7 +494,7 @@ logoutBtn?.addEventListener("click", () => {
 });
 
 // ============================
-// CAMPUS / PROGRAM CHANGE
+// CAMPUS / PROGRAM
 // ============================
 campusSelect?.addEventListener("change", () => {
   setCampus(normalizeCampus(campusSelect.value));
@@ -549,7 +539,11 @@ async function enterAdminMode(pin) {
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
-      addMessage("assistant", `Admin PIN error: ${escapeHtml(data.error || "Invalid PIN")}`);
+      if (chatScreen && !chatScreen.classList.contains("hidden")) {
+        addMessage("assistant", `Admin PIN error: ${escapeHtml(data.error || "Invalid PIN")}`);
+      } else {
+        setInlineError(data.error || "Invalid admin PIN");
+      }
       return;
     }
 
@@ -557,9 +551,18 @@ async function enterAdminMode(pin) {
     localStorage.setItem(LS.adminUntil, String(Date.now() + (data.expires_in || 28800) * 1000));
 
     syncModeBadge();
-    addMessage("assistant", "✅ Admin mode enabled (8 hours).");
+
+    if (chatScreen && !chatScreen.classList.contains("hidden")) {
+      addMessage("assistant", "✅ Admin mode enabled (8 hours).");
+    } else {
+      setInlineError("");
+    }
   } catch {
-    addMessage("assistant", "Admin login failed (network).");
+    if (chatScreen && !chatScreen.classList.contains("hidden")) {
+      addMessage("assistant", "Admin login failed (network).");
+    } else {
+      setInlineError("Admin login failed (network).");
+    }
   }
 }
 
@@ -680,7 +683,7 @@ function closeMenuPanel() {
 }
 
 // ============================
-// HANDBOOK BROWSER
+// HANDBOOKS
 // ============================
 async function fetchHandbookListForCampus(campus) {
   const token = getAnyBearerToken();
@@ -883,7 +886,7 @@ async function showHandbookSectionInPanel(campus, handbookId, sectionKey, hbMeta
 }
 
 // ============================
-// CHAT / API
+// CHAT
 // ============================
 async function askPolicy(question, scope = null) {
   const trimmed = String(question || "").trim();
@@ -962,7 +965,7 @@ async function askPolicy(question, scope = null) {
     addMessage("assistant", `<b>${escapeHtml(title)}</b><br><br>${toHtmlTextPreserveNewlines(answer)}${secPart}${linkPart}`);
   } catch {
     hideTyping();
-    addMessage("assistant", "Error connecting to server.");
+    addMessage("assistant", "Could not connect to server.");
   }
 }
 
@@ -977,7 +980,7 @@ chatForm?.addEventListener("submit", (e) => {
 // ============================
 // INIT
 // ============================
-(function init() {
+(async function init() {
   ensureTopMenuBar();
 
   if (loginAdminBtn) loginAdminBtn.setAttribute("type", "button");
@@ -987,14 +990,12 @@ chatForm?.addEventListener("submit", (e) => {
   if (!isAdminActive()) clearAdminSession();
 
   if (!getCampus()) setCampus("");
-
   if (!localStorage.getItem(LS.program)) setProgram("ALL");
 
-  if (programSwitch) {
-    if (!programSwitch.options.length) {
-      programSwitch.innerHTML = PROGRAMS.map((p) => `<option value="${p.value}">${p.label}</option>`).join("");
-    }
-    programSwitch.value = getProgram();
+  try {
+    await fetch(HEALTH_URL, { method: "GET" });
+  } catch {
+    // silent health check fail
   }
 
   if (isStaffActive() || isParentActive()) {
