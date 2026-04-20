@@ -50,7 +50,7 @@ const MENU_ITEMS = {
     { id: "sanitary_practices", label: "Sanitary Practices & Illness Procedures" }
   ],
   protocols: [
-    { id: "program_statement1", label: "CMS Program Statement and Implementation" },
+    { id: "program_statement_protocol", label: "CMS Program Statement and Implementation" },
     { id: "non_discrimination", label: "Non-Discrimination / Anti-Racism" },
     { id: "safety_security", label: "Safety & Security" },
     { id: "start_school_year", label: "Start of School Year" },
