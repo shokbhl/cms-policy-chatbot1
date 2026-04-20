@@ -10,6 +10,7 @@ const PARENT_AUTH_URL = `${WORKER_BASE}/auth/parent`;
 const ADMIN_AUTH_URL = `${WORKER_BASE}/auth/admin`;
 const HANDBOOKS_URL = `${WORKER_BASE}/handbooks`;
 const HEALTH_URL = `${WORKER_BASE}/health`;
+const DOC_URL = `${WORKER_BASE}/doc`;
 
 const LS = {
   staffToken: "cms_staff_token",
@@ -650,23 +651,23 @@ async function openMenuPanel(type) {
       btn.className = "menu-item-btn";
       btn.textContent = item.label;
 
-      btn.onclick = () => {
-        closeMenuPanel();
+      btn.onclick = async () => {
+  if (!getActiveUserRole() && !isAdminActive()) {
+    addMessage(
+      "assistant",
+      `You’re not logged in.<br>Login with a <b>Staff</b>, <b>Parent</b>, or <b>Admin</b> account.`
+    );
+    return;
+  }
 
-        if (!getActiveUserRole()) {
-          addMessage(
-            "assistant",
-            `You’re in <b>Admin mode</b> (dashboard/logs).<br>To ask in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
-          );
-          return;
-        }
+  const docType = type === "protocols" ? "protocol" : "policy";
 
-        const qPrefix = type === "protocols" ? "Protocol: " : "Policy: ";
-        askPolicy(qPrefix + item.label, {
-          type: type === "protocols" ? "protocol" : "policy",
-          id: item.id
-        });
-      };
+  await showDocPreviewInPanel(docType, item.id, item.label);
+
+  // مهم: پنل باید باز بمونه
+  menuPanel.classList.remove("hidden");
+  if (menuOverlay) menuOverlay.classList.remove("hidden");
+};
 
       menuPanelBody.appendChild(btn);
     });
@@ -1032,3 +1033,98 @@ chatForm?.addEventListener("submit", (e) => {
 
   showLoginUI();
 })();
+async function fetchDocPreview(type, id) {
+  const token = getAnyBearerToken();
+  if (!token) throw new Error("Not logged in");
+
+  const qs = `type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`;
+  const res = await fetch(`${DOC_URL}?${qs}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data?.error || "Failed to load document");
+  return data.doc;
+}
+async function showDocPreviewInPanel(type, id, label) {
+  if (!menuPanelBody) return;
+
+  menuPanelBody.innerHTML = `
+    <div class="handbook-wrap">
+      <div class="handbook-top">
+        <div><b>${escapeHtml(label || "Document Preview")}</b></div>
+        <div class="handbook-meta">${escapeHtml(type)}</div>
+      </div>
+      <div class="muted" style="margin-top:6px;">Loading document...</div>
+    </div>
+  `;
+
+  try {
+    const doc = await fetchDocPreview(type, id);
+
+    const contentHtml = toHtmlTextPreserveNewlines(doc.content || "No content yet.");
+
+    menuPanelBody.innerHTML = `
+      <div class="handbook-wrap">
+        <div class="handbook-top">
+          <div><b>${escapeHtml(doc.title || label || "Document Preview")}</b></div>
+          <div class="handbook-meta">${escapeHtml((doc.type || type || "").toUpperCase())}</div>
+        </div>
+
+        <div class="hb-section-view">
+          <div class="hb-section-head">
+            <div class="hb-section-title">${escapeHtml(doc.title || label || "Document")}</div>
+            <div class="hb-section-actions">
+              <button class="mini-btn" id="doc-back">Back</button>
+              ${
+                doc.link
+                  ? `<a class="mini-link" href="${escapeHtml(doc.link)}" target="_blank" rel="noopener">Open full document</a>`
+                  : ""
+              }
+            </div>
+          </div>
+
+          <div class="hb-section-content">${contentHtml}</div>
+
+          <div class="hb-ask">
+            ${
+              getActiveUserRole()
+                ? `<button class="primary-btn" id="doc-ask-btn">Ask this in chat</button>`
+                : `<div class="muted">To ask questions in chat, login with a Staff or Parent code.</div>`
+            }
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById("doc-back")?.addEventListener("click", async () => {
+      await openMenuPanel(type === "protocol" ? "protocols" : "policies");
+    });
+
+    document.getElementById("doc-ask-btn")?.addEventListener("click", () => {
+      closeMenuPanel();
+
+      askPolicy(
+        `${type === "protocol" ? "Protocol" : "Policy"}: ${doc.title}`,
+        {
+          type,
+          id: doc.id
+        }
+      );
+    });
+  } catch (err) {
+    menuPanelBody.innerHTML = `
+      <div class="handbook-wrap">
+        <div class="muted">${escapeHtml(err?.message || "Could not load document.")}</div>
+        <button class="mini-btn" id="doc-back">Back</button>
+      </div>
+    `;
+
+    document.getElementById("doc-back")?.addEventListener("click", async () => {
+      await openMenuPanel(type === "protocol" ? "protocols" : "policies");
+    });
+  }
+}
