@@ -64,13 +64,33 @@
               <option value="WC">WC</option>
             </select>
 
-            <input
-              id="access-code"
-              class="input"
-              type="password"
-              placeholder="Staff or parent access code"
-              autocomplete="current-password"
-            />
+            <div style="position: relative;">
+              <input
+                id="access-code"
+                class="input"
+                type="password"
+                placeholder="Staff or parent access code"
+              />
+
+              <button
+                type="button"
+                id="toggle-password"
+                style="
+                  position:absolute;
+                  right:10px;
+                  top:50%;
+                  transform:translateY(-50%);
+                  border:none;
+                  background:none;
+                  cursor:pointer;
+                  font-size:12px;
+                  color:#64748b;
+                  font-weight:700;
+                "
+              >
+                SHOW
+              </button>
+            </div>
           </div>
 
           <div class="login-actions">
