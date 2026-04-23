@@ -1147,6 +1147,18 @@ chatForm?.addEventListener("submit", (e) => {
 
   showLoginUI();
 })();
+const togglePassword = document.getElementById("toggle-password");
+const accessCode = document.getElementById("access-code");
 
+togglePassword?.addEventListener("click", () => {
+  if (accessCode.type === "password") {
+    accessCode.type = "text";
+    togglePassword.textContent = "HIDE";
+  } else {
+    accessCode.type = "password";
+    togglePassword.textContent = "SHOW";
+  }
+});
 window.fetchDocPreview = fetchDocPreview;
 window.showDocPreviewInPanel = showDocPreviewInPanel;
+
