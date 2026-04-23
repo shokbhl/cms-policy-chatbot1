@@ -22,9 +22,7 @@
         </div>
       </div>
 
-      <!-- header actions (shown after login in app.js) -->
       <div id="header-actions" class="header-actions hidden">
-        <!-- Program select -->
         <select id="program-switch" class="select" aria-label="Program">
           <option value="ALL">All Programs</option>
           <option value="PRESCHOOL">Preschool</option>
@@ -32,7 +30,6 @@
           <option value="ELEMENTARY">Elementary</option>
         </select>
 
-        <!-- Campus switch -->
         <select id="campus-switch" class="select" aria-label="Campus">
           <option value="">Campus</option>
           <option value="MC">MC</option>
@@ -42,22 +39,11 @@
           <option value="WC">WC</option>
         </select>
 
-        <!-- Admin mode button -->
         <button id="admin-mode-btn" class="btn" type="button">Admin</button>
-
-        <!-- Mode badge -->
         <span id="mode-badge" class="badge-mode">STAFF</span>
-
-        <!-- Logout -->
         <button id="logout-btn" class="btn danger" type="button">Logout</button>
       </div>
     </header>
-
-    <!-- TOP MENU BAR (created dynamically in app.js if not found) -->
-    <!-- You can keep this empty; app.js will create it automatically. -->
-    <!-- If you want it in HTML anyway, uncomment below:
-    <nav id="top-menu-bar" class="top-menu-bar hidden"></nav>
-    -->
 
     <!-- LOGIN SCREEN -->
     <section id="login-screen" class="panel">
@@ -78,7 +64,6 @@
               <option value="WC">WC</option>
             </select>
 
-            <!-- IMPORTANT: password type so code is hidden -->
             <input
               id="access-code"
               class="input"
@@ -126,13 +111,19 @@
       <div id="menu-panel-body" class="menu-panel-body"></div>
     </div>
 
-    <!-- ADMIN MODAL (optional; app.js uses this if present) -->
+    <!-- ADMIN MODAL -->
     <div id="admin-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Admin PIN">
       <div class="modal-card">
         <div class="modal-title">Admin Login</div>
         <div class="modal-sub">Enter Admin PIN</div>
 
-        <input id="admin-pin" class="input" type="password" placeholder="Admin PIN" autocomplete="one-time-code" />
+        <input
+          id="admin-pin"
+          class="input"
+          type="password"
+          placeholder="Admin PIN"
+          autocomplete="one-time-code"
+        />
 
         <div class="modal-actions">
           <button id="admin-pin-cancel" class="btn" type="button">Cancel</button>
@@ -144,6 +135,7 @@
     <footer>© CMS – Staff internal tool</footer>
 
   </div>
+
   <script src="app.js?v=999"></script>
 </body>
 </html>
