@@ -1,6 +1,6 @@
 // ============================
 // CMS Policy Chatbot - app.js
-// Final version aligned with current worker
+// Aligned with current worker
 // ============================
 
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
@@ -433,9 +433,10 @@ loginForm?.addEventListener("submit", async (e) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        code
+        data: { code }
       })
     });
+
     const data = await res.json().catch(() => ({}));
     return { res, data };
   };
@@ -549,7 +550,7 @@ async function enterAdminMode(pin) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        pin: p
+        data: { pin: p }
       })
     });
 
@@ -1039,10 +1040,12 @@ async function askPolicy(question, scope = null) {
         Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({
-        query: trimmed,
-        campus,
-        program: getProgram(),
-        scope
+        data: {
+          query: trimmed,
+          campus,
+          program: getProgram(),
+          scope
+        }
       })
     });
 
@@ -1151,6 +1154,6 @@ chatForm?.addEventListener("submit", (e) => {
   showLoginUI();
 })();
 
-// Optional: expose for console testing
+// Optional console testing
 window.fetchDocPreview = fetchDocPreview;
 window.showDocPreviewInPanel = showDocPreviewInPanel;
