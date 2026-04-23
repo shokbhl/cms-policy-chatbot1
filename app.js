@@ -442,13 +442,17 @@ loginForm?.addEventListener("submit", async (e) => {
         data: { code }
       })
     });
+
     const data = await res.json().catch(() => ({}));
     return { res, data };
   };
 
   try {
     let out = await tryAuth(STAFF_AUTH_URL);
-    if (!out.res.ok || !out.data.ok) out = await tryAuth(PARENT_AUTH_URL);
+
+    if (!out.res.ok || !out.data.ok) {
+      out = await tryAuth(PARENT_AUTH_URL);
+    }
 
     if (!out.res.ok || !out.data.ok) {
       setInlineError(out.data?.error || "Invalid code.");
@@ -491,7 +495,6 @@ loginForm?.addEventListener("submit", async (e) => {
     setInlineError("Could not connect to server.");
   }
 });
-
 // ============================
 // LOGOUT
 // ============================
