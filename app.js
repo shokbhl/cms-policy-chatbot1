@@ -1,12 +1,6 @@
 // ============================
 // CMS Policy Chatbot - app.js
 // Final version aligned with current worker
-// - Staff / Parent login
-// - Admin mode
-// - Campus + Program selectors
-// - Parent Handbook browser
-// - Policy / Protocol preview panel
-// - Scoped ask in chat
 // ============================
 
 const WORKER_BASE = "https://cms-policy-worker.shokbhl.workers.dev";
@@ -439,10 +433,9 @@ loginForm?.addEventListener("submit", async (e) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        data: { code }
+        code
       })
     });
-
     const data = await res.json().catch(() => ({}));
     return { res, data };
   };
@@ -495,6 +488,7 @@ loginForm?.addEventListener("submit", async (e) => {
     setInlineError("Could not connect to server.");
   }
 });
+
 // ============================
 // LOGOUT
 // ============================
@@ -555,7 +549,7 @@ async function enterAdminMode(pin) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        data: { pin: p }
+        pin: p
       })
     });
 
@@ -1029,8 +1023,7 @@ async function askPolicy(question, scope = null) {
   if (!role || !token) {
     addMessage(
       "assistant",
-      `You’re in <b>Admin mode</b> (dashboard/logs).<br>
-       To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
+      `You’re in <b>Admin mode</b> (dashboard/logs).<br>To ask questions in chat, login with a <b>Staff</b> or <b>Parent</b> code.`
     );
     return;
   }
@@ -1046,12 +1039,10 @@ async function askPolicy(question, scope = null) {
         Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({
-        data: {
-          query: trimmed,
-          campus,
-          program: getProgram(),
-          scope
-        }
+        query: trimmed,
+        campus,
+        program: getProgram(),
+        scope
       })
     });
 
@@ -1159,3 +1150,7 @@ chatForm?.addEventListener("submit", (e) => {
 
   showLoginUI();
 })();
+
+// Optional: expose for console testing
+window.fetchDocPreview = fetchDocPreview;
+window.showDocPreviewInPanel = showDocPreviewInPanel;
