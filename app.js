@@ -432,9 +432,7 @@ loginForm?.addEventListener("submit", async (e) => {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        data: { code }
-      })
+      body: JSON.stringify({ code })
     });
 
     const data = await res.json().catch(() => ({}));
@@ -549,9 +547,7 @@ async function enterAdminMode(pin) {
     const res = await fetch(ADMIN_AUTH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        data: { pin: p }
-      })
+      body: JSON.stringify({ pin: p })
     });
 
     const data = await res.json().catch(() => ({}));
@@ -1040,12 +1036,10 @@ async function askPolicy(question, scope = null) {
         Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({
-        data: {
-          query: trimmed,
-          campus,
-          program: getProgram(),
-          scope
-        }
+        query: trimmed,
+        campus,
+        program: getProgram(),
+        scope
       })
     });
 
@@ -1154,6 +1148,5 @@ chatForm?.addEventListener("submit", (e) => {
   showLoginUI();
 })();
 
-// Optional console testing
 window.fetchDocPreview = fetchDocPreview;
 window.showDocPreviewInPanel = showDocPreviewInPanel;
