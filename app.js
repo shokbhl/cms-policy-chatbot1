@@ -43,7 +43,7 @@ const MENU_ITEMS = {
     { id: "staff_development", label: "Staff Development" },
     { id: "program_statement", label: "Program Statement" },
     { id: "parent_issues_concerns", label: "Parent Issues & Concerns" },
-    { id: "behaviour_management_monitoring", label: "Behaviour Management Monitoring" },
+    { id: "monitoring_compliance_contraventions", label: "monitoring compliance contraventions" },
     { id: "fire_safety", label: "Fire Safety" },
     { id: "emergency_management", label: "Emergency Management" },
     { id: "criminal_reference_vsc_policy", label: "Criminal Reference / VSC" },
