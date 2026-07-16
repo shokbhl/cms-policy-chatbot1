@@ -48,7 +48,8 @@ const MENU_ITEMS = {
     { id: "emergency_management", label: "Emergency Management" },
     { id: "criminal_reference_vsc_policy", label: "Criminal Reference / VSC" },
     { id: "health_policy", label: "Health & Infection Prevention" },
-    { id: "sanitary_practices", label: "Sanitary Practices & Illness Procedures" }
+    { id: "sanitary_practices", label: "Sanitary Practices & Illness Procedures" },
+    { id: "prohibited_practices", label: "Prohibited Practices" }
   ],
   protocols: [
     { id: "protocolprogramstatement", label: "CMS Program Statement and Implementation" },
