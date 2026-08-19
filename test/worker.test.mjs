@@ -649,6 +649,41 @@ test("a second document that answers differently is returned with its own source
   assert.match(data.also_says[0].says, /different rule/);
 });
 
+test("the handbook's shorter telling of the same topic is surfaced without being asked", async () => {
+  const token = await login("staff");
+
+  const policies = seedPolicies();
+  policies.safe_arrival = {
+    ...policies.safe_arrival,
+    title: "Safe Arrival and Dismissal Policy",
+    content: "Contact the parent no later than 10:00 am. " + "procedure detail. ".repeat(300),
+  };
+  currentEnv.POLICIES = new MockKV(policies, "POLICIES");
+
+  const book = JSON.parse(JSON.stringify(HANDBOOK_YC));
+  const first = Array.isArray(book) ? book[0] : book;
+  first.sections = [
+    { key: "safe_arrival", title: "Safe Arrival and Dismissal Policy",
+      content: "The school will make reasonable efforts to contact the parents." },
+    ...(first.sections || []),
+  ];
+  currentEnv.HANDBOOKS = new MockKV({ handbook_YC: book }, "HANDBOOKS");
+
+  // The model reports nothing extra — a summary that merely omits the deadline
+  // reads to it as the same thing, which is exactly when the reader needs both.
+  stubOpenAI({ id: "safe_arrival", others: [] });
+
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "safe arrival dismissal what should we do", campus: "YC" },
+  });
+  await settle();
+
+  const hb = (data.also_says || []).find((o) => o.type === "handbook");
+  assert.ok(hb, "the handbook version of the same topic must be shown alongside");
+  assert.match(hb.says, /reasonable efforts/, "and must carry what that document actually says");
+});
+
 test("a differing document the caller may not see is dropped", async () => {
   // A parent must not be shown a staff-only policy just because the model
   // named it, exactly as with the primary source.

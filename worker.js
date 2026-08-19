@@ -851,8 +851,9 @@ When documents differ from each other:
   different time, a different requirement, an extra step, or detail the first
   one omits - list it in "others" with what that document specifically says.
   Never silently drop it: the reader has to see both and which is which.
-- Only list genuine differences. If a document merely repeats the same thing in
-  other words, leave it out.
+- A document that covers the same topic but LEAVES OUT a time, deadline or step
+  the other one states counts as differing, and must be listed. Only leave out a
+  document that says the same thing with nothing added or missing.
 - Say so in the answer when the difference matters, e.g. that the handbook
   gives the summary for families while the policy sets the deadline staff work to.
 
@@ -1217,31 +1218,7 @@ async function handleApi(request, env, ctx) {
       null;
   }
 
-  // Documents that answer the same question differently. Each is resolved
-  // against the permitted shortlist for the same reason `chosen` is: the model
-  // must never surface something this caller was not allowed to see.
-  const others = [];
-  const seenOther = new Set([`${chosen?.id}:${chosen?.section_key || ""}`]);
-  for (const o of Array.isArray(ai.others) ? ai.others.slice(0, 3) : []) {
-    if (!o || !o.id) continue;
-    const match =
-      top.find((c) => c.id === o.id && (!o.section_key || c.section_key === o.section_key)) ||
-      top.find((c) => c.id === o.id);
-    if (!match) continue;
-    const key = `${match.id}:${match.section_key || ""}`;
-    if (seenOther.has(key)) continue;
-    seenOther.add(key);
-    others.push({
-      id: match.id,
-      type: match.type,
-      title: match.title,
-      program: match.program || null,
-      link: match.link || null,
-      section_key: match.section_key || null,
-      section_title: match.section_title || null,
-      says: String(o.says || "").trim(),
-    });
-  }
+  const others = collectAlsoSays(top, chosen, ai.others);
 
   const handbookSection = chosen?.type === "handbook"
     ? {
@@ -1322,6 +1299,34 @@ async function handleDiagnose(request, env, url) {
   });
   const top = rank(candidates, query, MAX_DOCS_TO_AI, semantic);
 
+  // ?answer=1 also generates the real answer, so the wording can be checked
+  // without a staff code. Deliberately not cached and not logged: this is a
+  // diagnostic, and it must not pollute the analytics or the answer cache.
+  let generated = null;
+  if (url.searchParams.get("answer") === "1") {
+    const ai = await askOpenAI(env, buildPrompt({
+      query, campus, program, role: "staff", scope: null, docs: top,
+    }));
+    if (!ai.ok) {
+      generated = { error: ai.error };
+    } else {
+      const pick = (id, sk) =>
+        top.find((c) => c.id === id && (!sk || c.section_key === sk)) ||
+        top.find((c) => c.id === id) || null;
+      const chosen = ai.id ? pick(ai.id, ai.section_key) : null;
+      generated = {
+        answer: ai.answer,
+        match_reason: ai.match_reason,
+        source: chosen ? {
+          id: chosen.id, type: chosen.type, title: chosen.title,
+          section_title: chosen.section_title || null,
+          chars: String(chosen.content || "").length,
+        } : null,
+        also_says: collectAlsoSays(top, chosen, ai.others),
+      };
+    }
+  }
+
   return json({
     ok: true,
     query,
@@ -1330,6 +1335,7 @@ async function handleDiagnose(request, env, url) {
     semantic_off_because: semantic ? null : (report.why || null),
     considered: candidates.length,
     ms: Date.now() - started,
+    generated,
     results: top.map((c, i) => ({
       position: i + 1,
       id: c.id,
@@ -1345,6 +1351,60 @@ async function handleDiagnose(request, env, url) {
 
 // Rebuilds the semantic index over every document a staff member could reach.
 // Admin-only, and safe to re-run: it replaces the stored index wholesale.
+// Other documents the reader should see alongside the answer.
+//
+// Two sources: what the model flagged as differing, plus — deterministically —
+// any other version of the SAME topic that was offered to it. The second half
+// matters because a parent-handbook section that merely omits the policy's
+// deadline reads to the model as "the same thing, shorter", so it goes
+// unreported exactly when the reader most needs to know both exist.
+function collectAlsoSays(top, chosen, aiOthers) {
+  const out = [];
+  const seen = new Set([`${chosen?.id}:${chosen?.section_key || ""}`]);
+
+  const push = (match, says) => {
+    const key = `${match.id}:${match.section_key || ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      id: match.id,
+      type: match.type,
+      title: match.title,
+      program: match.program || null,
+      link: match.link || null,
+      section_key: match.section_key || null,
+      section_title: match.section_title || null,
+      says: String(says || "").trim().slice(0, 600),
+    });
+  };
+
+  // Ids from the model are untrusted: resolve each against the shortlist so it
+  // can never surface something this caller was not allowed to see.
+  for (const o of Array.isArray(aiOthers) ? aiOthers.slice(0, 3) : []) {
+    if (!o || !o.id) continue;
+    const match =
+      top.find((c) => c.id === o.id && (!o.section_key || c.section_key === o.section_key)) ||
+      top.find((c) => c.id === o.id);
+    if (match) push(match, o.says);
+  }
+
+  // The same topic under another heading, e.g. the handbook's shorter telling
+  // of the policy that was answered from.
+  if (chosen) {
+    const topic = norm(chosen.section_title || chosen.title);
+    if (topic) {
+      for (const c of top) {
+        if (norm(c.section_title || c.title) !== topic) continue;
+        if (c.id === chosen.id && (c.section_key || "") === (chosen.section_key || "")) continue;
+        push(c, String(c.content || "").trim().slice(0, 400));
+        if (out.length >= 3) break;
+      }
+    }
+  }
+
+  return out.slice(0, 3);
+}
+
 async function handleReindex(request, env) {
   const auth = await authenticate(request, env, ["admin"]);
   if (!auth.ok) return fail("Unauthorized (admin token required)", 401, request, env);
