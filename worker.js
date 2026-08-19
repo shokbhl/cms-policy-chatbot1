@@ -595,6 +595,48 @@ function buildIdf(items) {
   };
 }
 
+// The same topic is often covered twice: a policy stating the procedure, and a
+// handbook section summarising it for families under the same heading. They
+// score almost identically, so trivial differences in wording decided which one
+// the model answered from — and the summary omits the times staff are held to.
+// Where both are present, the fuller one leads and the summary follows it, so
+// the model answers from the procedure and can still report the difference.
+function promoteFullestPerTopic(list) {
+  const topic = (c) => norm(c.section_title || c.title);
+  const groups = new Map();
+  list.forEach((c, i) => {
+    const k = topic(c);
+    if (!k) return;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(i);
+  });
+
+  const moves = [];
+  for (const idxs of groups.values()) {
+    if (idxs.length < 2) continue;
+    const len = (i) => String(list[i].content || "").length;
+    const fullest = idxs.reduce((a, b) => (len(b) > len(a) ? b : a));
+    const earliest = idxs[0];
+    // Only reorder when one version is substantially more complete, so this
+    // never shuffles genuine near-duplicates.
+    if (fullest !== earliest && len(fullest) > len(earliest) * 1.5) {
+      moves.push([fullest, earliest]);
+    }
+  }
+  if (!moves.length) return list;
+
+  const out = list.slice();
+  for (const [from, to] of moves) {
+    const item = out.find((x) => x === list[from]);
+    const at = out.indexOf(item);
+    const target = out.indexOf(list[to]);
+    if (at < 0 || target < 0 || at <= target) continue;
+    out.splice(at, 1);
+    out.splice(target, 0, item);
+  }
+  return out;
+}
+
 function rank(items, query, limit, semantic) {
   const tokens = tokenize(query);
   const idf = buildIdf(items);
@@ -605,7 +647,7 @@ function rank(items, query, limit, semantic) {
       .map((c, i) => ({ ...c, _score: lexical[i].s }))
       .sort((a, b) => b._score - a._score);
     const matched = scored.filter((c) => c._score > 0);
-    return (matched.length ? matched : scored).slice(0, limit || MAX_DOCS_TO_AI);
+    return promoteFullestPerTopic(matched.length ? matched : scored).slice(0, limit || MAX_DOCS_TO_AI);
   }
 
   // Two rankings — one on words, one on meaning — combined by reciprocal rank
@@ -635,7 +677,7 @@ function rank(items, query, limit, semantic) {
   }).sort((a, b) => b._score - a._score);
 
   const matched = fused.filter((c) => c._score > 0);
-  return (matched.length ? matched : fused).slice(0, limit || MAX_DOCS_TO_AI);
+  return promoteFullestPerTopic(matched.length ? matched : fused).slice(0, limit || MAX_DOCS_TO_AI);
 }
 
 // ------------------------------------------------------------
@@ -795,9 +837,11 @@ Answer questions from school STAFF and PARENTS using ONLY the documents provided
 
 Choosing which document to answer from:
 - Several documents usually cover the same topic at different depth. A parent
-  handbook summarises; a policy carries the actual procedure. Answer from the
-  one that most completely answers what was asked - normally the one stating
-  the concrete steps, not the summary.
+  handbook summarises it for families; a policy carries the actual procedure
+  staff follow. When BOTH appear and the question is about what to do, answer
+  from the POLICY, because the handbook version leaves out the times and
+  responsibilities that make the procedure usable - then record the handbook's
+  shorter version in "others" so the reader sees both.
 - "id" must identify the document the answer actually came from. Never answer
   out of one document and cite another.
 - If a scope is given, answer ONLY from that document or section.
@@ -881,6 +925,7 @@ async function askOpenAI(env, prompt) {
         model: env.OPENAI_MODEL || "gpt-4o-mini",
         temperature: 0,
         max_tokens: 900,
+        response_format: { type: "json_object" },
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },

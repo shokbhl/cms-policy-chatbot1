@@ -580,6 +580,50 @@ test("an unscoped staff query shortlists policy docs instead of loading all 18",
 });
 
 // ------------------------------------------------------------
+// A policy and a handbook section under the same heading.
+// ------------------------------------------------------------
+
+test("the fuller version of a topic is sent ahead of the summary", async () => {
+  const token = await login("staff");
+
+  // The handbook section and the policy share a heading, as they do in the real
+  // data: the policy carries the procedure, the handbook only summarises it.
+  const policies = seedPolicies();
+  policies.safe_arrival = {
+    ...policies.safe_arrival,
+    title: "Safe Arrival and Dismissal Policy",
+    content: "THE_ACTUAL_PROCEDURE contact the parent no later than 10:00 am. " + "detail. ".repeat(400),
+  };
+  currentEnv.POLICIES = new MockKV(policies, "POLICIES");
+
+  const book = JSON.parse(JSON.stringify(HANDBOOK_YC));
+  const first = Array.isArray(book) ? book[0] : book;
+  first.sections = [
+    { key: "safe_arrival", title: "Safe Arrival and Dismissal Policy",
+      content: "The school will make reasonable efforts to contact the parents." },
+    ...(first.sections || []),
+  ];
+  currentEnv.HANDBOOKS = new MockKV({ handbook_YC: book }, "HANDBOOKS");
+
+  await callJson("/api", {
+    method: "POST", token,
+    body: { query: "safe arrival dismissal what should we do", campus: "YC" },
+  });
+  await settle();
+
+  const prompt = capturedPrompts.join("\n");
+  const policyAt = prompt.indexOf("THE_ACTUAL_PROCEDURE");
+  const summaryAt = prompt.indexOf("reasonable efforts to contact the parents");
+  assert.ok(policyAt >= 0, "the policy carrying the procedure must be sent");
+  if (summaryAt >= 0) {
+    assert.ok(
+      policyAt < summaryAt,
+      "the procedure must come before the summary, or the model answers from the summary"
+    );
+  }
+});
+
+// ------------------------------------------------------------
 // Documents that disagree. Staff must see every version with its
 // own source, not whichever one the model happened to pick.
 // ------------------------------------------------------------
