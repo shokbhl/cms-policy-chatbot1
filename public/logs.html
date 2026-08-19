@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>CMS Assistant v2 — Logs</title>
+  <link rel="icon" href="favicon.svg" />
+  <link rel="icon" type="image/png" sizes="96x96" href="favicon-96.png" />
+
+  <!-- Home screen icon. iOS ignores the manifest for this and needs an
+       opaque PNG here, otherwise transparent areas render black. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+
+  <meta name="theme-color" content="#0b3a7a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CMS Assistant" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <strong>CMS Assistant — Logs</strong>
+        <div class="small muted">Every question asked, with the source that answered it</div>
+      </div>
+      <div class="nav">
+        <a href="index.html">Assistant</a>
+        <a href="dashboard.html">Dashboard</a>
+        <a class="active" href="logs.html">Logs</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="card-head">
+        <div class="title">
+          Questions
+          <span class="subtitle" id="status-text">Loading…</span>
+        </div>
+        <span class="pill-count" id="count-pill">0</span>
+      </div>
+
+      <div class="filters">
+        <label class="hidden" for="search-input">Search</label>
+        <input id="search-input" type="text" placeholder="Search questions, titles, sections…" />
+
+        <label class="hidden" for="campus-select">Campus</label>
+        <select id="campus-select" class="select"><option value="">All campuses</option></select>
+
+        <label class="hidden" for="role-select">Role</label>
+        <select id="role-select" class="select"><option value="">All roles</option></select>
+
+        <label class="hidden" for="source-select">Source</label>
+        <select id="source-select" class="select"><option value="">All sources</option></select>
+
+        <label><input id="only-errors" type="checkbox" /> Unanswered only</label>
+
+        <button id="refresh-btn" class="btn" type="button">Refresh</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th><th>Campus</th><th>Role</th><th>Status</th>
+              <th class="right">ms</th><th>Source</th><th>Title</th><th>Section</th><th>Question</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div id="error-box" class="error-box" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script src="logs.js"></script>
+</body>
+</html>

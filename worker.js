@@ -1,22 +1,972 @@
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
+// ============================================================
+// CMS Assistant v2 — Cloudflare Worker
+// ------------------------------------------------------------
+// Second-generation backend over the SAME content as v1.
+// It binds the existing content namespaces READ-ONLY and keeps
+// its own sessions/logs namespace, so v1 is completely unaffected.
+//
+// KV bindings (see wrangler.toml):
+//   POLICIES    -> cms_policies    (shared, read-only)
+//   PROTOCOLS   -> cms_protocols   (shared, read-only)
+//   HANDBOOKS   -> cms_handbooks   (shared, read-only)
+//   STATE       -> cms_v2_state    (v2 ONLY: tokens, rate limits, cache, logs)
+//
+// Secrets:
+//   STAFF_CODE, PARENT_CODE, ADMIN_PIN, OPENAI_API_KEY
+// Vars:
+//   OPENAI_MODEL (default gpt-4o-mini), ALLOWED_ORIGINS (default "*")
+//
+// Improvements over v1 (see README "What changed"):
+//   1. /doc is role-checked — parents can no longer read policies
+//   2. /admin/stats returns ok:true + ok_count (no duplicate key)
+//   3. Index-first ranking — loads ~8 docs, not all 30
+//   4. Handbook sections rank individually, not as one blob
+//   5. /admin/logs reads list metadata — 1 KV op instead of ~200
+//   6. WC/WD campus aliasing
+// ============================================================
 
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: cors() });
+const VERSION = "2.0.0";
+const SERVICE = "cms-assistant-v2";
+
+const TOKEN_TTL = 60 * 60 * 8;          // 8 hours
+const LOG_TTL = 60 * 60 * 24 * 30;      // 30 days
+const AI_CACHE_TTL = 60 * 5;            // 5 minutes
+const DOC_CACHE_MS = 60 * 1000;         // in-isolate
+const MAX_DOCS_TO_AI = 8;
+const MAX_CHARS_PER_DOC = 4000;
+
+const RATE_AUTH = { limit: 10, window: 60 };
+const RATE_API = { limit: 60, window: 60 };
+
+const PROGRAMS = ["ALL", "PRESCHOOL", "SR_CASA", "ELEMENTARY"];
+
+// The UI uses WC for Willowdale; some data uses WD. Accept either.
+const CAMPUS_ALIASES = { WC: ["WC", "WD"], WD: ["WD", "WC"] };
+
+// ============================================================
+// HTTP helpers
+// ============================================================
+
+function cors(request, env) {
+  const allowed = String(env?.ALLOWED_ORIGINS || "*").trim();
+  const origin = request.headers.get("Origin") || "";
+
+  let allowOrigin = "*";
+  if (allowed !== "*") {
+    const list = allowed.split(",").map((s) => s.trim()).filter(Boolean);
+    allowOrigin = list.includes(origin) ? origin : list[0] || "*";
+  }
+
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
+  };
+}
+
+function json(data, status, request, env) {
+  return new Response(JSON.stringify(data), {
+    status: status || 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...cors(request, env),
+    },
+  });
+}
+
+function fail(error, status, request, env) {
+  return json({ ok: false, error }, status || 400, request, env);
+}
+
+function tooMany(retryAfter, request, env) {
+  return new Response(
+    JSON.stringify({ ok: false, error: "Too many requests. Please wait a moment and try again." }),
+    {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Retry-After": String(Math.max(1, retryAfter || 1)),
+        ...cors(request, env),
+      },
+    }
+  );
+}
+
+// Accepts { x }, { data:{ x } } and { data:{ data:{ x } } }, matching v1's tolerance.
+async function readBody(request) {
+  let raw;
+  try {
+    raw = await request.json();
+  } catch {
+    return null;
+  }
+  if (!raw || typeof raw !== "object") return {};
+
+  let out = raw;
+  for (let depth = 0; depth < 2; depth++) {
+    if (out.data && typeof out.data === "object") {
+      const { data, ...rest } = out;
+      out = { ...data, ...rest };
+    } else break;
+  }
+  return out;
+}
+
+function safeParse(raw, fallback) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function textOf(x) {
+  if (x == null) return "";
+  if (Array.isArray(x)) return x.join("\n");
+  return String(x);
+}
+
+function clamp(text, max) {
+  const s = String(text || "");
+  return s.length > max ? s.slice(0, max) + "\n…[truncated]" : s;
+}
+
+function clampInt(v, min, max, fallback) {
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function normCampus(v) {
+  return String(v || "").trim().toUpperCase();
+}
+
+function normProgram(v) {
+  const s = String(v || "").trim().toLowerCase();
+  if (!s || s === "all" || s === "all programs" || s === "all_programs") return "ALL";
+  if (s.includes("preschool")) return "PRESCHOOL";
+  if (s.includes("casa") || s.startsWith("sr")) return "SR_CASA";
+  if (s.includes("elementary")) return "ELEMENTARY";
+  const up = s.toUpperCase();
+  return PROGRAMS.includes(up) ? up : "ALL";
+}
+
+function randomId() {
+  return crypto.randomUUID().replace(/-/g, "");
+}
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(text)));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// ============================================================
+// In-isolate cache
+// ============================================================
+
+function cache() {
+  if (!globalThis.__CMS_V2_CACHE) globalThis.__CMS_V2_CACHE = new Map();
+  return globalThis.__CMS_V2_CACHE;
+}
+
+function cacheGet(key) {
+  const hit = cache().get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.until) {
+    cache().delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function cacheSet(key, value, ttlMs) {
+  cache().set(key, { value, until: Date.now() + (ttlMs || DOC_CACHE_MS) });
+  return value;
+}
+
+// ============================================================
+// Auth & rate limiting  (all writes go to STATE, never the shared namespaces)
+// ============================================================
+
+async function issueToken(env, role) {
+  const token = crypto.randomUUID();
+  await env.STATE.put(
+    `${role}:${token}`,
+    JSON.stringify({ role, created: Date.now() }),
+    { expirationTtl: TOKEN_TTL }
+  );
+  return token;
+}
+
+function bearer(request) {
+  const auth = request.headers.get("Authorization") || "";
+  return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+}
+
+// Only checks the roles a route actually allows — this is what closes
+// v1's /doc gap, where any valid token (including a parent's) was accepted.
+async function authenticate(request, env, allowedRoles) {
+  const token = bearer(request);
+  if (!token) return { ok: false, error: "Unauthorized (token required)" };
+
+  for (const role of allowedRoles) {
+    if (await env.STATE.get(`${role}:${token}`)) {
+      return { ok: true, role, token };
+    }
+  }
+  return { ok: false, error: "Unauthorized (invalid, expired, or wrong role for this resource)" };
+}
+
+async function rateLimit(env, key, { limit, window }) {
+  const now = Date.now();
+  const windowId = Math.floor(now / (window * 1000));
+  const bucketKey = `rl:${key}:${windowId}`;
+
+  const count = parseInt((await env.STATE.get(bucketKey)) || "0", 10) || 0;
+  if (count >= limit) {
+    return { ok: false, retry_after: window - Math.floor((now / 1000) % window) };
+  }
+
+  await env.STATE.put(bucketKey, String(count + 1), { expirationTtl: window + 5 });
+  return { ok: true };
+}
+
+function clientIp(request) {
+  return request.headers.get("CF-Connecting-IP") || "0.0.0.0";
+}
+
+// ============================================================
+// Content loading — READ-ONLY against the shared namespaces
+// ============================================================
+
+function coerceIndex(value) {
+  if (Array.isArray(value)) return value;
+  if (value && Array.isArray(value.policies)) return value.policies;
+  if (value && Array.isArray(value.protocols)) return value.protocols;
+  if (value && Array.isArray(value.items)) return value.items;
+  return [];
+}
+
+function nsFor(env, kind) {
+  return kind === "policy" ? env.POLICIES : env.PROTOCOLS;
+}
+
+async function loadIndex(env, kind) {
+  const key = `index:${kind}`;
+  const hit = cacheGet(key);
+  if (hit) return hit;
+
+  const ns = nsFor(env, kind);
+  if (!ns) return cacheSet(key, []);
+
+  const raw = await ns.get(kind === "policy" ? "policies" : "protocols");
+  const list = coerceIndex(safeParse(raw, []))
+    .map((e) => ({
+      id: String(e?.id || e?.kv_key || "").trim(),
+      kv_key: String(e?.kv_key || e?.id || "").trim(),
+      type: kind,
+      title: String(e?.title || e?.id || ""),
+      keywords: Array.isArray(e?.keywords) ? e.keywords : [],
+      program: e?.program ? normProgram(e.program) : null,
+      link: typeof e?.link === "string" ? e.link : null,
+    }))
+    .filter((e) => e.id && e.kv_key);
+
+  return cacheSet(key, list);
+}
+
+async function loadDoc(env, kind, id) {
+  const key = `doc:${kind}:${id}`;
+  const hit = cacheGet(key);
+  if (hit) return hit;
+
+  const ns = nsFor(env, kind);
+  if (!ns) return null;
+
+  const index = await loadIndex(env, kind);
+  const meta = index.find((e) => e.id === id || e.kv_key === id);
+  if (!meta) return null;
+
+  const full = safeParse(await ns.get(meta.kv_key), null);
+
+  return cacheSet(key, {
+    id: full?.id || meta.id,
+    type: full?.type || meta.type || kind,
+    title: full?.title || meta.title || meta.kv_key,
+    content: textOf(full?.content),
+    keywords: Array.isArray(full?.keywords) ? full.keywords : meta.keywords,
+    program: full?.program ? normProgram(full.program) : meta.program,
+    link: typeof full?.link === "string" ? full.link : meta.link,
+  });
+}
+
+async function loadHandbooks(env, campus) {
+  const c = normCampus(campus);
+  const key = `handbooks:${c}`;
+  const hit = cacheGet(key);
+  if (hit) return hit;
+
+  if (!env.HANDBOOKS) return cacheSet(key, []);
+
+  let list = [];
+  for (const code of CAMPUS_ALIASES[c] || [c]) {
+    const raw = await env.HANDBOOKS.get(`handbook_${code}`);
+    const parsed = safeParse(raw, null);
+    if (parsed) {
+      list = Array.isArray(parsed) ? parsed : [parsed];
+      break;
+    }
+  }
+
+  const normalized = list.map((hb, i) => ({
+    id: String(hb?.id || `${c.toLowerCase()}_handbook_${i}`),
+    type: "handbook",
+    campus: normCampus(hb?.campus || c),
+    program: hb?.program ? normProgram(hb.program) : "ALL",
+    title: String(hb?.title || "Parent Handbook"),
+    link: typeof hb?.link === "string" ? hb.link : null,
+    keywords: Array.isArray(hb?.keywords) ? hb.keywords : ["handbook", "parent handbook"],
+    sections: (Array.isArray(hb?.sections) ? hb.sections : []).map((s, j) => ({
+      key: String(s?.key || `section_${j}`),
+      title: String(s?.title || s?.key || `Section ${j + 1}`),
+      content: textOf(s?.content),
+    })),
+  }));
+
+  return cacheSet(key, normalized);
+}
+
+function programMatches(docProgram, requested) {
+  const d = normProgram(docProgram || "ALL");
+  const r = normProgram(requested);
+  return r === "ALL" || d === "ALL" || d === r;
+}
+
+// ============================================================
+// Ranking
+// ============================================================
+
+const STOP_WORDS = new Set([
+  "the", "and", "for", "are", "but", "not", "you", "your", "our", "with", "what",
+  "when", "where", "how", "why", "can", "does", "did", "should", "would", "could",
+  "this", "that", "there", "from", "have", "has", "had", "was", "were", "who",
+  "a", "an", "of", "to", "in", "on", "is", "it", "at", "be", "do", "if", "or", "we",
+]);
+
+function tokenize(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+}
+
+// Scores index entries (title + keywords only) and full candidates alike.
+function score(item, tokens, rawQuery) {
+  const title = String(item.title || "").toLowerCase();
+  const sectionTitle = String(item.section_title || "").toLowerCase();
+  const keywords = (item.keywords || []).join(" ").toLowerCase();
+  const content = String(item.content || "").toLowerCase();
+  const q = String(rawQuery || "").toLowerCase().trim();
+
+  let s = 0;
+  for (const t of tokens) {
+    if (keywords.includes(t)) s += 6;
+    if (title.includes(t)) s += 4;
+    if (sectionTitle.includes(t)) s += 3;
+    if (content.includes(t)) s += 1;
+  }
+  if (q.length > 6) {
+    if (title.includes(q)) s += 12;
+    if (sectionTitle.includes(q)) s += 10;
+    if (keywords.includes(q)) s += 8;
+  }
+  if (content.length > 200) s += 1;
+  return s;
+}
+
+function rank(items, query, limit) {
+  const tokens = tokenize(query);
+  const scored = items
+    .map((c) => ({ ...c, _score: score(c, tokens, query) }))
+    .sort((a, b) => b._score - a._score);
+
+  const matched = scored.filter((c) => c._score > 0);
+  return (matched.length ? matched : scored).slice(0, limit || MAX_DOCS_TO_AI);
+}
+
+// Index-first: the index carries title + keywords, the two heaviest signals,
+// so shortlist on it and only then fetch bodies — in parallel.
+// v1 expanded every policy and protocol on each cold request (~30 serial reads).
+async function shortlistDocs(env, kind, { query, program, scope }) {
+  if (scope?.id) {
+    const doc = await loadDoc(env, kind, scope.id);
+    return doc && programMatches(doc.program, program) ? [doc] : [];
+  }
+
+  const index = (await loadIndex(env, kind)).filter((e) => programMatches(e.program, program));
+  if (!index.length) return [];
+
+  // Ranking on the index only works if the index carries keywords, which are
+  // the heaviest signal (x6, vs x4 for title). Some data sets keep keywords
+  // on the documents but not in the index — there, shortlisting on title
+  // alone would discard the best matches, so load everything and rank in
+  // full instead. loadDoc memoizes per isolate, so this costs one pass per
+  // cold isolate rather than one per request, and runs in parallel.
+  const indexHasKeywords = index.some((e) => Array.isArray(e.keywords) && e.keywords.length);
+
+  const entries = indexHasKeywords ? rank(index, query, MAX_DOCS_TO_AI) : index;
+  const docs = (await Promise.all(entries.map((e) => loadDoc(env, kind, e.id))))
+    .filter((d) => d && programMatches(d.program, program));
+
+  return indexHasKeywords ? docs : rank(docs, query, MAX_DOCS_TO_AI);
+}
+
+// Each handbook SECTION is its own candidate. v1 concatenated every section
+// into one blob, so a large handbook crowded out everything else.
+async function buildCandidates(env, { role, campus, program, scope, query }) {
+  const type = scope?.type ? String(scope.type).toLowerCase() : null;
+
+  const wantPolicies = role === "staff" && (!type || type === "policy");
+  const wantProtocols = role === "staff" && (!type || type === "protocol");
+  const wantHandbooks = !type || type === "handbook";
+
+  const [policies, protocols] = await Promise.all([
+    wantPolicies ? shortlistDocs(env, "policy", { query, program, scope }) : [],
+    wantProtocols ? shortlistDocs(env, "protocol", { query, program, scope }) : [],
+  ]);
+
+  const out = [];
+
+  for (const d of [...policies, ...protocols]) {
+    out.push({
+      id: d.id,
+      type: d.type,
+      title: d.title,
+      program: d.program,
+      link: d.link,
+      keywords: d.keywords,
+      section_key: null,
+      section_title: null,
+      content: d.content,
+    });
+  }
+
+  if (wantHandbooks) {
+    for (const hb of await loadHandbooks(env, campus)) {
+      if (scope?.id && hb.id !== scope.id) continue;
+      if (!programMatches(hb.program, program)) continue;
+
+      for (const sec of hb.sections) {
+        if (scope?.section_key && sec.key !== scope.section_key) continue;
+        out.push({
+          id: hb.id,
+          type: "handbook",
+          title: hb.title,
+          program: hb.program,
+          link: hb.link,
+          keywords: [...hb.keywords, sec.title],
+          section_key: sec.key,
+          section_title: sec.title,
+          content: sec.content,
+        });
+      }
+    }
+  }
+
+  return out;
+}
+
+// ============================================================
+// OpenAI
+// ============================================================
+
+const SYSTEM_PROMPT = `You are the Central Montessori School (CMS) assistant.
+Answer questions from school STAFF and PARENTS using ONLY the documents provided below.
+
+Rules:
+- Use ONLY the provided documents. Never invent policies, numbers, or procedures.
+- If the documents don't answer it, set "id" to null and say briefly what's missing.
+- If a scope is given, answer ONLY from that document or section.
+- Never give legal advice. Never reveal internal staff-only policies to a parent.
+- Be practical and concrete: plain language, actionable steps.
+- If the answer comes from a handbook section, return that exact section_key.
+
+Return valid JSON only. No markdown, no backticks. Exactly:
+{"id":"best_doc_id_or_null","answer":"clear helpful answer","match_reason":"short reason","section_key":"best_section_key_or_null"}`;
+
+function buildPrompt({ query, campus, program, role, scope, docs }) {
+  const blocks = docs.map((d, i) => {
+    const lines = [
+      `--- Document ${i + 1} ---`,
+      `ID: ${d.id}`,
+      `Type: ${d.type}`,
+      `Title: ${d.title}`,
+    ];
+    if (d.section_key) {
+      lines.push(`Section key: ${d.section_key}`);
+      lines.push(`Section title: ${d.section_title || ""}`);
+    }
+    if (d.keywords?.length) lines.push(`Keywords: ${d.keywords.join(", ")}`);
+    lines.push("Text:");
+    lines.push(clamp(d.content, MAX_CHARS_PER_DOC));
+    return lines.join("\n");
+  });
+
+  return [
+    `Campus: ${campus}`,
+    `Program: ${program}`,
+    `Asked by role: ${role}`,
+    scope ? `Scope restriction: ${JSON.stringify(scope)}` : "",
+    "",
+    "Documents:",
+    blocks.join("\n\n"),
+    "",
+    `Question: ${query}`,
+  ].filter(Boolean).join("\n");
+}
+
+async function askOpenAI(env, prompt) {
+  if (!env.OPENAI_API_KEY) return { ok: false, error: "OPENAI_API_KEY is not configured" };
+
+  let res;
+  try {
+    res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: env.OPENAI_MODEL || "gpt-4o-mini",
+        temperature: 0.1,
+        max_tokens: 500,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: prompt },
+        ],
+      }),
+    });
+  } catch (e) {
+    console.error("OpenAI request failed:", e?.message || String(e));
+    return { ok: false, error: `OpenAI request failed: ${e?.message || e}` };
+  }
+
+  if (!res.ok) {
+    console.error(`OpenAI returned ${res.status}`);
+    return { ok: false, error: `OpenAI error ${res.status}` };
+  }
+
+  const data = await res.json().catch(() => null);
+  const parsed = safeParse(data?.choices?.[0]?.message?.content || "", null);
+  if (!parsed || typeof parsed !== "object") {
+    console.error("OpenAI returned non-JSON content");
+    return { ok: false, error: "AI returned non-JSON" };
+  }
+
+  const clean = (v) => (v && v !== "null" ? String(v) : null);
+  return {
+    ok: true,
+    id: clean(parsed.id),
+    answer: String(parsed.answer || "").trim(),
+    match_reason: String(parsed.match_reason || "").trim(),
+    section_key: clean(parsed.section_key),
+  };
+}
+
+// ============================================================
+// Logging  (v2's own namespace — v1's dashboard never sees these)
+// ============================================================
+
+// Inverted timestamp keeps KV's ascending list order newest-first, and the
+// record is duplicated into list metadata so /admin/logs needs no value reads.
+// v1 fetched every log value individually (~200 KV reads per dashboard load).
+let logSequence = 0;
+
+async function writeLog(env, record) {
+  try {
+    const ts = Number(record.ts || Date.now());
+    // Two logs can land in the same millisecond, which would leave their
+    // order arbitrary. A per-isolate sequence (also inverted) breaks the tie
+    // so "newest first" holds at sub-millisecond resolution too.
+    const seq = String(999999 - (logSequence++ % 1000000)).padStart(6, "0");
+    const key = `log:${String(1e15 - ts).padStart(16, "0")}:${seq}:${randomId().slice(0, 8)}`;
+
+    const metadata = {
+      ts,
+      campus: record.campus || "UNKNOWN",
+      user_role: record.user_role || "unknown",
+      ok: record.ok === true,
+      ms: Number(record.ms || 0),
+      source_type: record.source_type || null,
+      source_id: record.source_id || null,
+      source_title: clamp(record.source_title || "", 120) || null,
+      section_key: record.section_key || null,
+      query: clamp(record.query || "", 180),
+      cached: record.cached === true,
+    };
+
+    await env.STATE.put(key, JSON.stringify({ ...record, ts }), {
+      expirationTtl: LOG_TTL,
+      metadata,
+    });
+  } catch (err) {
+    // Logging must never break a user request, but a silent failure means the
+    // admin dashboard just goes empty with no explanation — so surface it.
+    console.error("writeLog failed:", err?.message || String(err));
+  }
+}
+
+async function readLogs(env, limit) {
+  const capped = clampInt(limit, 1, 1000, 200);
+  const out = [];
+  let cursor;
+
+  while (out.length < capped) {
+    const page = await env.STATE.list({
+      prefix: "log:",
+      limit: Math.min(1000, capped - out.length),
+      cursor,
+    });
+
+    for (const k of page.keys) {
+      if (k.metadata) out.push(k.metadata);
+      else {
+        const raw = await env.STATE.get(k.name);
+        const parsed = safeParse(raw, null);
+        if (parsed) out.push(parsed);
+      }
+    }
+
+    if (page.list_complete || !page.cursor) break;
+    cursor = page.cursor;
+  }
+
+  // Stable sort: equal timestamps keep KV key order, which is already
+  // newest-first thanks to the inverted timestamp + sequence in the key.
+  out.sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
+  return out.slice(0, capped);
+}
+
+// ============================================================
+// Routes
+// ============================================================
+
+async function handleAuth(request, env, role) {
+  const rl = await rateLimit(env, `auth_${role}:${clientIp(request)}`, RATE_AUTH);
+  if (!rl.ok) return tooMany(rl.retry_after, request, env);
+
+  const body = await readBody(request);
+  if (body === null) return fail("Invalid JSON", 400, request, env);
+
+  const field = role === "admin" ? "pin" : "code";
+  const supplied = String(body[field] || "").trim();
+  if (!supplied) return fail(`Missing ${field}`, 400, request, env);
+
+  const envName = role === "staff" ? "STAFF_CODE" : role === "parent" ? "PARENT_CODE" : "ADMIN_PIN";
+  const expected = String(env[envName] || "").trim();
+  if (!expected) return fail(`${envName} not set`, 500, request, env);
+
+  if (supplied !== expected) {
+    return fail(role === "admin" ? "Invalid admin PIN" : "Invalid code", 401, request, env);
+  }
+
+  const token = await issueToken(env, role);
+  return json({ ok: true, token, expires_in: TOKEN_TTL, role }, 200, request, env);
+}
+
+async function handleHandbooks(request, env, url) {
+  const auth = await authenticate(request, env, ["staff", "parent", "admin"]);
+  if (!auth.ok) return fail(auth.error, 401, request, env);
+
+  const campus = normCampus(url.searchParams.get("campus"));
+  if (!campus) return fail("Missing campus", 400, request, env);
+
+  const handbooks = await loadHandbooks(env, campus);
+  const id = String(url.searchParams.get("id") || "").trim();
+  const sectionKey = String(url.searchParams.get("section") || "").trim();
+
+  if (!id) {
+    return json({
+      ok: true,
+      campus,
+      count: handbooks.length,
+      handbooks: handbooks.map((hb) => ({
+        id: hb.id,
+        type: hb.type,
+        campus: hb.campus,
+        program: hb.program,
+        title: hb.title,
+        link: hb.link,
+        sections: hb.sections.map((s) => ({ key: s.key, title: s.title })),
+      })),
+    }, 200, request, env);
+  }
+
+  const hb = handbooks.find((x) => x.id === id);
+  if (!hb) return fail("Handbook not found", 404, request, env);
+
+  const meta = { id: hb.id, type: hb.type, title: hb.title, program: hb.program, link: hb.link, campus: hb.campus };
+
+  if (!sectionKey) {
+    return json({ ok: true, campus, handbook: { ...meta, sections: hb.sections } }, 200, request, env);
+  }
+
+  const section = hb.sections.find((s) => s.key === sectionKey);
+  if (!section) return fail("Section not found", 404, request, env);
+
+  return json({ ok: true, campus, handbook: meta, section }, 200, request, env);
+}
+
+// Staff and admin only. v1 accepted any valid token here, so a parent could
+// read internal policies directly from the endpoint.
+async function handleDoc(request, env, url) {
+  const auth = await authenticate(request, env, ["staff", "admin"]);
+  if (!auth.ok) {
+    return fail("Unauthorized (staff or admin token required)", 401, request, env);
+  }
+
+  const type = String(url.searchParams.get("type") || "").trim().toLowerCase();
+  const id = String(url.searchParams.get("id") || "").trim();
+
+  if (type !== "policy" && type !== "protocol") return fail("Invalid type", 400, request, env);
+  if (!id) return fail("Missing id", 400, request, env);
+
+  const doc = await loadDoc(env, type, id);
+  if (!doc) return fail("Document not found", 404, request, env);
+
+  return json({ ok: true, doc }, 200, request, env);
+}
+
+async function handleApi(request, env, ctx) {
+  const started = Date.now();
+
+  const auth = await authenticate(request, env, ["staff", "parent"]);
+  if (!auth.ok) return fail("Unauthorized (staff/parent token required)", 401, request, env);
+
+  const rl = await rateLimit(env, `api:${auth.token}`, RATE_API);
+  if (!rl.ok) return tooMany(rl.retry_after, request, env);
+
+  const body = await readBody(request);
+  if (body === null) return fail("Invalid JSON", 400, request, env);
+
+  const query = String(body.query || "").trim();
+  const campus = normCampus(body.campus);
+  const program = normProgram(body.program);
+  const scope = body.scope && typeof body.scope === "object" ? body.scope : null;
+
+  if (!campus) return fail("Missing campus", 400, request, env);
+  if (!query) return fail("Missing query", 400, request, env);
+
+  // Parents are restricted to handbook content regardless of the scope sent.
+  if (auth.role === "parent" && scope?.type && String(scope.type).toLowerCase() !== "handbook") {
+    return fail("Parents can only access the Parent Handbook.", 403, request, env);
+  }
+
+  const cacheKey = `ai:${auth.role}:${campus}:${program}:${await sha256Hex(
+    query.toLowerCase() + JSON.stringify(scope || {})
+  )}`;
+
+  const cached = safeParse(await env.STATE.get(cacheKey), null);
+  if (cached) {
+    ctx.waitUntil(writeLog(env, {
+      campus, user_role: auth.role, ok: true, ms: Date.now() - started, cached: true, query,
+      source_type: cached.source?.type || null,
+      source_id: cached.source?.id || null,
+      source_title: cached.source?.title || null,
+      section_key: cached.handbook_section?.section_key || null,
+    }));
+    return json({ ...cached, cached: true }, 200, request, env);
+  }
+
+  const candidates = await buildCandidates(env, { role: auth.role, campus, program, scope, query });
+
+  if (!candidates.length) {
+    ctx.waitUntil(writeLog(env, {
+      campus, user_role: auth.role, ok: false, ms: Date.now() - started, query,
+      section_key: scope?.section_key || null,
+    }));
+    return json({
+      ok: true, campus, user_role: auth.role, program,
+      answer: "", match_reason: "", source: null, handbook_section: null, matches: [],
+      note: auth.role === "parent"
+        ? "No parent handbook content is available for this campus yet."
+        : "No matching documents found.",
+    }, 200, request, env);
+  }
+
+  const top = rank(candidates, query, MAX_DOCS_TO_AI);
+  const ai = await askOpenAI(env, buildPrompt({ query, campus, program, role: auth.role, scope, docs: top }));
+
+  if (!ai.ok) {
+    ctx.waitUntil(writeLog(env, {
+      campus, user_role: auth.role, ok: false, ms: Date.now() - started, query, error: ai.error,
+    }));
+    return fail(ai.error, 502, request, env);
+  }
+
+  // Resolve the model's id against the permitted shortlist, so it can never
+  // surface a document this caller wasn't allowed to see.
+  let chosen = null;
+  if (ai.id) {
+    chosen =
+      top.find((c) => c.id === ai.id && (!ai.section_key || c.section_key === ai.section_key)) ||
+      top.find((c) => c.id === ai.id) ||
+      null;
+  }
+
+  const handbookSection = chosen?.type === "handbook"
+    ? {
+        section_key: chosen.section_key,
+        section_title: chosen.section_title || "",
+        section_content: clamp(chosen.content, MAX_CHARS_PER_DOC),
+      }
+    : null;
+
+  const payload = {
+    ok: true,
+    campus,
+    user_role: auth.role,
+    program,
+    answer: ai.answer,
+    match_reason: ai.match_reason,
+    source: chosen
+      ? {
+          id: chosen.id,
+          type: chosen.type,
+          title: chosen.title,
+          program: chosen.program || null,
+          link: chosen.link || null,
+        }
+      : null,
+    handbook_section: handbookSection,
+    matches: top.map((c) => {
+      const isChosen = chosen && c.id === chosen.id && c.section_key === chosen.section_key;
+      return {
+        id: c.id,
+        type: c.type,
+        title: c.title,
+        program: c.program || null,
+        link: c.link || null,
+        section_key: c.section_key,
+        answer: isChosen ? ai.answer : "",
+        why: isChosen ? ai.match_reason : "",
+      };
+    }),
+  };
+
+  if (!chosen && !payload.answer) {
+    payload.note = "I could not find that in the available documents. Try rephrasing, or check with the office.";
+  }
+
+  ctx.waitUntil(
+    env.STATE.put(cacheKey, JSON.stringify(payload), { expirationTtl: AI_CACHE_TTL }).catch(() => {})
+  );
+  ctx.waitUntil(writeLog(env, {
+    campus, user_role: auth.role, ok: Boolean(chosen), ms: Date.now() - started, query,
+    source_type: chosen?.type || null,
+    source_id: chosen?.id || null,
+    source_title: chosen?.title || null,
+    section_key: handbookSection?.section_key || null,
+  }));
+
+  return json(payload, 200, request, env);
+}
+
+async function handleAdminLogs(request, env, url) {
+  const auth = await authenticate(request, env, ["admin"]);
+  if (!auth.ok) return fail("Unauthorized (admin token required)", 401, request, env);
+
+  const logs = await readLogs(env, url.searchParams.get("limit"));
+  return json({ ok: true, count: logs.length, logs }, 200, request, env);
+}
+
+async function handleAdminStats(request, env, url) {
+  const auth = await authenticate(request, env, ["admin"]);
+  if (!auth.ok) return fail("Unauthorized (admin token required)", 401, request, env);
+
+  const logs = await readLogs(env, url.searchParams.get("limit"));
+
+  const bucket = () => ({ total: 0, ok: 0, bad: 0 });
+  const byCampus = {};
+  const byRole = { staff: bucket(), parent: bucket(), admin: bucket() };
+  const bySourceType = {};
+
+  let total = 0;
+  let okCount = 0;
+  let msSum = 0;
+
+  for (const l of logs) {
+    total++;
+    const good = l.ok === true;
+    if (good) okCount++;
+    msSum += Number(l.ms || 0);
+
+    const add = (map, key) => {
+      const k = String(key || "unknown");
+      if (!map[k]) map[k] = bucket();
+      map[k].total++;
+      map[k][good ? "ok" : "bad"]++;
+    };
+
+    add(byCampus, String(l.campus || "UNKNOWN").toUpperCase());
+    add(byRole, String(l.user_role || "unknown").toLowerCase());
+    add(bySourceType, String(l.source_type || "unknown").toLowerCase());
+  }
+
+  const bad = total - okCount;
+  const avgMs = total ? Math.round(msSum / total) : 0;
+  const okRate = total ? okCount / total : 1;
+
+  let badge = "OK";
+  if (okRate < 0.75 || avgMs > 6000) badge = "BAD";
+  else if (okRate < 0.9 || avgMs > 3000) badge = "WARN";
+
+  // `ok` is the envelope flag only. The success count is `ok_count`.
+  // v1 emitted `ok` twice in one object literal, so the flag and the count
+  // collided and a zero count made the dashboard throw.
+  return json({
+    ok: true,
+    badge,
+    total,
+    ok_count: okCount,
+    bad,
+    avg_ms: avgMs,
+    byCampus,
+    byRole,
+    bySourceType,
+  }, 200, request, env);
+}
+
+// ============================================================
+// Entry point
+// ============================================================
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const path = url.pathname.replace(/\/+$/, "") || "/";
+    const method = request.method;
+
+    if (method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: cors(request, env) });
     }
 
     try {
-      if (url.pathname === "/") {
-        return json({ ok: true, service: "cms-policy-worker", status: "running" });
+      if (path === "/" && method === "GET") {
+        return json({ ok: true, service: SERVICE, status: "running", version: VERSION }, 200, request, env);
       }
 
-      if (url.pathname === "/health") {
+      if (path === "/health" && method === "GET") {
         return json({
           ok: true,
-          service: "cms-policy-worker",
+          service: SERVICE,
           status: "running",
-          version: "stable-optimized",
+          version: VERSION,
           routes: {
             root: "GET /",
             health: "GET /health",
@@ -27,904 +977,49 @@ export default {
             doc: "GET /doc?type=policy&id=safe_arrival",
             api: "POST /api",
             admin_logs: "GET /admin/logs",
-            admin_stats: "GET /admin/stats"
-          }
-        });
-      }
-
-      // =========================
-      // AUTH: STAFF
-      // =========================
-      if (url.pathname === "/auth/staff") {
-        if (request.method !== "POST") return json({ ok: false, error: "POST required" }, 405);
-
-        const ip = getClientIp(request);
-        const rl = await rateLimitKV(env, `rl:auth_staff:${ip}`, 10, 60);
-        if (!rl.ok) return tooMany(rl.retry_after);
-
-        const body = await safeReadJson(request);
-        if (!body.ok) return json({ ok: false, error: "Invalid JSON" }, 400);
-
-        const code = String(body.data?.code ?? body.data?.data?.code ?? "").trim();
-        if (!code) return json({ ok: false, error: "Missing code" }, 400);
-
-        if (!env.STAFF_CODE) return json({ ok: false, error: "STAFF_CODE not set" }, 500);
-        if (code !== env.STAFF_CODE) return json({ ok: false, error: "Invalid code" }, 401);
-
-        const token = crypto.randomUUID();
-        const expiresIn = 8 * 60 * 60;
-
-        await env.cms_logs.put(`staff:${token}`, JSON.stringify({ created: Date.now() }), {
-          expirationTtl: expiresIn
-        });
-
-        return json({ ok: true, token, expires_in: expiresIn, role: "staff" });
-      }
-
-      // =========================
-      // AUTH: PARENT
-      // =========================
-      if (url.pathname === "/auth/parent") {
-        if (request.method !== "POST") return json({ ok: false, error: "POST required" }, 405);
-
-        const ip = getClientIp(request);
-        const rl = await rateLimitKV(env, `rl:auth_parent:${ip}`, 10, 60);
-        if (!rl.ok) return tooMany(rl.retry_after);
-
-        const body = await safeReadJson(request);
-        if (!body.ok) return json({ ok: false, error: "Invalid JSON" }, 400);
-
-        const code = String(body.data?.code ?? body.data?.data?.code ?? "").trim();
-        if (!code) return json({ ok: false, error: "Missing code" }, 400);
-
-        if (!env.PARENT_CODE) return json({ ok: false, error: "PARENT_CODE not set" }, 500);
-        if (code !== env.PARENT_CODE) return json({ ok: false, error: "Invalid code" }, 401);
-
-        const token = crypto.randomUUID();
-        const expiresIn = 8 * 60 * 60;
-
-        await env.cms_logs.put(`parent:${token}`, JSON.stringify({ created: Date.now() }), {
-          expirationTtl: expiresIn
-        });
-
-        return json({ ok: true, token, expires_in: expiresIn, role: "parent" });
-      }
-
-      // =========================
-      // AUTH: ADMIN
-      // =========================
-      if (url.pathname === "/auth/admin") {
-        if (request.method !== "POST") return json({ ok: false, error: "POST required" }, 405);
-
-        const ip = getClientIp(request);
-        const rl = await rateLimitKV(env, `rl:auth_admin:${ip}`, 10, 60);
-        if (!rl.ok) return tooMany(rl.retry_after);
-
-        const body = await safeReadJson(request);
-        if (!body.ok) return json({ ok: false, error: "Invalid JSON" }, 400);
-
-        const pin = String(body.data?.pin ?? body.data?.data?.pin ?? "").trim();
-        if (!pin) return json({ ok: false, error: "Missing pin" }, 400);
-
-        if (!env.ADMIN_PIN) return json({ ok: false, error: "ADMIN_PIN not set" }, 500);
-        if (pin !== env.ADMIN_PIN) return json({ ok: false, error: "Invalid admin PIN" }, 401);
-
-        const token = crypto.randomUUID();
-        const expiresIn = 8 * 60 * 60;
-
-        await env.cms_logs.put(`admin:${token}`, JSON.stringify({ created: Date.now() }), {
-          expirationTtl: expiresIn
-        });
-
-        return json({ ok: true, token, expires_in: expiresIn, role: "admin" });
-      }
-
-      const anyUser = await validateAnyToken(env, request);
-
-      // =========================
-      // HANDBOOKS
-      // =========================
-      if (url.pathname === "/handbooks") {
-        if (request.method !== "GET") return json({ ok: false, error: "Only GET allowed" }, 405);
-        if (!anyUser.ok) return json({ ok: false, error: "Unauthorized (token required)" }, 401);
-
-        const campus = String(url.searchParams.get("campus") || "").trim().toUpperCase();
-        if (!campus) return json({ ok: false, error: "Missing campus" }, 400);
-
-        const handbookKey = `handbook_${campus}`;
-        const raw = await env.cms_handbooks.get(handbookKey);
-        const handbooks = raw ? safeJsonParse(raw, []) : [];
-
-        const id = String(url.searchParams.get("id") || "").trim();
-        const sectionKey = String(url.searchParams.get("section") || "").trim();
-
-        if (!id) {
-          const list = Array.isArray(handbooks)
-            ? handbooks.map((hb) => ({
-                id: hb?.id || null,
-                type: hb?.type || "handbook",
-                campus: hb?.campus || campus,
-                program: hb?.program || null,
-                title: hb?.title || "Parent Handbook",
-                link: typeof hb?.link === "string" ? hb.link : null,
-                sections: Array.isArray(hb?.sections)
-                  ? hb.sections.map((s) => ({
-                      key: s?.key || "",
-                      title: s?.title || ""
-                    }))
-                  : []
-              }))
-            : [];
-
-          return json({ ok: true, campus, count: list.length, handbooks: list });
-        }
-
-        const hb = Array.isArray(handbooks)
-          ? handbooks.find((x) => String(x?.id || "") === id)
-          : null;
-
-        if (!hb) return json({ ok: false, error: "Handbook not found" }, 404);
-
-        if (sectionKey) {
-          const sec = Array.isArray(hb.sections)
-            ? hb.sections.find((s) => String(s?.key || "").trim() === sectionKey)
-            : null;
-
-          if (!sec) return json({ ok: false, error: "Section not found" }, 404);
-
-          return json({
-            ok: true,
-            campus,
-            handbook: {
-              id: hb.id,
-              type: hb.type || "handbook",
-              title: hb.title || "Parent Handbook",
-              program: hb.program || null,
-              link: typeof hb?.link === "string" ? hb.link : null
-            },
-            section: {
-              key: sec.key,
-              title: sec.title || "",
-              content: normalizeText(sec.content)
-            }
-          });
-        }
-
-        return json({
-          ok: true,
-          campus,
-          handbook: {
-            id: hb.id,
-            type: hb.type || "handbook",
-            title: hb.title || "Parent Handbook",
-            program: hb.program || null,
-            link: typeof hb?.link === "string" ? hb.link : null,
-            sections: Array.isArray(hb.sections)
-              ? hb.sections.map((s) => ({
-                  key: s?.key || "",
-                  title: s?.title || "",
-                  content: normalizeText(s?.content)
-                }))
-              : []
-          }
-        });
-      }
-
-      // =========================
-      // DOC PREVIEW
-      // =========================
-      if (url.pathname === "/doc") {
-        if (request.method !== "GET") return json({ ok: false, error: "Only GET allowed" }, 405);
-
-        const user = await validateAnyToken(env, request);
-        if (!user.ok) return json({ ok: false, error: "Unauthorized (token required)" }, 401);
-
-        const type = String(url.searchParams.get("type") || "").trim().toLowerCase();
-        const id = String(url.searchParams.get("id") || "").trim();
-
-        if (!type) return json({ ok: false, error: "Missing type" }, 400);
-        if (!id) return json({ ok: false, error: "Missing id" }, 400);
-
-        let namespace = null;
-        let indexKey = "";
-
-        if (type === "policy") {
-          namespace = env.cms_policies;
-          indexKey = "policies";
-        } else if (type === "protocol") {
-          namespace = env.cms_protocols;
-          indexKey = "protocols";
-        } else {
-          return json({ ok: false, error: "Invalid type" }, 400);
-        }
-
-        const indexRaw = await namespace.get(indexKey);
-        const indexList = indexRaw ? safeJsonParse(indexRaw, []) : [];
-
-        const meta = Array.isArray(indexList)
-          ? indexList.find((x) => String(x?.id || "").trim() === id)
-          : null;
-
-        if (!meta) return json({ ok: false, error: "Document not found in index" }, 404);
-
-        const kvKey = String(meta?.kv_key || id).trim();
-        const raw = await namespace.get(kvKey);
-
-        if (!raw) return json({ ok: false, error: "Document content not found" }, 404);
-
-        const full = safeJsonParse(raw, null);
-        if (!full) return json({ ok: false, error: "Invalid document JSON" }, 500);
-
-        return json({
-          ok: true,
-          doc: {
-            id: full?.id || meta?.id || kvKey,
-            type: full?.type || meta?.type || type,
-            title: full?.title || meta?.title || kvKey,
-            content: normalizeText(full?.content),
-            keywords: Array.isArray(full?.keywords)
-              ? full.keywords
-              : Array.isArray(meta?.keywords)
-                ? meta.keywords
-                : [],
-            link: typeof full?.link === "string"
-              ? full.link
-              : typeof meta?.link === "string"
-                ? meta.link
-                : null
-          }
-        });
-      }
-
-      // =========================
-      // ADMIN
-      // =========================
-      if (url.pathname.startsWith("/admin/")) {
-        if (!anyUser.ok || anyUser.role !== "admin") {
-          return json({ ok: false, error: "Unauthorized (admin token required)" }, 401);
-        }
-
-        if (url.pathname === "/admin/logs") {
-          const limit = clampInt(url.searchParams.get("limit"), 1, 200, 120);
-          const list = await env.cms_logs.list({ prefix: "log:", limit });
-
-          const logs = [];
-          for (const k of list.keys) {
-            const raw = await env.cms_logs.get(k.name);
-            if (!raw) continue;
-            try {
-              logs.push(JSON.parse(raw));
-            } catch {}
-          }
-
-          logs.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-          return json({ ok: true, count: logs.length, logs });
-        }
-
-        if (url.pathname === "/admin/stats") {
-          const limit = clampInt(url.searchParams.get("limit"), 50, 300, 200);
-          const list = await env.cms_logs.list({ prefix: "log:", limit });
-
-          const rows = [];
-          for (const k of list.keys) {
-            const raw = await env.cms_logs.get(k.name);
-            if (!raw) continue;
-            try {
-              rows.push(JSON.parse(raw));
-            } catch {}
-          }
-
-          const total = rows.length;
-          const okCount = rows.filter((r) => r.ok === true).length;
-          const badCount = total - okCount;
-          const msValues = rows.map((r) => Number(r.ms || 0)).filter((n) => Number.isFinite(n) && n >= 0);
-          const avgMs = msValues.length ? Math.round(msValues.reduce((a, b) => a + b, 0) / msValues.length) : 0;
-
-          const byCampus = {};
-          const byRole = {};
-          const bySourceType = {};
-
-          for (const r of rows) {
-            const c = r.campus || "UNKNOWN";
-            byCampus[c] = byCampus[c] || { total: 0, ok: 0, bad: 0 };
-            byCampus[c].total++;
-            if (r.ok) byCampus[c].ok++;
-            else byCampus[c].bad++;
-
-            const rr = r.user_role || "unknown";
-            byRole[rr] = byRole[rr] || { total: 0, ok: 0, bad: 0 };
-            byRole[rr].total++;
-            if (r.ok) byRole[rr].ok++;
-            else byRole[rr].bad++;
-
-            const st = r.source_type || "unknown";
-            bySourceType[st] = bySourceType[st] || { total: 0, ok: 0, bad: 0 };
-            bySourceType[st].total++;
-            if (r.ok) bySourceType[st].ok++;
-            else bySourceType[st].bad++;
-          }
-
-          const okRate = total ? okCount / total : 1;
-          let badge = "OK";
-          if (okRate < 0.9) badge = "WARN";
-          if (okRate < 0.75) badge = "BAD";
-
-          return json({
-            ok: true,
-            badge,
-            total,
-            ok: okCount,
-            bad: badCount,
-            avg_ms: avgMs,
-            byCampus,
-            byRole,
-            bySourceType
-          });
-        }
-
-        return json({ ok: false, error: "Not found" }, 404);
-      }
-
-      // =========================
-      // API
-      // =========================
-      if (url.pathname === "/api") {
-        if (request.method !== "POST") return json({ ok: false, error: "Only POST allowed" }, 405);
-
-        const user = await validateChatToken(env, request);
-        if (!user.ok) return json({ ok: false, error: "Unauthorized (staff/parent token required)" }, 401);
-
-        const rl = await rateLimitKV(env, `rl:api:${user.token}`, 60, 60);
-        if (!rl.ok) return tooMany(rl.retry_after);
-
-        const body = await safeReadJson(request);
-        if (!body.ok) return json({ ok: false, error: "Invalid JSON" }, 400);
-
-        const payload = body.data?.data ?? body.data ?? {};
-        const query = String(payload.query || "").trim();
-        const campus = String(payload.campus || "").trim().toUpperCase();
-        const program = normalizeProgram(payload.program || "");
-        const scope = payload.scope || null;
-
-        if (!campus) return json({ ok: false, error: "Missing campus" }, 400);
-        if (!query) return json({ ok: false, error: "Missing query" }, 400);
-
-        const cachedAiKey = `ai:${user.role}:${campus}:${program}:${hashString(query + JSON.stringify(scope || {}))}`;
-        const cachedAiRaw = await env.cms_logs.get(cachedAiKey);
-        if (cachedAiRaw) {
-          try {
-            return json(JSON.parse(cachedAiRaw));
-          } catch {}
-        }
-
-        const { policies, protocols } = await getCachedPolicyProtocolDocs(env);
-
-        const handbookKey = `handbook_${campus}`;
-        const handbookRaw = await env.cms_handbooks.get(handbookKey);
-        const handbooks = handbookRaw ? safeJsonParse(handbookRaw, []) : [];
-        const handbookDocs = Array.isArray(handbooks) ? handbooks.map(normalizeHandbookDoc) : [];
-
-        let allDocs = user.role === "parent"
-          ? [...handbookDocs]
-          : [...policies, ...protocols, ...handbookDocs];
-
-        if (scope && typeof scope === "object") {
-          const scopeType = String(scope.type || "").trim().toLowerCase();
-          const scopeId = String(scope.id || "").trim();
-          const scopeSectionKey = String(scope.section_key || "").trim();
-
-          if (scopeType) {
-            allDocs = allDocs.filter((d) => String(d?.type || "").toLowerCase() === scopeType);
-          }
-
-          if (scopeId) {
-            allDocs = allDocs.filter((d) => String(d?.id || "") === scopeId);
-          }
-
-          if (scopeType === "handbook" && scopeSectionKey) {
-            allDocs = allDocs
-              .map((d) => {
-                if (!Array.isArray(d.sections)) return null;
-                const sec = d.sections.find((s) => String(s?.key || "") === scopeSectionKey);
-                if (!sec) return null;
-                return { ...d, sections: [sec] };
-              })
-              .filter(Boolean);
-          }
-        }
-
-        if (!allDocs.length) {
-          const emptyResponse = {
-            ok: true,
-            campus,
-            user_role: user.role,
-            program: program || "ALL",
-            answer: "",
-            source: null,
-            handbook_section: null,
-            matches: [],
-            note: "No matching documents found."
-          };
-
-          await writeLog(env, {
-            campus,
-            user_role: user.role,
-            ok: false,
-            ms: 0,
-            query,
-            source_type: null,
-            source_id: null,
-            section_key: scope?.section_key || null
-          });
-
-          return json(emptyResponse);
-        }
-
-        const rankedDocs = rankDocs(allDocs, query).slice(0, 8);
-        const docsForAi = rankedDocs.length ? rankedDocs : allDocs.slice(0, 8);
-
-        const searchData = docsForAi
-          .map((p) => {
-            const contentText = getDocText(p);
-            const kwText = Array.isArray(p.keywords) ? p.keywords.join(", ") : "";
-            return [
-              `ID: ${p.id}`,
-              `Type: ${p.type || "doc"}`,
-              `Campus: ${p.campus || ""}`,
-              `Program: ${p.program || ""}`,
-              `Title: ${p.title || ""}`,
-              `Keywords: ${kwText}`,
-              `Text:\n${contentText}`
-            ].join("\n");
-          })
-          .join("\n\n-----\n\n");
-
-        const t0 = Date.now();
-
-        const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${env.OPENAI_API_KEY}`
+            admin_stats: "GET /admin/stats",
           },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            temperature: 0.1,
-            max_tokens: 450,
-            messages: [
-              {
-                role: "system",
-                content: `
-You are a CMS assistant.
-Return valid JSON only. No markdown. No backticks.
-
-Return exactly:
-{
-  "id": "best_doc_id_or_null",
-  "answer": "clear helpful answer",
-  "match_reason": "short reason",
-  "section_key": "best_section_key_or_null"
-}
-
-Rules:
-- If documents are already scope-limited, answer ONLY from those.
-- If the best result is a handbook section, return that section_key.
-- Keep answers clear and practical.
-- If nothing fits, return id as null.
-`
-              },
-              {
-                role: "user",
-                content: `Campus: ${campus}
-User role: ${user.role}
-Program: ${program || "ALL"}
-User question: ${query}
-
-Documents:
-${searchData}`
-              }
-            ]
-          })
-        });
-
-        const aiJson = await aiRes.json();
-
-        let match;
-        try {
-          match = JSON.parse(aiJson?.choices?.[0]?.message?.content || "{}");
-        } catch {
-          await writeLog(env, {
-            campus,
-            user_role: user.role,
-            ok: false,
-            ms: Date.now() - t0,
-            query,
-            source_type: null,
-            source_id: null,
-            section_key: scope?.section_key || null
-          });
-
-          return json({ ok: false, error: "AI returned non-JSON", raw: aiJson }, 500);
-        }
-
-        const doc = match?.id ? allDocs.find((d) => String(d.id) === String(match.id)) : null;
-        const ms = Date.now() - t0;
-
-        let handbookSection = null;
-        const sectionKey = String(match?.section_key || "").trim() || null;
-
-        if (doc?.type === "handbook" && Array.isArray(doc.sections) && sectionKey) {
-          const sec = doc.sections.find((s) => String(s?.key || "") === sectionKey);
-          if (sec) {
-            handbookSection = {
-              section_key: sec.key,
-              section_title: sec.title || "",
-              section_content: normalizeText(sec.content)
-            };
-          }
-        }
-
-        await writeLog(env, {
-          campus,
-          user_role: user.role,
-          ok: true,
-          ms,
-          query,
-          source_type: doc?.type || null,
-          source_id: doc?.id || null,
-          section_key: handbookSection?.section_key || sectionKey || null
-        });
-
-        const responsePayload = {
-          ok: true,
-          campus,
-          user_role: user.role,
-          program: program || "ALL",
-          answer: String(match?.answer || "").trim(),
-          match_reason: String(match?.match_reason || "").trim(),
-          source: doc
-            ? {
-                id: doc.id,
-                type: doc.type || "doc",
-                title: doc.title || "",
-                program: doc.program || null,
-                link: typeof doc.link === "string" ? doc.link : null
-              }
-            : null,
-          handbook_section: handbookSection,
-          matches: doc
-            ? [
-                {
-                  id: doc.id,
-                  type: doc.type || "doc",
-                  title: doc.title || "",
-                  program: doc.program || null,
-                  link: typeof doc.link === "string" ? doc.link : null,
-                  section_key: handbookSection?.section_key || null,
-                  answer: String(match?.answer || "").trim(),
-                  why: String(match?.match_reason || "").trim()
-                }
-              ]
-            : []
-        };
-
-        await env.cms_logs.put(cachedAiKey, JSON.stringify(responsePayload), {
-          expirationTtl: 60 * 5
-        });
-
-        return json(responsePayload);
+        }, 200, request, env);
       }
 
-      return json({ ok: false, error: "Not found" }, 404);
+      if (path.startsWith("/auth/")) {
+        const role = path.slice(6);
+        if (!["staff", "parent", "admin"].includes(role)) return fail("Not found", 404, request, env);
+        if (method !== "POST") return fail("POST required", 405, request, env);
+        return handleAuth(request, env, role);
+      }
+
+      if (path === "/handbooks") {
+        if (method !== "GET") return fail("Only GET allowed", 405, request, env);
+        return handleHandbooks(request, env, url);
+      }
+
+      if (path === "/doc") {
+        if (method !== "GET") return fail("Only GET allowed", 405, request, env);
+        return handleDoc(request, env, url);
+      }
+
+      if (path === "/api") {
+        if (method !== "POST") return fail("Only POST allowed", 405, request, env);
+        return handleApi(request, env, ctx);
+      }
+
+      if (path === "/admin/logs") {
+        if (method !== "GET") return fail("Only GET allowed", 405, request, env);
+        return handleAdminLogs(request, env, url);
+      }
+
+      if (path === "/admin/stats") {
+        if (method !== "GET") return fail("Only GET allowed", 405, request, env);
+        return handleAdminStats(request, env, url);
+      }
+
+      return fail("Not found", 404, request, env);
     } catch (err) {
-      return json({ ok: false, error: "Server error", detail: err?.message || String(err) }, 500);
+      // Log the detail for diagnosis; return a generic message so internal
+      // error text never reaches the browser.
+      console.error(`Unhandled error on ${method} ${path}:`, err?.stack || err?.message || String(err));
+      return json({ ok: false, error: "Server error" }, 500, request, env);
     }
-  }
+  },
 };
-
-// =========================
-// HELPERS
-// =========================
-
-function cors() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization"
-  };
-}
-
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      ...cors()
-    }
-  });
-}
-
-function clampInt(v, min, max, fallback) {
-  const n = parseInt(v, 10);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, n));
-}
-
-function getClientIp(request) {
-  return request.headers.get("CF-Connecting-IP") || "0.0.0.0";
-}
-
-function getBearerToken(request) {
-  const auth = request.headers.get("Authorization") || "";
-  if (!auth.startsWith("Bearer ")) return "";
-  return auth.slice(7).trim();
-}
-
-function normalizeText(x) {
-  if (x == null) return "";
-  if (Array.isArray(x)) return x.join("\n");
-  return String(x);
-}
-
-function safeJsonParse(raw, fallback) {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
-}
-
-function normalizeProgram(p) {
-  const s = String(p || "").trim().toLowerCase();
-  if (!s) return "";
-  if (s === "all" || s === "all programs" || s === "all_programs") return "ALL";
-  if (s.includes("preschool")) return "PRESCHOOL";
-  if (s.includes("sr") || s.includes("casa")) return "SR_CASA";
-  if (s.includes("elementary")) return "ELEMENTARY";
-  return s.toUpperCase();
-}
-
-function normalizeHandbookDoc(hb) {
-  return {
-    id: hb?.id || `handbook:${crypto.randomUUID()}`,
-    type: hb?.type || "handbook",
-    campus: hb?.campus || "",
-    program: hb?.program || "",
-    title: hb?.title || "Parent Handbook",
-    sections: Array.isArray(hb?.sections) ? hb.sections : [],
-    content: hb?.content ?? "",
-    keywords: Array.isArray(hb?.keywords) ? hb.keywords : ["handbook", "parent handbook"],
-    link: typeof hb?.link === "string" ? hb.link : null
-  };
-}
-
-async function getCachedPolicyProtocolDocs(env) {
-  const CACHE_TTL = 60 * 1000;
-
-  if (!globalThis.CMS_DOC_CACHE) {
-    globalThis.CMS_DOC_CACHE = {
-      policies: null,
-      protocols: null,
-      ts: 0
-    };
-  }
-
-  const cache = globalThis.CMS_DOC_CACHE;
-
-  if (!cache.policies || !cache.protocols || Date.now() - cache.ts > CACHE_TTL) {
-    const policiesIndexRaw = await env.cms_policies.get("policies");
-    const protocolsIndexRaw = await env.cms_protocols.get("protocols");
-
-    const policiesIndex = policiesIndexRaw ? safeJsonParse(policiesIndexRaw, []) : [];
-    const protocolsIndex = protocolsIndexRaw ? safeJsonParse(protocolsIndexRaw, []) : [];
-
-    cache.policies = await expandDocsFromIndex(env.cms_policies, policiesIndex, "policy");
-    cache.protocols = await expandDocsFromIndex(env.cms_protocols, protocolsIndex, "protocol");
-    cache.ts = Date.now();
-  }
-
-  return {
-    policies: cache.policies || [],
-    protocols: cache.protocols || []
-  };
-}
-
-async function expandDocsFromIndex(namespace, indexList = [], fallbackType = "doc") {
-  const out = [];
-
-  for (const meta of Array.isArray(indexList) ? indexList : []) {
-    const id = String(meta?.id || "").trim();
-    const kvKey = String(meta?.kv_key || id).trim();
-
-    let full = null;
-
-    if (kvKey) {
-      const raw = await namespace.get(kvKey);
-      if (raw) full = safeJsonParse(raw, null);
-    }
-
-    const doc = full
-      ? {
-          ...meta,
-          ...full,
-          id: full?.id || meta?.id || kvKey,
-          type: full?.type || meta?.type || fallbackType,
-          title: full?.title || meta?.title || kvKey,
-          keywords: Array.isArray(full?.keywords)
-            ? full.keywords
-            : Array.isArray(meta?.keywords)
-              ? meta.keywords
-              : [],
-          link: typeof full?.link === "string"
-            ? full.link
-            : typeof meta?.link === "string"
-              ? meta.link
-              : null
-        }
-      : {
-          ...meta,
-          id: meta?.id || kvKey,
-          type: meta?.type || fallbackType,
-          title: meta?.title || kvKey,
-          keywords: Array.isArray(meta?.keywords) ? meta.keywords : [],
-          link: typeof meta?.link === "string" ? meta.link : null
-        };
-
-    out.push(doc);
-  }
-
-  return out;
-}
-
-function getDocText(doc) {
-  const parts = [];
-
-  if (doc?.title) parts.push(String(doc.title));
-
-  if (doc?.content != null) {
-    if (Array.isArray(doc.content)) parts.push(doc.content.join(" "));
-    else parts.push(String(doc.content));
-  }
-
-  if (Array.isArray(doc?.sections)) {
-    for (const s of doc.sections) {
-      const title = s?.title ? `Section: ${s.title}` : "Section";
-      const content = normalizeText(s?.content);
-      parts.push(`${title}\n${content}`);
-    }
-  }
-
-  return parts.join("\n\n");
-}
-
-function rankDocs(docs, query) {
-  const q = String(query || "").toLowerCase();
-  const words = q.split(/\s+/).filter((w) => w.length > 2);
-
-  return docs
-    .map((doc) => {
-      const title = String(doc?.title || "").toLowerCase();
-      const keywords = Array.isArray(doc?.keywords) ? doc.keywords.join(" ").toLowerCase() : "";
-      const text = getDocText(doc).toLowerCase();
-
-      let score = 0;
-
-      if (title.includes(q)) score += 20;
-      if (keywords.includes(q)) score += 15;
-      if (text.includes(q)) score += 10;
-
-      for (const w of words) {
-        if (title.includes(w)) score += 5;
-        if (keywords.includes(w)) score += 4;
-        if (text.includes(w)) score += 1;
-      }
-
-      return { doc, score };
-    })
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .map((x) => x.doc);
-}
-
-function hashString(str) {
-  let h = 0;
-  const s = String(str || "");
-
-  for (let i = 0; i < s.length; i++) {
-    h = Math.imul(31, h) + s.charCodeAt(i) | 0;
-  }
-
-  return String(h);
-}
-
-async function writeLog(env, payload) {
-  const logObj = {
-    ts: Date.now(),
-    campus: payload.campus || "UNKNOWN",
-    user_role: payload.user_role || "unknown",
-    ok: !!payload.ok,
-    ms: Number(payload.ms || 0),
-    query: String(payload.query || ""),
-    source_type: payload.source_type || null,
-    source_id: payload.source_id || null,
-    section_key: payload.section_key || null
-  };
-
-  const key = `log:${logObj.ts}:${crypto.randomUUID()}`;
-
-  await env.cms_logs.put(key, JSON.stringify(logObj), {
-    expirationTtl: 60 * 60 * 24 * 30
-  });
-}
-
-async function rateLimitKV(env, key, limit, windowSec) {
-  const now = Date.now();
-  const windowId = Math.floor(now / (windowSec * 1000));
-  const bucketKey = `${key}:${windowId}`;
-
-  const raw = await env.cms_logs.get(bucketKey);
-  const count = raw ? parseInt(raw, 10) : 0;
-
-  if (count >= limit) {
-    return {
-      ok: false,
-      limit,
-      retry_after: windowSec - Math.floor((now / 1000) % windowSec)
-    };
-  }
-
-  await env.cms_logs.put(bucketKey, String(count + 1), {
-    expirationTtl: windowSec + 5
-  });
-
-  return { ok: true };
-}
-
-function tooMany(retryAfterSec) {
-  return new Response(JSON.stringify({ error: "Too many requests" }), {
-    status: 429,
-    headers: {
-      "Content-Type": "application/json",
-      "Retry-After": String(Math.max(1, retryAfterSec || 1)),
-      ...cors()
-    }
-  });
-}
-
-async function safeReadJson(request) {
-  try {
-    const data = await request.json();
-    return { ok: true, data };
-  } catch {
-    return { ok: false, data: null };
-  }
-}
-
-async function validateAnyToken(env, request) {
-  const token = getBearerToken(request);
-  if (!token) return { ok: false, role: "", token: "" };
-
-  const staffOk = await env.cms_logs.get(`staff:${token}`);
-  if (staffOk) return { ok: true, role: "staff", token };
-
-  const parentOk = await env.cms_logs.get(`parent:${token}`);
-  if (parentOk) return { ok: true, role: "parent", token };
-
-  const adminOk = await env.cms_logs.get(`admin:${token}`);
-  if (adminOk) return { ok: true, role: "admin", token };
-
-  return { ok: false, role: "", token: "" };
-}
-
-async function validateChatToken(env, request) {
-  const token = getBearerToken(request);
-  if (!token) return { ok: false, role: "", token: "" };
-
-  const staffOk = await env.cms_logs.get(`staff:${token}`);
-  if (staffOk) return { ok: true, role: "staff", token };
-
-  const parentOk = await env.cms_logs.get(`parent:${token}`);
-  if (parentOk) return { ok: true, role: "parent", token };
-
-  return { ok: false, role: "", token: "" };
-}

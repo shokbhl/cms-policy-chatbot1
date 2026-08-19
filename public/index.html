@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>CMS Assistant</title>
+  <link rel="icon" href="favicon.svg" />
+  <link rel="icon" type="image/png" sizes="96x96" href="favicon-96.png" />
+
+  <!-- Home screen icon. iOS ignores the manifest for this and needs an
+       opaque PNG here, otherwise transparent areas render black. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+
+  <meta name="theme-color" content="#0b3a7a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CMS Assistant" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="container">
+
+    <header>
+      <div class="brand">
+        <img src="cms-logo.png" alt="" />
+        <div>
+          <h1>CMS Assistant</h1>
+          <div class="sub">Policies, protocols &amp; parent handbooks</div>
+        </div>
+      </div>
+
+      <div id="header-actions" class="header-actions hidden">
+        <label class="hidden" for="program-switch">Program</label>
+        <select id="program-switch" class="select" aria-label="Program">
+          <option value="ALL">All Programs</option>
+          <option value="PRESCHOOL">Preschool</option>
+          <option value="SR_CASA">Sr. Casa</option>
+          <option value="ELEMENTARY">Elementary</option>
+        </select>
+
+        <label class="hidden" for="campus-switch">Campus</label>
+        <select id="campus-switch" class="select" aria-label="Campus">
+          <option value="">Campus</option>
+          <option value="MC">MC — Maplehurst</option>
+          <option value="YC">YC — York Mills</option>
+          <option value="SC">SC — Sheppard</option>
+          <option value="TC">TC — Thornhill</option>
+          <option value="WC">WC — Willowdale</option>
+        </select>
+
+        <button id="admin-mode-btn" class="btn" type="button">Admin</button>
+        <span id="mode-badge" class="badge-mode">STAFF</span>
+        <button id="logout-btn" class="btn danger" type="button">Log out</button>
+      </div>
+    </header>
+
+    <!-- ---------------- login ---------------- -->
+    <section id="login-screen" class="panel">
+      <div class="panel-head">
+        <div class="panel-title">Sign in</div>
+        <div class="hint">Enter your staff or parent access code. The same box accepts both.</div>
+      </div>
+
+      <div class="login-wrap">
+        <form id="login-form" autocomplete="off">
+          <div class="login-row">
+            <div>
+              <label class="hidden" for="campus-select">Campus</label>
+              <select id="campus-select" class="select" style="width:100%" aria-label="Campus">
+                <option value="">Select campus…</option>
+                <option value="MC">MC — Maplehurst</option>
+                <option value="YC">YC — York Mills</option>
+                <option value="SC">SC — Sheppard</option>
+                <option value="TC">TC — Thornhill</option>
+                <option value="WC">WC — Willowdale</option>
+              </select>
+            </div>
+
+            <div class="password-wrapper">
+              <label class="hidden" for="access-code">Access code</label>
+              <input id="access-code" class="input" type="password"
+                     placeholder="Staff or parent access code" autocomplete="current-password" />
+              <button type="button" id="toggle-password" aria-label="Show access code">SHOW</button>
+            </div>
+          </div>
+
+          <div class="login-actions">
+            <button class="primary-btn" type="submit" id="login-submit">Sign in</button>
+            <button id="login-admin-btn" class="btn" type="button">Admin login</button>
+          </div>
+
+          <div id="login-error" class="error" role="alert" aria-live="polite"></div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ---------------- menu ---------------- -->
+    <nav id="top-menu-bar" class="top-menu-bar hidden">
+      <div class="top-menu-inner">
+        <button class="menu-pill" data-menu="policies" type="button">Policies</button>
+        <button class="menu-pill" data-menu="protocols" type="button">Protocols</button>
+        <button class="menu-pill" data-menu="handbook" type="button">Parent Handbook</button>
+
+        <div id="admin-links" class="admin-links hidden">
+          <a class="admin-link" href="dashboard.html">Dashboard</a>
+          <a class="admin-link" href="logs.html">Logs</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ---------------- chat ---------------- -->
+    <section id="chat-screen" class="panel hidden">
+      <div class="panel-head">
+        <div class="panel-title">Chat</div>
+        <div class="hint" id="status-line">Ask about any policy, protocol or parent handbook.</div>
+      </div>
+
+      <div class="chat-wrap">
+        <div id="chat-window" class="chat-window" role="log" aria-live="polite" aria-label="Conversation"></div>
+
+        <form id="chat-form" class="chat-form">
+          <label class="hidden" for="user-input">Your question</label>
+          <input id="user-input" class="text-input" type="text"
+                 placeholder="Ask a question…" autocomplete="off" />
+          <button class="primary-btn" type="submit">Ask</button>
+        </form>
+      </div>
+    </section>
+
+    <div id="menu-overlay" class="overlay hidden"></div>
+
+    <div id="menu-panel" class="menu-panel hidden" role="dialog" aria-modal="true" aria-labelledby="menu-panel-title">
+      <div class="menu-panel-header">
+        <div id="menu-panel-title" class="menu-panel-title">Menu</div>
+        <button id="menu-panel-close" class="menu-close" type="button">Close</button>
+      </div>
+      <div id="menu-panel-body" class="menu-panel-body"></div>
+    </div>
+
+    <!-- ---------------- admin PIN ---------------- -->
+    <div id="admin-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="admin-modal-title">
+      <div class="modal-card">
+        <div id="admin-modal-title" class="modal-title">Admin login</div>
+        <div class="modal-sub">Admin mode is for the dashboard and logs. To ask questions, sign in with a staff or parent code.</div>
+
+        <label class="hidden" for="admin-pin">Admin PIN</label>
+        <input id="admin-pin" class="input" type="password" placeholder="Admin PIN" autocomplete="one-time-code" />
+
+        <div class="modal-actions">
+          <button id="admin-pin-cancel" class="btn" type="button">Cancel</button>
+          <button id="admin-pin-submit" class="primary-btn" type="button">Sign in</button>
+        </div>
+      </div>
+    </div>
+
+    <footer>© Central Montessori School — internal assistant (v2)</footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

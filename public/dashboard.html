@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>CMS Assistant v2 — Dashboard</title>
+  <link rel="icon" href="favicon.svg" />
+  <link rel="icon" type="image/png" sizes="96x96" href="favicon-96.png" />
+
+  <!-- Home screen icon. iOS ignores the manifest for this and needs an
+       opaque PNG here, otherwise transparent areas render black. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+
+  <meta name="theme-color" content="#0b3a7a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CMS Assistant" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <strong>CMS Assistant — Dashboard</strong>
+        <div class="small muted">Usage and health by campus, role and source type</div>
+      </div>
+      <div class="nav">
+        <span class="badge ok" id="badge">OK</span>
+        <a href="index.html">Assistant</a>
+        <a class="active" href="dashboard.html">Dashboard</a>
+        <a href="logs.html">Logs</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="statusbar">
+      <span id="status-line">Loading…</span>
+      <span>Auto-refresh <b id="auto-refresh-state">ON</b> · Last updated <b id="last-refresh">—</b></span>
+    </div>
+
+    <div class="grid">
+      <div class="card span-3">
+        <div class="card-head"><div class="title">Total<span class="subtitle">questions asked</span></div></div>
+        <div class="kpi">
+          <div class="label">Total</div>
+          <div class="value" id="kpi-total">—</div>
+          <div class="hint" id="kpi-range">—</div>
+        </div>
+      </div>
+
+      <div class="card span-3">
+        <div class="card-head"><div class="title">Answered<span class="subtitle">matched a document</span></div></div>
+        <div class="kpi">
+          <div class="label">OK</div>
+          <div class="value" id="kpi-ok">—</div>
+          <div class="hint" id="kpi-ok-rate">—</div>
+        </div>
+      </div>
+
+      <div class="card span-3">
+        <div class="card-head"><div class="title">Unanswered<span class="subtitle">no match or error</span></div></div>
+        <div class="kpi">
+          <div class="label">Bad</div>
+          <div class="value" id="kpi-bad">—</div>
+          <div class="hint">Worth reviewing in Logs</div>
+        </div>
+      </div>
+
+      <div class="card span-3">
+        <div class="card-head"><div class="title">Speed<span class="subtitle">average response</span></div></div>
+        <div class="kpi">
+          <div class="label">Avg ms</div>
+          <div class="value" id="kpi-ms">—</div>
+          <div class="hint" id="kpi-badge-wrap">—</div>
+        </div>
+      </div>
+
+      <div class="card span-6">
+        <div class="card-head">
+          <div class="title">Questions by campus<span class="subtitle">hover a bar for the count</span></div>
+          <button class="btn" id="refresh-btn" type="button">Refresh</button>
+        </div>
+        <div style="padding:14px 16px; overflow-x:auto;">
+          <canvas id="campus-chart" width="520" height="240" style="width:100%; height:auto; display:block;"></canvas>
+        </div>
+      </div>
+
+      <div class="card span-6">
+        <div class="card-head">
+          <div class="title">Unanswered rate<span class="subtitle">20-question moving window, oldest → newest</span></div>
+        </div>
+        <div style="padding:14px 16px; overflow-x:auto;">
+          <canvas id="trend-chart" width="520" height="240" style="width:100%; height:auto; display:block;"></canvas>
+        </div>
+      </div>
+
+      <div class="card span-4">
+        <div class="card-head"><div class="title">By campus</div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Campus</th><th class="right">Total</th><th class="right">OK</th><th class="right">Bad</th></tr></thead>
+            <tbody id="by-campus"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card span-4">
+        <div class="card-head">
+          <div class="title">By role<span class="subtitle">parent shown even at zero</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Role</th><th class="right">Total</th><th class="right">OK</th><th class="right">Bad</th></tr></thead>
+            <tbody id="by-role"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card span-4">
+        <div class="card-head"><div class="title">By source type</div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Type</th><th class="right">Total</th><th class="right">OK</th><th class="right">Bad</th></tr></thead>
+            <tbody id="by-source"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card span-6">
+        <div class="card-head">
+          <div class="title">Common topics<span class="subtitle">what people actually ask about</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Topic</th><th class="right">Count</th><th class="right">Share</th></tr></thead>
+            <tbody id="topics-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card span-6">
+        <div class="card-head">
+          <div class="title">Unanswered questions<span class="subtitle">content gaps worth filling</span></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Campus</th><th>Question</th></tr></thead>
+            <tbody id="gaps-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card span-12">
+        <div class="card-head"><div class="title">Latest questions<span class="subtitle">most recent 30</span></div></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th><th>Campus</th><th>Role</th><th>Status</th>
+                <th class="right">ms</th><th>Source</th><th>Title</th><th>Section</th><th>Question</th>
+              </tr>
+            </thead>
+            <tbody id="latest-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="error-box" class="error-box" style="display:none;"></div>
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

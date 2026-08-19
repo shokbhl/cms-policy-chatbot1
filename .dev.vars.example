@@ -1,0 +1,6 @@
+# Copy to `.dev.vars` for local development (never committed).
+# Use the SAME values as v1 so nobody has to learn new codes.
+STAFF_CODE="your-staff-code"
+PARENT_CODE="your-parent-code"
+ADMIN_PIN="your-admin-pin"
+OPENAI_API_KEY="sk-..."

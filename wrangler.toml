@@ -1,0 +1,62 @@
+# ============================================================
+# CMS Assistant v2 — Worker config
+#
+# IMPORTANT: this deploys a SEPARATE Worker. It does not replace
+# cms-policy-worker (v1), which keeps running untouched.
+#
+# The three content namespaces are the SAME ones v1 uses, bound
+# read-only. The state namespace is NEW and belongs to v2 alone.
+# ============================================================
+
+name = "cms-assistant-v2"
+main = "worker.js"
+compatibility_date = "2024-11-06"
+
+# Workers Logs — off by default when deploying via wrangler. Without this,
+# nothing appears under the Worker's "Logs" tab in the dashboard.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[vars]
+OPENAI_MODEL = "gpt-4o-mini"
+
+# The site v2 is served from. Kept narrow so the Worker only answers the
+# real front end. Takes effect on the next `wrangler deploy`; until then the
+# deployed Worker still carries the older "*".
+ALLOWED_ORIGINS = "https://cms-policy-chatbot1.pages.dev"
+
+# ---------- Shared content (READ-ONLY) ----------
+# Reuse the ids v1 already uses. Find them with:
+#   npx wrangler kv namespace list
+# Do NOT create new namespaces for these three, or v2 will read
+# empty stores and answer nothing.
+
+[[kv_namespaces]]
+binding = "POLICIES"
+id = "efa9baebff4d42e986076324c942d9fd"
+
+[[kv_namespaces]]
+binding = "PROTOCOLS"
+id = "4e3bcd089a534628acb600263e855734"
+
+[[kv_namespaces]]
+binding = "HANDBOOKS"
+id = "0a0fcb0c5c5a4cc49dbfbfa47ec566cc"
+
+# ---------- v2 state (READ/WRITE, new) ----------
+# Tokens, rate-limit counters, AI cache and logs.
+# Deliberately NOT v1's cms_logs: sharing it would interleave the two
+# systems' sessions and make v1's dashboard report v2's traffic.
+# Create it with:
+#   npx wrangler kv namespace create cms_v2_state
+
+[[kv_namespaces]]
+binding = "STATE"
+id = "e2380f7d967a457b86880700b3ce4106"
+
+# ---------- Secrets (never commit values) ----------
+#   npx wrangler secret put STAFF_CODE
+#   npx wrangler secret put PARENT_CODE
+#   npx wrangler secret put ADMIN_PIN
+#   npx wrangler secret put OPENAI_API_KEY
