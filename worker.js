@@ -364,6 +364,12 @@ const STOP_WORDS = new Set([
 // Staff ask "didn't show up"; the Safe Arrival policy says "child not arriving".
 const SYNONYMS = new Map(Object.entries({
   show: ["arrive", "arriving", "arrival", "attend", "attendance"],
+  come: ["arrive", "arriving", "arrival", "attend", "attendance"],
+  came: ["arrive", "arriving", "arrival", "attendance"],
+  coming: ["arrive", "arriving", "arrival", "attendance"],
+  school: ["attendance", "arrival"],
+  turn: ["arrive", "arriving"],
+  arrived: ["arrival", "arriving"],
   showed: ["arrive", "arriving", "arrival"],
   shows: ["arrive", "arriving", "arrival"],
   absent: ["arrival", "arriving", "attendance"],
@@ -390,8 +396,26 @@ const SYNONYMS = new Map(Object.entries({
   covid: ["illness", "outbreak", "infection"],
 }));
 
-const norm = (t) =>
-  String(t || "").toLowerCase().replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").trim();
+// Contractions must be expanded BEFORE punctuation is stripped. Otherwise
+// "didn't" becomes "didn" + "t" and the negation vanishes — and the negation
+// is usually the most discriminating word in the question.
+const CONTRACTIONS = [
+  [/\b(can)(?:'|\u2019)?t\b/g, "can not"],
+  [/\b(won)(?:'|\u2019)?t\b/g, "will not"],
+  [/\b(shan)(?:'|\u2019)?t\b/g, "shall not"],
+  [/\b(\w+?)n(?:'|\u2019)?t\b/g, "$1 not"],   // didn't, doesn't, isn't, aren't, hasn't
+  [/(?:'|\u2019)re\b/g, " are"],
+  [/(?:'|\u2019)ve\b/g, " have"],
+  [/(?:'|\u2019)ll\b/g, " will"],
+  [/(?:'|\u2019)m\b/g, " am"],
+  [/(?:'|\u2019)s\b/g, ""],
+];
+
+const norm = (t) => {
+  let s = String(t || "").toLowerCase();
+  for (const [re, to] of CONTRACTIONS) s = s.replace(re, to);
+  return s.replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").trim();
+};
 
 const wordsOf = (t) => norm(t).split(" ").filter(Boolean);
 
@@ -486,8 +510,9 @@ function prepare(item) {
   return prep;
 }
 
-function score(item, tokens, rawQuery) {
+function score(item, tokens, rawQuery, idf) {
   const p = prepare(item);
+  const w = idf || (() => 1);
   const qNorm = norm(rawQuery);
   const pool = tokens.length ? tokens : wordsOf(rawQuery);
   let s = 0;
@@ -497,23 +522,31 @@ function score(item, tokens, rawQuery) {
   //    "a child did not show up", where "arriving" is never actually said.
   for (const ph of p.phrases) {
     if (!ph.words.length) continue;
-    let covered = 0;
-    for (const w of ph.words) covered += bestSim(w, pool);
-    const frac = covered / ph.words.length;
+    // Weight each word of the phrase by how rare it is in this corpus, so a
+    // shared "not" or "child" cannot carry a phrase on its own while a rare
+    // word like "anaphylaxis" is what actually identifies the document.
+    let covered = 0, total = 0;
+    for (const pw of ph.words) {
+      const weight = w(pw);
+      total += weight;
+      covered += bestSim(pw, pool) * weight;
+    }
+    const frac = total > 0 ? covered / total : 0;
     if (frac >= 0.5) s += 16 * frac * (ph.words.length >= 2 ? 1 : 0.5);
     if (ph.words.length >= 2 && qNorm.includes(ph.text)) s += 10;
   }
 
   // 2. Titles.
   for (const t of tokens) {
-    s += 5 * bestSim(t, p.titleWords);
-    s += 3 * bestSim(t, p.sectionWords);
-    if (p.kwWords.size) s += 4 * bestSim(t, p.kwWords);
+    const weight = w(t);
+    s += 5 * bestSim(t, p.titleWords) * weight;
+    s += 3 * bestSim(t, p.sectionWords) * weight;
+    if (p.kwWords.size) s += 4 * bestSim(t, p.kwWords) * weight;
   }
 
   // 3. Body text, capped so long documents cannot win on length alone.
   let body = 0;
-  for (const t of tokens) if (p.contentWords.has(t)) body += 1;
+  for (const t of tokens) if (p.contentWords.has(t)) body += w(t);
   s += Math.min(body, 4);
 
   // 4. The whole question appearing verbatim in a heading.
@@ -524,10 +557,34 @@ function score(item, tokens, rawQuery) {
   return s;
 }
 
+// How informative each word is across the candidate set. Words appearing in
+// many documents ("child", "not", "policy") identify nothing; rare ones do.
+function buildIdf(items) {
+  const df = new Map();
+  for (const item of items) {
+    const p = prepare(item);
+    const seen = new Set([...p.kwWords, ...p.titleWords, ...p.sectionWords]);
+    for (const word of seen) df.set(word, (df.get(word) || 0) + 1);
+  }
+  const n = Math.max(items.length, 1);
+  const cache = new Map();
+  return (word) => {
+    let v = cache.get(word);
+    if (v !== undefined) return v;
+    // Ranges from ~1 for a word unique to one document down towards ~0.15 for
+    // one present in nearly all of them. Never zero: a common word still counts
+    // for something when it is all the question gives us.
+    v = Math.max(0.15, Math.log(1 + n / (1 + (df.get(word) || 0))) / Math.log(1 + n));
+    cache.set(word, v);
+    return v;
+  };
+}
+
 function rank(items, query, limit) {
   const tokens = tokenize(query);
+  const idf = buildIdf(items);
   const scored = items
-    .map((c) => ({ ...c, _score: score(c, tokens, query) }))
+    .map((c) => ({ ...c, _score: score(c, tokens, query, idf) }))
     .sort((a, b) => b._score - a._score);
 
   const matched = scored.filter((c) => c._score > 0);
