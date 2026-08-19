@@ -634,8 +634,11 @@ function rank(items, query, limit, semantic) {
 // ------------------------------------------------------------
 
 async function loadSemanticIndex(env) {
+  // cacheGet returns null for "not cached", so the entry is wrapped: a present
+  // wrapper whose .index is null means "checked, there is no usable index",
+  // which must not be confused with "not looked yet".
   const cached = cacheGet(SEMANTIC_INDEX_KEY);
-  if (cached !== undefined) return cached;
+  if (cached) return cached.index;
 
   let index = null;
   try {
@@ -656,26 +659,29 @@ async function loadSemanticIndex(env) {
   } catch {
     index = null;
   }
-  return cacheSet(SEMANTIC_INDEX_KEY, index, 10 * 60 * 1000);
+  return cacheSet(SEMANTIC_INDEX_KEY, { index }, 10 * 60 * 1000).index;
 }
 
-async function buildSemantic(env, query) {
-  if (!embeddingsAvailable(env)) return null;
+async function buildSemantic(env, query, report) {
+  const off = (why) => { if (report) report.why = why; return null; };
+
+  if (!embeddingsAvailable(env)) return off("no embedding credentials configured");
   let index;
   try {
     index = await loadSemanticIndex(env);
-  } catch {
-    return null;
+  } catch (e) {
+    return off(`index load failed: ${e.message}`);
   }
-  if (!index) return null;
+  if (!index) return off("no index stored, or it was built by a different provider/model — run POST /admin/reindex");
 
   let queryUnit;
   try {
     const [vec] = await embed(env, [query], "query");
-    if (!vec || vec.length !== index.dims) return null;
+    if (!vec) return off("provider returned no vector");
+    if (vec.length !== index.dims) return off(`provider returned ${vec.length} dimensions, index has ${index.dims}`);
     queryUnit = normalize(vec);
-  } catch {
-    return null;   // never let an embedding outage take the assistant down
+  } catch (e) {
+    return off(`embedding call failed: ${e.message}`);   // never take the assistant down
   }
 
   return {
@@ -1186,7 +1192,8 @@ async function handleDiagnose(request, env, url) {
   const program = normProgram(url.searchParams.get("program"));
 
   const started = Date.now();
-  const semantic = await buildSemantic(env, query);
+  const report = {};
+  const semantic = await buildSemantic(env, query, report);
   const candidates = await buildCandidates(env, {
     role: "staff", campus, program, scope: null, query, semantic,
   });
@@ -1197,6 +1204,7 @@ async function handleDiagnose(request, env, url) {
     query,
     campus,
     semantic: Boolean(semantic),
+    semantic_off_because: semantic ? null : (report.why || null),
     considered: candidates.length,
     ms: Date.now() - started,
     results: top.map((c, i) => ({
@@ -1296,7 +1304,7 @@ async function handleReindex(request, env) {
     built_at: new Date().toISOString(),
   }));
 
-  cacheSet(SEMANTIC_INDEX_KEY, undefined, 0);   // drop the isolate's stale copy
+  cacheSet(SEMANTIC_INDEX_KEY, null, 0);   // drop the isolate's stale copy
 
   return json({
     ok: true, provider: cfg.name, model: cfg.model, dims,
