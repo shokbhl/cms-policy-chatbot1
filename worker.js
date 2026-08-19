@@ -43,6 +43,12 @@ const MAX_DOCS_TO_AI = 12;
 const SHORTLIST_POOL = 40;
 const SEMANTIC_INDEX_KEY = "emb:index:v1";
 const MAX_CHARS_PER_DOC = 4000;
+// The top-ranked documents are sent nearly whole; the rest are trimmed to keep
+// the prompt affordable. A policy carrying the actual procedure runs past 6000
+// characters, and clipping it is how "no later than 10:00 am" gets lost.
+const FULL_TEXT_DOCS = 3;
+const MAX_CHARS_TOP = 7000;
+const MAX_CHARS_REST = 1500;
 
 const RATE_AUTH = { limit: 10, window: 60 };
 const RATE_API = { limit: 60, window: 60 };
@@ -787,16 +793,47 @@ async function buildCandidates(env, { role, campus, program, scope, query, seman
 const SYSTEM_PROMPT = `You are the Central Montessori School (CMS) assistant.
 Answer questions from school STAFF and PARENTS using ONLY the documents provided below.
 
-Rules:
-- Use ONLY the provided documents. Never invent policies, numbers, or procedures.
-- If the documents don't answer it, set "id" to null and say briefly what's missing.
+Choosing which document to answer from:
+- Several documents usually cover the same topic at different depth. A parent
+  handbook summarises; a policy carries the actual procedure. Answer from the
+  one that most completely answers what was asked - normally the one stating
+  the concrete steps, not the summary.
+- "id" must identify the document the answer actually came from. Never answer
+  out of one document and cite another.
 - If a scope is given, answer ONLY from that document or section.
-- Never give legal advice. Never reveal internal staff-only policies to a parent.
+
+When documents differ from each other:
+- If another provided document answers the SAME question DIFFERENTLY - a
+  different time, a different requirement, an extra step, or detail the first
+  one omits - list it in "others" with what that document specifically says.
+  Never silently drop it: the reader has to see both and which is which.
+- Only list genuine differences. If a document merely repeats the same thing in
+  other words, leave it out.
+- Say so in the answer when the difference matters, e.g. that the handbook
+  gives the summary for families while the policy sets the deadline staff work to.
+
+Writing the answer:
+- Use ONLY the provided documents. Never invent policies, numbers or procedures.
+- Reproduce specifics exactly as written: clock times ("no later than 10:00 am"),
+  durations ("within 4 hours"), deadlines, counts, forms, and who is responsible.
+  These ARE the procedure. Never summarise them away, and never replace a stated
+  time with vague wording such as "reasonable efforts" when the document gives one.
 - Be practical and concrete: plain language, actionable steps.
 - If the answer comes from a handbook section, return that exact section_key.
 
+Before saying it is not covered:
+- Check EVERY document provided, including those further down the list. The
+  answer is often in a later one.
+- Never state that a detail is unspecified if any provided document states it.
+- Only if none of them answer it, set "id" to null and say briefly what is missing.
+
+Never give legal advice. Never reveal internal staff-only policies to a parent.
+
 Return valid JSON only. No markdown, no backticks. Exactly:
-{"id":"best_doc_id_or_null","answer":"clear helpful answer","match_reason":"short reason","section_key":"best_section_key_or_null"}`;
+{"id":"best_doc_id_or_null","answer":"clear helpful answer","match_reason":"short reason","section_key":"best_section_key_or_null","others":[{"id":"other_doc_id","section_key":"section_or_null","says":"what THIS document says differently"}]}
+
+"others" may be an empty array. Include an entry only for a document that
+genuinely differs, and only for documents provided above.`;
 
 function buildPrompt({ query, campus, program, role, scope, docs }) {
   const blocks = docs.map((d, i) => {
@@ -812,7 +849,7 @@ function buildPrompt({ query, campus, program, role, scope, docs }) {
     }
     if (d.keywords?.length) lines.push(`Keywords: ${d.keywords.join(", ")}`);
     lines.push("Text:");
-    lines.push(clamp(d.content, MAX_CHARS_PER_DOC));
+    lines.push(clamp(d.content, i < FULL_TEXT_DOCS ? MAX_CHARS_TOP : MAX_CHARS_REST));
     return lines.join("\n");
   });
 
@@ -842,8 +879,8 @@ async function askOpenAI(env, prompt) {
       },
       body: JSON.stringify({
         model: env.OPENAI_MODEL || "gpt-4o-mini",
-        temperature: 0.1,
-        max_tokens: 500,
+        temperature: 0,
+        max_tokens: 900,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
@@ -875,6 +912,16 @@ async function askOpenAI(env, prompt) {
     answer: String(parsed.answer || "").trim(),
     match_reason: String(parsed.match_reason || "").trim(),
     section_key: clean(parsed.section_key),
+    // Other documents that answer the same question differently. Ids are not
+    // trusted here; the caller resolves each against the shortlist it built.
+    others: (Array.isArray(parsed.others) ? parsed.others : [])
+      .filter((o) => o && typeof o === "object" && o.id)
+      .slice(0, 3)
+      .map((o) => ({
+        id: clean(o.id),
+        section_key: clean(o.section_key),
+        says: String(o.says || "").trim().slice(0, 600),
+      })),
   };
 }
 
@@ -1125,11 +1172,37 @@ async function handleApi(request, env, ctx) {
       null;
   }
 
+  // Documents that answer the same question differently. Each is resolved
+  // against the permitted shortlist for the same reason `chosen` is: the model
+  // must never surface something this caller was not allowed to see.
+  const others = [];
+  const seenOther = new Set([`${chosen?.id}:${chosen?.section_key || ""}`]);
+  for (const o of Array.isArray(ai.others) ? ai.others.slice(0, 3) : []) {
+    if (!o || !o.id) continue;
+    const match =
+      top.find((c) => c.id === o.id && (!o.section_key || c.section_key === o.section_key)) ||
+      top.find((c) => c.id === o.id);
+    if (!match) continue;
+    const key = `${match.id}:${match.section_key || ""}`;
+    if (seenOther.has(key)) continue;
+    seenOther.add(key);
+    others.push({
+      id: match.id,
+      type: match.type,
+      title: match.title,
+      program: match.program || null,
+      link: match.link || null,
+      section_key: match.section_key || null,
+      section_title: match.section_title || null,
+      says: String(o.says || "").trim(),
+    });
+  }
+
   const handbookSection = chosen?.type === "handbook"
     ? {
         section_key: chosen.section_key,
         section_title: chosen.section_title || "",
-        section_content: clamp(chosen.content, MAX_CHARS_PER_DOC),
+        section_content: clamp(chosen.content, MAX_CHARS_TOP),
       }
     : null;
 
@@ -1150,6 +1223,7 @@ async function handleApi(request, env, ctx) {
         }
       : null,
     handbook_section: handbookSection,
+    also_says: others,
     matches: top.map((c) => {
       const isChosen = chosen && c.id === chosen.id && c.section_key === chosen.section_key;
       return {

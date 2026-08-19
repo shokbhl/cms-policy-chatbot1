@@ -753,6 +753,24 @@ function renderAnswer(data) {
     }
     html += `<span class="source-tag">${bits.join(" · ")}</span>`;
   }
+
+  // Where another document answers the same question differently, show it too
+  // rather than leaving the reader with only one version. The handbook tends to
+  // summarise for families while the policy carries the deadline staff work to,
+  // and which one you are reading matters.
+  if (Array.isArray(data.also_says) && data.also_says.length) {
+    const items = data.also_says.map((o) => {
+      const label = [escapeHtml(o.title || "Another document")];
+      if (o.section_title) label.push(`section “${escapeHtml(o.section_title)}”`);
+      const link = o.link
+        ? ` <a href="${escapeHtml(o.link)}" target="_blank" rel="noopener">open ↗</a>`
+        : "";
+      const says = o.says ? `<span class="also-says">${escapeHtml(o.says)}</span>` : "";
+      return `<li><span class="also-source">${label.join(" · ")}${link}</span>${says}</li>`;
+    }).join("");
+    html += `<div class="also-block"><div class="also-head">Another document says something different</div><ul>${items}</ul></div>`;
+  }
+
   return html;
 }
 

@@ -176,7 +176,7 @@ async function callJson(path, opts) {
   return { res, data: await res.json().catch(() => ({})) };
 }
 
-function stubOpenAI({ id = "safe_arrival", sectionKey = null, fail = false, raw = null } = {}) {
+function stubOpenAI({ id = "safe_arrival", sectionKey = null, fail = false, raw = null, others = undefined } = {}) {
   globalThis.fetch = async (url, init) => {
     if (!String(url).includes("api.openai.com")) return realFetch(url, init);
 
@@ -185,6 +185,7 @@ function stubOpenAI({ id = "safe_arrival", sectionKey = null, fail = false, raw 
 
     const content = raw ?? JSON.stringify({
       id, answer: "Here is the answer.", match_reason: "keyword match", section_key: sectionKey,
+      ...(others ? { others } : {}),
     });
 
     return new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
@@ -576,6 +577,101 @@ test("an unscoped staff query shortlists policy docs instead of loading all 18",
     `must not load the whole store: read ${docReads.length} of ${POLICY_INDEX.length}`
   );
   assert.ok(docReads.length > 0, "at least one document was loaded");
+});
+
+// ------------------------------------------------------------
+// Documents that disagree. Staff must see every version with its
+// own source, not whichever one the model happened to pick.
+// ------------------------------------------------------------
+
+test("a second document that answers differently is returned with its own source", async () => {
+  const token = await login("staff");
+  stubOpenAI({
+    id: "safe_arrival",
+    others: [{ id: "anaphylaxis_policy", section_key: null, says: "This one sets a different rule." }],
+  });
+
+  // The query must actually retrieve both, or the second is dropped for the
+  // same reason an invented one is: it was never offered to the model.
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "late pickup dismissal arrival anaphylaxis epipen allergy", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal(data.also_says?.length, 1, "the differing document must be reported");
+  assert.equal(data.also_says[0].id, "anaphylaxis_policy");
+  assert.equal(data.also_says[0].title, "Anaphylaxis Policy", "it carries its own source title");
+  assert.match(data.also_says[0].says, /different rule/);
+});
+
+test("a differing document the caller may not see is dropped", async () => {
+  // A parent must not be shown a staff-only policy just because the model
+  // named it, exactly as with the primary source.
+  const token = await login("parent");
+  stubOpenAI({
+    id: null,
+    others: [{ id: "safe_arrival", section_key: null, says: "internal staff wording" }],
+  });
+
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "pickup", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal((data.also_says || []).length, 0, "a staff policy must never leak to a parent");
+});
+
+test("a document the model invents is not reported", async () => {
+  const token = await login("staff");
+  stubOpenAI({
+    id: "safe_arrival",
+    others: [{ id: "does_not_exist", section_key: null, says: "made up" }],
+  });
+
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "late pickup dismissal arrival", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal((data.also_says || []).length, 0, "only documents actually provided may be surfaced");
+});
+
+// ------------------------------------------------------------
+// Prompt budget. A real policy runs past 6000 characters and the
+// operative detail ("no later than 10:00 am") sits well past the
+// old 4000-character clamp, so a top-ranked document must be sent
+// far enough in for its procedure to survive.
+// ------------------------------------------------------------
+
+test("a top-ranked document keeps its procedure instead of being clipped short", async () => {
+  const token = await login("staff");
+
+  // Rebuild the store with a safe_arrival policy long enough to be clipped,
+  // and a marker sitting where the real 10:00 am rule sits.
+  const policies = seedPolicies();
+  policies.safe_arrival = {
+    ...policies.safe_arrival,
+    content:
+      "Safe arrival preamble. " + "filler sentence about arrival and dismissal. ".repeat(120) +
+      "DEEP_PROCEDURE_MARKER staff must contact the parent no later than 10:00 am. " +
+      "trailing text. ".repeat(80),
+  };
+  currentEnv.POLICIES = new MockKV(policies, "POLICIES");
+
+  await callJson("/api", {
+    method: "POST", token,
+    body: { query: "late pickup dismissal arrival safe", campus: "YC" },
+  });
+  await settle();
+
+  const prompt = capturedPrompts.join("\n");
+  assert.ok(
+    prompt.includes("DEEP_PROCEDURE_MARKER"),
+    "the operative step sits ~5000 characters in and must still reach the model"
+  );
 });
 
 // ------------------------------------------------------------
