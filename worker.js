@@ -619,8 +619,12 @@ function rank(items, query, limit, semantic) {
     const lr = lexRank.get(i);
     const sr = semRank.get(i);
     let s = 0;
+    // Words and meaning contribute equally. Weighting meaning above words was
+    // measurably worse: it demoted exact matches ("anaphylaxis", "fire drill")
+    // that the keyword pass had already ranked first, without finding anything
+    // the pair did not already find together.
     if (lr) s += 1 / (K + lr);
-    if (sr) s += 1.2 / (K + sr);      // meaning weighted slightly above words
+    if (sr) s += 1 / (K + sr);
     return { ...c, _score: s, _lex: lexical[i].s, _sem: meaning[i].s };
   }).sort((a, b) => b._score - a._score);
 

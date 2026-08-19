@@ -1,42 +1,52 @@
 {
   "_comment": [
     "Retrieval benchmark for the CMS assistant.",
-    "Each entry is a real or realistic staff question and the document ids (or",
-    "handbook section keys) that genuinely answer it. Several accept more than",
-    "one, because a handbook section often answers as well as the policy does.",
     "",
-    "Questions marked 'real failure' were taken from the production logs, where",
-    "the assistant found nothing.",
+    "'questions' were used while tuning, so scores on them flatter whichever",
+    "approach was tuned last. 'held_out' were written afterwards and never used",
+    "for tuning — judge changes on those.",
     "",
-    "To score a change, run each question through GET /admin/diagnose and check",
-    "where the wanted document lands. See EMBEDDINGS.md."
+    "Each entry lists the document ids or handbook section keys that genuinely",
+    "answer it; several accept more than one, because a handbook section often",
+    "answers as well as the policy does.",
+    "",
+    "To score: run each question through GET /admin/diagnose and note where the",
+    "wanted document lands. See EMBEDDINGS.md."
   ],
   "questions": [
     {
       "q": "What should we do if a child did not show up",
       "want": [
-        "safe_arrival"
+        "safe_arrival",
+        "absences",
+        "absences_midday"
       ],
       "note": "real failure from your logs"
     },
     {
       "q": "What should we so if a child did not show up",
       "want": [
-        "safe_arrival"
+        "safe_arrival",
+        "absences",
+        "absences_midday"
       ],
       "note": "real failure - typo 'so' for 'do'"
     },
     {
       "q": "What should we so if achild did not show up",
       "want": [
-        "safe_arrival"
+        "safe_arrival",
+        "absences",
+        "absences_midday"
       ],
       "note": "real failure - typo 'achild'"
     },
     {
       "q": "what should we do if a child didnt show up on time ?",
       "want": [
-        "safe_arrival"
+        "safe_arrival",
+        "absences",
+        "absences_midday"
       ],
       "note": "worked Aug 17, at slot 8"
     },
@@ -200,35 +210,45 @@
     {
       "q": "What should we do if a child didn't come to school",
       "want": [
-        "safe_arrival"
+        "safe_arrival",
+        "absences",
+        "absences_midday"
       ],
       "note": "user-reported paraphrase"
     },
     {
       "q": "What should we do if a child didn’t come to school",
       "want": [
-        "safe_arrival"
+        "safe_arrival",
+        "absences",
+        "absences_midday"
       ],
       "note": "user-reported, curly apostrophe"
     },
     {
       "q": "a child is absent today",
       "want": [
-        "safe_arrival"
+        "safe_arrival",
+        "absences",
+        "absences_midday"
       ],
       "note": "paraphrase"
     },
     {
       "q": "the child hasn't arrived yet",
       "want": [
-        "safe_arrival"
+        "safe_arrival",
+        "absences",
+        "absences_midday"
       ],
       "note": "paraphrase"
     },
     {
       "q": "a kid never turned up today",
       "want": [
-        "safe_arrival"
+        "safe_arrival",
+        "absences",
+        "absences_midday"
       ],
       "note": "paraphrase"
     },
@@ -254,7 +274,9 @@
     {
       "q": "a student isn't here this morning",
       "want": [
-        "safe_arrival"
+        "safe_arrival",
+        "absences",
+        "absences_midday"
       ],
       "note": "paraphrase"
     },
@@ -278,6 +300,98 @@
         "employee_conduct"
       ],
       "note": "paraphrase"
+    }
+  ],
+  "held_out": [
+    {
+      "q": "one of the kids wandered off the playground",
+      "want": [
+        "playground_safety",
+        "safety_security",
+        "supervision"
+      ]
+    },
+    {
+      "q": "a toddler bit another toddler, what now",
+      "want": [
+        "prohibited_practices",
+        "monitoring_compliance_contraventions",
+        "program_statement",
+        "behaviour"
+      ]
+    },
+    {
+      "q": "my coworker showed up in ripped jeans",
+      "want": [
+        "employee_conduct"
+      ]
+    },
+    {
+      "q": "there is smoke in the building",
+      "want": [
+        "fire_safety",
+        "emergency_management"
+      ]
+    },
+    {
+      "q": "a child threw up after lunch",
+      "want": [
+        "health_policy",
+        "sanitary_practices",
+        "illness",
+        "health_wellbeing"
+      ]
+    },
+    {
+      "q": "the epipen expired last month",
+      "want": [
+        "anaphylaxis_policy",
+        "medication_administration"
+      ]
+    },
+    {
+      "q": "somebody strange is at the front door",
+      "want": [
+        "safety_security",
+        "emergency_management",
+        "school_office"
+      ]
+    },
+    {
+      "q": "how long before my kid gets a spot",
+      "want": [
+        "waiting_list"
+      ]
+    },
+    {
+      "q": "where do babies sleep during the day",
+      "want": [
+        "sleep_infants",
+        "sleep_toddlers",
+        "nap",
+        "rest"
+      ]
+    },
+    {
+      "q": "a mum is upset about her daughters teacher",
+      "want": [
+        "parent_issues_concerns",
+        "parent_concerns"
+      ]
+    },
+    {
+      "q": "do I need paperwork to work here",
+      "want": [
+        "criminal_reference_vsc_policy",
+        "students_volunteers",
+        "staff_development"
+      ]
+    },
+    {
+      "q": "something bad happened and head office needs to know",
+      "want": [
+        "serious_occurrence"
+      ]
     }
   ]
 }
