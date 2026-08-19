@@ -61,6 +61,9 @@ class MockKV {
 
 const STAFF_ONLY_MARKER = "INTERNAL_STAFF_ONLY_MARKER late pickup after 6pm incurs a fee.";
 
+// Mirrors MAX_DOCS_TO_AI in worker.js.
+const MAX_DOCS_TO_AI = 12;
+
 const POLICY_INDEX = [
   { id: "safe_arrival", kv_key: "safe_arrival", type: "policy", title: "Safe Arrival and Dismissal Policy", keywords: ["arrival", "dismissal", "pickup", "late pickup"] },
   { id: "anaphylaxis_policy", kv_key: "anaphylaxis_policy", type: "policy", title: "Anaphylaxis Policy", keywords: ["allergy", "anaphylaxis", "epipen"] },
@@ -555,7 +558,7 @@ test("POST /api rate limits after 60 requests in a window", async () => {
 // Efficiency — index-first ranking
 // ============================================================
 
-test("an unscoped staff query loads at most 8 policy docs, not all 18", async () => {
+test("an unscoped staff query shortlists policy docs instead of loading all 18", async () => {
   const token = await login("staff");
   const kv = currentEnv.POLICIES;
   kv.getKeys = [];
@@ -564,8 +567,64 @@ test("an unscoped staff query loads at most 8 policy docs, not all 18", async ()
   await settle();
 
   const docReads = kv.getKeys.filter((k) => k !== "policies");
-  assert.ok(docReads.length <= 8, `expected <=8 doc reads, got ${docReads.length}`);
+  assert.ok(
+    docReads.length <= MAX_DOCS_TO_AI,
+    `expected at most the shortlist size (${MAX_DOCS_TO_AI}) doc reads, got ${docReads.length}`
+  );
+  assert.ok(
+    docReads.length < POLICY_INDEX.length,
+    `must not load the whole store: read ${docReads.length} of ${POLICY_INDEX.length}`
+  );
   assert.ok(docReads.length > 0, "at least one document was loaded");
+});
+
+// ------------------------------------------------------------
+// Typo tolerance and phrasing — the failures seen in production,
+// where "did not show up" and "achild" sent the right policy out
+// of the shortlist entirely.
+// ------------------------------------------------------------
+
+test("a misspelled query still reaches the right policy", async () => {
+  const token = await login("staff");
+  await callJson("/api", {
+    method: "POST", token,
+    body: { query: "anaphlaxis emergancy epipen", campus: "YC" },
+  });
+  await settle();
+
+  assert.ok(
+    capturedPrompts.join("\n").includes("Anaphylaxis Policy"),
+    "single-letter typos must not hide the matching policy"
+  );
+});
+
+test("a missing space between words still matches", async () => {
+  const token = await login("staff");
+  await callJson("/api", {
+    method: "POST", token,
+    body: { query: "late pickupand dismissal", campus: "YC" },
+  });
+  await settle();
+
+  assert.ok(
+    capturedPrompts.join("\n").includes("Safe Arrival and Dismissal Policy"),
+    "a run-together word must still match the keyword it contains"
+  );
+});
+
+test("everyday phrasing matches the document's own vocabulary", async () => {
+  const token = await login("staff");
+  // Staff say "pick up"; the policy keyword is the single word "pickup".
+  await callJson("/api", {
+    method: "POST", token,
+    body: { query: "a parent was late to pick up their child", campus: "YC" },
+  });
+  await settle();
+
+  assert.ok(
+    capturedPrompts.join("\n").includes("Safe Arrival and Dismissal Policy"),
+    "spacing differences must not decide whether a policy is found"
+  );
 });
 
 test("index-first ranking still finds the keyword-matching policy", async () => {
@@ -628,8 +687,18 @@ test("a keyword-rich index still uses the cheap index-first path", async () => {
   });
   await settle();
 
+  // The point is that the index-first path shortlists before fetching bodies,
+  // instead of expanding the whole store the way v1 did. The bound is the
+  // shortlist size, so assert against that rather than a fixed document count.
   const docReads = kv.getKeys.filter((k) => k !== "policies");
-  assert.ok(docReads.length <= 8, `expected <=8 reads on the fast path, got ${docReads.length}`);
+  assert.ok(
+    docReads.length < POLICY_INDEX.length,
+    `must not expand the whole store: read ${docReads.length} of ${POLICY_INDEX.length}`
+  );
+  assert.ok(
+    docReads.length <= MAX_DOCS_TO_AI,
+    `expected at most the shortlist size (${MAX_DOCS_TO_AI}), got ${docReads.length}`
+  );
 });
 
 test("a scoped request loads exactly one document", async () => {

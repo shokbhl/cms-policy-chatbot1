@@ -32,7 +32,7 @@ const TOKEN_TTL = 60 * 60 * 8;          // 8 hours
 const LOG_TTL = 60 * 60 * 24 * 30;      // 30 days
 const AI_CACHE_TTL = 60 * 5;            // 5 minutes
 const DOC_CACHE_MS = 60 * 1000;         // in-isolate
-const MAX_DOCS_TO_AI = 8;
+const MAX_DOCS_TO_AI = 12;
 const MAX_CHARS_PER_DOC = 4000;
 
 const RATE_AUTH = { limit: 10, window: 60 };
@@ -349,42 +349,178 @@ function programMatches(docProgram, requested) {
 // Ranking
 // ============================================================
 
+// Words with no topical meaning. Negations are deliberately NOT listed:
+// several keyword phrases are built on them ("child not arriving", "child not
+// picked up"), and discarding "not" was what made "did not show up" unfindable.
 const STOP_WORDS = new Set([
-  "the", "and", "for", "are", "but", "not", "you", "your", "our", "with", "what",
+  "the", "and", "for", "are", "but", "you", "your", "our", "with", "what",
   "when", "where", "how", "why", "can", "does", "did", "should", "would", "could",
   "this", "that", "there", "from", "have", "has", "had", "was", "were", "who",
   "a", "an", "of", "to", "in", "on", "is", "it", "at", "be", "do", "if", "or", "we",
+  "i", "my", "me", "us", "am", "so", "as", "by", "will", "shall", "please", "tell",
 ]);
 
+// Everyday phrasing mapped onto the vocabulary the documents actually use.
+// Staff ask "didn't show up"; the Safe Arrival policy says "child not arriving".
+const SYNONYMS = new Map(Object.entries({
+  show: ["arrive", "arriving", "arrival", "attend", "attendance"],
+  showed: ["arrive", "arriving", "arrival"],
+  shows: ["arrive", "arriving", "arrival"],
+  absent: ["arrival", "arriving", "attendance"],
+  missing: ["arrival", "arriving"],
+  late: ["lateness", "arrival", "dismissal"],
+  pickup: ["pick", "dismissal", "picked"],
+  picked: ["dismissal", "pick"],
+  collect: ["pick", "dismissal"],
+  waitlist: ["waiting", "list"],
+  tylenol: ["medication", "acetaminophen", "counter"],
+  advil: ["medication", "ibuprofen", "counter"],
+  epipen: ["epinephrine", "anaphylaxis"],
+  allergy: ["anaphylaxis", "allergic"],
+  phone: ["cell", "mobile", "device"],
+  complaint: ["concerns", "issues", "complaints"],
+  complain: ["concerns", "issues", "complaints"],
+  lockdown: ["emergency", "secure"],
+  evacuate: ["evacuation", "fire", "emergency"],
+  nap: ["sleep", "rest"],
+  napping: ["sleep", "rest"],
+  teacher: ["staff", "educator", "classroom"],
+  birthday: ["birthdays", "celebration"],
+  sick: ["illness", "ill", "health"],
+  covid: ["illness", "outbreak", "infection"],
+}));
+
+const norm = (t) =>
+  String(t || "").toLowerCase().replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").trim();
+
+const wordsOf = (t) => norm(t).split(" ").filter(Boolean);
+
+// Query words worth matching on, plus their document-vocabulary synonyms.
 function tokenize(text) {
-  return String(text || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+  const out = [];
+  for (const w of wordsOf(text)) {
+    if (w.length < 2 || STOP_WORDS.has(w)) continue;
+    out.push(w);
+    for (const s of SYNONYMS.get(w) || []) out.push(...wordsOf(s));
+  }
+  return [...new Set(out)];
 }
 
-// Scores index entries (title + keywords only) and full candidates alike.
-function score(item, tokens, rawQuery) {
-  const title = String(item.title || "").toLowerCase();
-  const sectionTitle = String(item.section_title || "").toLowerCase();
-  const keywords = (item.keywords || []).join(" ").toLowerCase();
-  const content = String(item.content || "").toLowerCase();
-  const q = String(rawQuery || "").toLowerCase().trim();
+// Damerau-Levenshtein, abandoned as soon as the distance exceeds `max`.
+// Transpositions cost one edit, so "fier" -> "fire" is distance 1.
+function editDistance(a, b, max) {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const prev2 = [], prev = [], cur = [];
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    cur[0] = i;
+    let best = cur[0];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        cur[j] = Math.min(cur[j], prev2[j - 2] + 1);
+      }
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > max) return max + 1;
+    for (let j = 0; j <= b.length; j++) { prev2[j] = prev[j]; prev[j] = cur[j]; }
+  }
+  return prev[b.length];
+}
 
+// How well one query word matches one document word: 1 exact, 0 not at all.
+// Tolerant enough for real typing ("achild", "medicaton", "polcy").
+function wordSim(q, d) {
+  if (q === d) return 1;
+  if (q.length < 3 || d.length < 3) return 0;
+  const shorter = q.length < d.length ? q : d;
+  const longer = q.length < d.length ? d : q;
+  if (longer.includes(shorter) && shorter.length >= 4) return 0.8;
+  const tol = longer.length >= 8 ? 2 : longer.length >= 4 ? 1 : 0;
+  if (tol) {
+    const dist = editDistance(q, d, tol);
+    if (dist <= tol) return dist === 1 ? 0.85 : 0.7;
+  }
+  let p = 0;
+  while (p < shorter.length && q[p] === d[p]) p++;
+  if (p >= 4 && shorter.length >= 5) return 0.55;
+  return 0;
+}
+
+function bestSim(word, pool) {
+  let best = 0;
+  for (const p of pool) {
+    const s = wordSim(word, p);
+    if (s > best) best = s;
+    if (best === 1) break;
+  }
+  return best;
+}
+
+// Per-document derived text, memoized. loadDoc hands back the same object for
+// the life of the isolate, so this is computed once per document, not per query.
+const PREP = new WeakMap();
+
+function prepare(item) {
+  let prep = PREP.get(item);
+  if (prep) return prep;
+  const raw = Array.isArray(item.keywords)
+    ? item.keywords
+    : (item.keywords ? [item.keywords] : []);
+  // Some documents pack every keyword into a single comma-joined string.
+  const phrases = raw.flatMap((k) => String(k).split(",")).map(norm).filter(Boolean);
+  prep = {
+    phrases: phrases.map((p) => ({ text: p, words: wordsOf(p) })),
+    kwWords: new Set(phrases.flatMap(wordsOf)),
+    titleWords: wordsOf(item.title),
+    sectionWords: wordsOf(item.section_title),
+    // Body text only contributes a capped bonus, so indexing the whole of a
+    // long policy buys nothing and costs CPU on the first query in an isolate.
+    contentWords: new Set(wordsOf(item.content).slice(0, 1500)),
+    titleText: norm(item.title),
+    sectionText: norm(item.section_title),
+  };
+  if (typeof item === "object" && item !== null) PREP.set(item, prep);
+  return prep;
+}
+
+function score(item, tokens, rawQuery) {
+  const p = prepare(item);
+  const qNorm = norm(rawQuery);
+  const pool = tokens.length ? tokens : wordsOf(rawQuery);
   let s = 0;
+
+  // 1. Keyword phrases are the most specific signal a document carries.
+  //    Partial credit is the point: "child not arriving" must score well for
+  //    "a child did not show up", where "arriving" is never actually said.
+  for (const ph of p.phrases) {
+    if (!ph.words.length) continue;
+    let covered = 0;
+    for (const w of ph.words) covered += bestSim(w, pool);
+    const frac = covered / ph.words.length;
+    if (frac >= 0.5) s += 16 * frac * (ph.words.length >= 2 ? 1 : 0.5);
+    if (ph.words.length >= 2 && qNorm.includes(ph.text)) s += 10;
+  }
+
+  // 2. Titles.
   for (const t of tokens) {
-    if (keywords.includes(t)) s += 6;
-    if (title.includes(t)) s += 4;
-    if (sectionTitle.includes(t)) s += 3;
-    if (content.includes(t)) s += 1;
+    s += 5 * bestSim(t, p.titleWords);
+    s += 3 * bestSim(t, p.sectionWords);
+    if (p.kwWords.size) s += 4 * bestSim(t, p.kwWords);
   }
-  if (q.length > 6) {
-    if (title.includes(q)) s += 12;
-    if (sectionTitle.includes(q)) s += 10;
-    if (keywords.includes(q)) s += 8;
+
+  // 3. Body text, capped so long documents cannot win on length alone.
+  let body = 0;
+  for (const t of tokens) if (p.contentWords.has(t)) body += 1;
+  s += Math.min(body, 4);
+
+  // 4. The whole question appearing verbatim in a heading.
+  if (qNorm.length > 6) {
+    if (p.titleText.includes(qNorm)) s += 12;
+    if (p.sectionText.includes(qNorm)) s += 10;
   }
-  if (content.length > 200) s += 1;
   return s;
 }
 
