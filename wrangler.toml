@@ -21,6 +21,21 @@ head_sampling_rate = 1
 [vars]
 OPENAI_MODEL = "gpt-4o-mini"
 
+# Which vendor turns text into meaning-vectors for semantic search.
+# Switching vendor = change this, add that vendor's key as a secret, then
+# POST /admin/reindex to rebuild the index. Nothing else changes.
+#   openai     text-embedding-3-small   uses OPENAI_API_KEY (already set)
+#   workersai  @cf/baai/bge-base-en-v1.5  no key; needs the [ai] binding below
+#   cohere     embed-english-v3.0       needs COHERE_API_KEY
+#   voyage     voyage-3-lite            needs VOYAGE_API_KEY
+#   gemini     text-embedding-004       needs GEMINI_API_KEY
+EMBEDDING_PROVIDER = "openai"
+
+# Uncomment to use Cloudflare's own embedding models — no third-party key,
+# no data leaving Cloudflare, and no per-call vendor bill.
+# [ai]
+# binding = "AI"
+
 # The site v2 is served from. Kept narrow so the Worker only answers the
 # real front end. Takes effect on the next `wrangler deploy`; until then the
 # deployed Worker still carries the older "*".

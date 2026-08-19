@@ -30,9 +30,18 @@ const SERVICE = "cms-assistant-v2";
 
 const TOKEN_TTL = 60 * 60 * 8;          // 8 hours
 const LOG_TTL = 60 * 60 * 24 * 30;      // 30 days
+import {
+  embed, embeddingsAvailable, providerConfig, normalize, cosine,
+  packVectors, unpackVectors, indexText, entryKey, PROVIDERS,
+} from "./lib/embeddings.js";
+
 const AI_CACHE_TTL = 60 * 5;            // 5 minutes
 const DOC_CACHE_MS = 60 * 1000;         // in-isolate
 const MAX_DOCS_TO_AI = 12;
+// When semantic search is on, the keyword pass must hand over a wider pool,
+// or it would discard the very documents meaning-matching exists to rescue.
+const SHORTLIST_POOL = 40;
+const SEMANTIC_INDEX_KEY = "emb:index:v1";
 const MAX_CHARS_PER_DOC = 4000;
 
 const RATE_AUTH = { limit: 10, window: 60 };
@@ -580,21 +589,108 @@ function buildIdf(items) {
   };
 }
 
-function rank(items, query, limit) {
+function rank(items, query, limit, semantic) {
   const tokens = tokenize(query);
   const idf = buildIdf(items);
-  const scored = items
-    .map((c) => ({ ...c, _score: score(c, tokens, query, idf) }))
-    .sort((a, b) => b._score - a._score);
+  const lexical = items.map((c, i) => ({ i, s: score(c, tokens, query, idf) }));
 
-  const matched = scored.filter((c) => c._score > 0);
-  return (matched.length ? matched : scored).slice(0, limit || MAX_DOCS_TO_AI);
+  if (!semantic) {
+    const scored = items
+      .map((c, i) => ({ ...c, _score: lexical[i].s }))
+      .sort((a, b) => b._score - a._score);
+    const matched = scored.filter((c) => c._score > 0);
+    return (matched.length ? matched : scored).slice(0, limit || MAX_DOCS_TO_AI);
+  }
+
+  // Two rankings — one on words, one on meaning — combined by reciprocal rank
+  // fusion. Fusing positions rather than raw scores means the two never have
+  // to be put on a comparable scale, which is what makes hybrid search stable.
+  const meaning = items.map((c, i) => ({ i, s: semantic.similarity(c) }));
+  const order = (list) =>
+    list.filter((x) => x.s !== null)
+        .sort((a, b) => b.s - a.s)
+        .reduce((m, x, pos) => m.set(x.i, pos + 1), new Map());
+
+  const lexRank = order(lexical);
+  const semRank = order(meaning);
+  const K = 20;
+
+  const fused = items.map((c, i) => {
+    const lr = lexRank.get(i);
+    const sr = semRank.get(i);
+    let s = 0;
+    if (lr) s += 1 / (K + lr);
+    if (sr) s += 1.2 / (K + sr);      // meaning weighted slightly above words
+    return { ...c, _score: s, _lex: lexical[i].s, _sem: meaning[i].s };
+  }).sort((a, b) => b._score - a._score);
+
+  const matched = fused.filter((c) => c._score > 0);
+  return (matched.length ? matched : fused).slice(0, limit || MAX_DOCS_TO_AI);
+}
+
+// ------------------------------------------------------------
+// Semantic index: one blob of quantised vectors in STATE, loaded
+// once per isolate. Rebuilt via POST /admin/reindex.
+// ------------------------------------------------------------
+
+async function loadSemanticIndex(env) {
+  const cached = cacheGet(SEMANTIC_INDEX_KEY);
+  if (cached !== undefined) return cached;
+
+  let index = null;
+  try {
+    const raw = await env.STATE.get(SEMANTIC_INDEX_KEY);
+    if (raw) {
+      const meta = JSON.parse(raw);
+      const cfg = providerConfig(env);
+      // Vectors from different providers or models are not comparable. Rather
+      // than return nonsense, ignore a stale index and fall back to keywords.
+      if (meta.provider === cfg.name && meta.model === cfg.model && meta.dims === cfg.dims) {
+        index = {
+          dims: meta.dims,
+          vectors: unpackVectors(meta.b64, meta.dims, meta.keys.length),
+          pos: new Map(meta.keys.map((k, i) => [k, i])),
+        };
+      }
+    }
+  } catch {
+    index = null;
+  }
+  return cacheSet(SEMANTIC_INDEX_KEY, index, 10 * 60 * 1000);
+}
+
+async function buildSemantic(env, query) {
+  if (!embeddingsAvailable(env)) return null;
+  let index;
+  try {
+    index = await loadSemanticIndex(env);
+  } catch {
+    return null;
+  }
+  if (!index) return null;
+
+  let queryUnit;
+  try {
+    const [vec] = await embed(env, [query], "query");
+    if (!vec || vec.length !== index.dims) return null;
+    queryUnit = normalize(vec);
+  } catch {
+    return null;   // never let an embedding outage take the assistant down
+  }
+
+  return {
+    similarity(item) {
+      const pos = index.pos.get(entryKey(item));
+      if (pos === undefined) return null;
+      return cosine(queryUnit, index.vectors[pos]);
+    },
+  };
 }
 
 // Index-first: the index carries title + keywords, the two heaviest signals,
 // so shortlist on it and only then fetch bodies — in parallel.
 // v1 expanded every policy and protocol on each cold request (~30 serial reads).
-async function shortlistDocs(env, kind, { query, program, scope }) {
+async function shortlistDocs(env, kind, { query, program, scope, semantic }) {
   if (scope?.id) {
     const doc = await loadDoc(env, kind, scope.id);
     return doc && programMatches(doc.program, program) ? [doc] : [];
@@ -611,16 +707,17 @@ async function shortlistDocs(env, kind, { query, program, scope }) {
   // cold isolate rather than one per request, and runs in parallel.
   const indexHasKeywords = index.some((e) => Array.isArray(e.keywords) && e.keywords.length);
 
-  const entries = indexHasKeywords ? rank(index, query, MAX_DOCS_TO_AI) : index;
+  const pool = semantic ? SHORTLIST_POOL : MAX_DOCS_TO_AI;
+  const entries = indexHasKeywords ? rank(index, query, pool) : index;
   const docs = (await Promise.all(entries.map((e) => loadDoc(env, kind, e.id))))
     .filter((d) => d && programMatches(d.program, program));
 
-  return indexHasKeywords ? docs : rank(docs, query, MAX_DOCS_TO_AI);
+  return indexHasKeywords ? docs : rank(docs, query, pool, semantic);
 }
 
 // Each handbook SECTION is its own candidate. v1 concatenated every section
 // into one blob, so a large handbook crowded out everything else.
-async function buildCandidates(env, { role, campus, program, scope, query }) {
+async function buildCandidates(env, { role, campus, program, scope, query, semantic }) {
   const type = scope?.type ? String(scope.type).toLowerCase() : null;
 
   const wantPolicies = role === "staff" && (!type || type === "policy");
@@ -628,8 +725,8 @@ async function buildCandidates(env, { role, campus, program, scope, query }) {
   const wantHandbooks = !type || type === "handbook";
 
   const [policies, protocols] = await Promise.all([
-    wantPolicies ? shortlistDocs(env, "policy", { query, program, scope }) : [],
-    wantProtocols ? shortlistDocs(env, "protocol", { query, program, scope }) : [],
+    wantPolicies ? shortlistDocs(env, "policy", { query, program, scope, semantic }) : [],
+    wantProtocols ? shortlistDocs(env, "protocol", { query, program, scope, semantic }) : [],
   ]);
 
   const out = [];
@@ -976,7 +1073,13 @@ async function handleApi(request, env, ctx) {
     return json({ ...cached, cached: true }, 200, request, env);
   }
 
-  const candidates = await buildCandidates(env, { role: auth.role, campus, program, scope, query });
+  // Meaning-based matching, when an index exists. Falls back to keywords alone
+  // if it is missing, stale, or the embedding call fails.
+  const semantic = await buildSemantic(env, query);
+
+  const candidates = await buildCandidates(env, {
+    role: auth.role, campus, program, scope, query, semantic,
+  });
 
   if (!candidates.length) {
     ctx.waitUntil(writeLog(env, {
@@ -992,7 +1095,7 @@ async function handleApi(request, env, ctx) {
     }, 200, request, env);
   }
 
-  const top = rank(candidates, query, MAX_DOCS_TO_AI);
+  const top = rank(candidates, query, MAX_DOCS_TO_AI, semantic);
   const ai = await askOpenAI(env, buildPrompt({ query, campus, program, role: auth.role, scope, docs: top }));
 
   if (!ai.ok) {
@@ -1068,6 +1171,138 @@ async function handleApi(request, env, ctx) {
   }));
 
   return json(payload, 200, request, env);
+}
+
+// Shows what retrieval would send to the model for a question, and why —
+// keyword score, meaning score, and the resulting order. No answer is
+// generated and nothing is logged, so it is cheap to use for diagnosis.
+async function handleDiagnose(request, env, url) {
+  const auth = await authenticate(request, env, ["admin"]);
+  if (!auth.ok) return fail("Unauthorized (admin token required)", 401, request, env);
+
+  const query = String(url.searchParams.get("q") || "").trim();
+  if (!query) return fail("Missing q", 400, request, env);
+  const campus = normCampus(url.searchParams.get("campus") || "MC");
+  const program = normProgram(url.searchParams.get("program"));
+
+  const started = Date.now();
+  const semantic = await buildSemantic(env, query);
+  const candidates = await buildCandidates(env, {
+    role: "staff", campus, program, scope: null, query, semantic,
+  });
+  const top = rank(candidates, query, MAX_DOCS_TO_AI, semantic);
+
+  return json({
+    ok: true,
+    query,
+    campus,
+    semantic: Boolean(semantic),
+    considered: candidates.length,
+    ms: Date.now() - started,
+    results: top.map((c, i) => ({
+      position: i + 1,
+      id: c.id,
+      type: c.type,
+      section_key: c.section_key || null,
+      title: c.title,
+      section_title: c.section_title || null,
+      keyword_score: Math.round((c._lex ?? c._score ?? 0) * 100) / 100,
+      meaning_score: c._sem == null ? null : Math.round(c._sem * 1000) / 1000,
+    })),
+  }, 200, request, env);
+}
+
+// Rebuilds the semantic index over every document a staff member could reach.
+// Admin-only, and safe to re-run: it replaces the stored index wholesale.
+async function handleReindex(request, env) {
+  const auth = await authenticate(request, env, ["admin"]);
+  if (!auth.ok) return fail("Unauthorized (admin token required)", 401, request, env);
+
+  if (!embeddingsAvailable(env)) {
+    let hint = "Configure an embedding provider.";
+    try {
+      const { name, provider } = providerConfig(env);
+      hint = provider.secret
+        ? `Provider "${name}" needs the ${provider.secret} secret.`
+        : `Provider "${name}" needs an [ai] binding in wrangler.toml.`;
+    } catch (e) {
+      hint = e.message;
+    }
+    return fail(hint, 400, request, env);
+  }
+
+  const cfg = providerConfig(env);
+  const started = Date.now();
+  const items = [];
+
+  for (const kind of ["policy", "protocol"]) {
+    for (const entry of await loadIndex(env, kind)) {
+      const doc = await loadDoc(env, kind, entry.id);
+      if (doc) items.push({ ...doc, id: doc.id || entry.id, type: kind });
+    }
+  }
+
+  // Enumerate handbooks from the store rather than a hard-coded campus list,
+  // so a new campus is picked up without a code change.
+  if (env.HANDBOOKS) {
+    const listed = await env.HANDBOOKS.list({ prefix: "handbook_" });
+    for (const k of listed.keys || []) {
+      const parsed = safeParse(await env.HANDBOOKS.get(k.name), null);
+      for (const hb of (Array.isArray(parsed) ? parsed : [parsed]).filter(Boolean)) {
+        for (const sec of hb.sections || []) {
+          items.push({
+            id: hb.id || k.name, type: "handbook", title: hb.title, keywords: hb.keywords,
+            section_key: sec.key, section_title: sec.title, content: sec.content,
+          });
+        }
+      }
+    }
+  }
+
+  if (!items.length) return fail("Nothing to index", 400, request, env);
+
+  // Campuses can share a handbook id, so collapse duplicates.
+  const seen = new Set();
+  const unique = items.filter((it) => {
+    const k = entryKey(it);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  const vectors = [];
+  const BATCH = 64;
+  try {
+    for (let i = 0; i < unique.length; i += BATCH) {
+      const slice = unique.slice(i, i + BATCH);
+      const got = await embed(env, slice.map(indexText), "document");
+      if (got.length !== slice.length) {
+        return fail("Embedding provider returned the wrong number of vectors", 502, request, env);
+      }
+      vectors.push(...got);
+    }
+  } catch (e) {
+    return fail(`Embedding failed: ${e.message}`, 502, request, env);
+  }
+
+  const { dims, b64 } = packVectors(vectors);
+  if (dims !== cfg.dims) {
+    return fail(`Provider returned ${dims}-dimension vectors, expected ${cfg.dims}`, 502, request, env);
+  }
+
+  await env.STATE.put(SEMANTIC_INDEX_KEY, JSON.stringify({
+    provider: cfg.name, model: cfg.model, dims, b64,
+    keys: unique.map(entryKey),
+    built_at: new Date().toISOString(),
+  }));
+
+  cacheSet(SEMANTIC_INDEX_KEY, undefined, 0);   // drop the isolate's stale copy
+
+  return json({
+    ok: true, provider: cfg.name, model: cfg.model, dims,
+    indexed: unique.length, approx_kb: Math.round(b64.length / 1024),
+    ms: Date.now() - started,
+  }, 200, request, env);
 }
 
 async function handleAdminLogs(request, env, url) {
@@ -1200,6 +1435,16 @@ export default {
       if (path === "/admin/logs") {
         if (method !== "GET") return fail("Only GET allowed", 405, request, env);
         return handleAdminLogs(request, env, url);
+      }
+
+      if (path === "/admin/diagnose") {
+        if (method !== "GET") return fail("Only GET allowed", 405, request, env);
+        return handleDiagnose(request, env, url);
+      }
+
+      if (path === "/admin/reindex") {
+        if (method !== "POST") return fail("Only POST allowed", 405, request, env);
+        return handleReindex(request, env);
       }
 
       if (path === "/admin/stats") {

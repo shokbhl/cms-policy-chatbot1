@@ -1,0 +1,283 @@
+{
+  "_comment": [
+    "Retrieval benchmark for the CMS assistant.",
+    "Each entry is a real or realistic staff question and the document ids (or",
+    "handbook section keys) that genuinely answer it. Several accept more than",
+    "one, because a handbook section often answers as well as the policy does.",
+    "",
+    "Questions marked 'real failure' were taken from the production logs, where",
+    "the assistant found nothing.",
+    "",
+    "To score a change, run each question through GET /admin/diagnose and check",
+    "where the wanted document lands. See EMBEDDINGS.md."
+  ],
+  "questions": [
+    {
+      "q": "What should we do if a child did not show up",
+      "want": [
+        "safe_arrival"
+      ],
+      "note": "real failure from your logs"
+    },
+    {
+      "q": "What should we so if a child did not show up",
+      "want": [
+        "safe_arrival"
+      ],
+      "note": "real failure - typo 'so' for 'do'"
+    },
+    {
+      "q": "What should we so if achild did not show up",
+      "want": [
+        "safe_arrival"
+      ],
+      "note": "real failure - typo 'achild'"
+    },
+    {
+      "q": "what should we do if a child didnt show up on time ?",
+      "want": [
+        "safe_arrival"
+      ],
+      "note": "worked Aug 17, at slot 8"
+    },
+    {
+      "q": "a child was not picked up at the end of the day",
+      "want": [
+        "safe_arrival"
+      ]
+    },
+    {
+      "q": "who is allowed to pick up a child",
+      "want": [
+        "safe_arrival"
+      ]
+    },
+    {
+      "q": "What is the anaphylaxis procedure?",
+      "want": [
+        "anaphylaxis_policy"
+      ],
+      "note": "currently works - must not regress"
+    },
+    {
+      "q": "Whats the protocol for washing hands",
+      "want": [
+        "sanitary_practices",
+        "health_policy"
+      ],
+      "note": "currently works - must not regress"
+    },
+    {
+      "q": "What is the classroom teacher responsible for?",
+      "want": [
+        "classroom_management",
+        "caring_students"
+      ],
+      "note": "real failure from your logs"
+    },
+    {
+      "q": "fire drill procedure",
+      "want": [
+        "fire_safety"
+      ]
+    },
+    {
+      "q": "what do we do in a lockdown",
+      "want": [
+        "emergency_management"
+      ]
+    },
+    {
+      "q": "how do I give a child medication",
+      "want": [
+        "medication_administration"
+      ]
+    },
+    {
+      "q": "can I give tylenol without a doctors note",
+      "want": [
+        "medication_administration"
+      ]
+    },
+    {
+      "q": "what is the waiting list policy",
+      "want": [
+        "waiting_list"
+      ]
+    },
+    {
+      "q": "how often do we inspect the playground",
+      "want": [
+        "playground_safety"
+      ]
+    },
+    {
+      "q": "when do I report a serious occurrence",
+      "want": [
+        "serious_occurrence"
+      ]
+    },
+    {
+      "q": "how often do we check sleeping infants",
+      "want": [
+        "sleep_infants"
+      ]
+    },
+    {
+      "q": "toddler sleep supervision checks",
+      "want": [
+        "sleep_toddlers"
+      ]
+    },
+    {
+      "q": "do staff need a criminal record check",
+      "want": [
+        "criminal_reference_vsc_policy"
+      ]
+    },
+    {
+      "q": "a parent wants to make a complaint",
+      "want": [
+        "parent_issues_concerns",
+        "parent_concerns"
+      ]
+    },
+    {
+      "q": "what are the prohibited practices",
+      "want": [
+        "prohibited_practices",
+        "monitoring_compliance_contraventions",
+        "program_statement"
+      ]
+    },
+    {
+      "q": "what is the dress code",
+      "want": [
+        "employee_conduct"
+      ]
+    },
+    {
+      "q": "can staff use their phone at work",
+      "want": [
+        "employee_conduct"
+      ]
+    },
+    {
+      "q": "fier drill procedeure",
+      "want": [
+        "fire_safety"
+      ],
+      "note": "typo test"
+    },
+    {
+      "q": "anaphlaxis emergancy",
+      "want": [
+        "anaphylaxis_policy"
+      ],
+      "note": "typo test"
+    },
+    {
+      "q": "medicaton administraton",
+      "want": [
+        "medication_administration"
+      ],
+      "note": "typo test"
+    },
+    {
+      "q": "playgrond inspecton",
+      "want": [
+        "playground_safety"
+      ],
+      "note": "typo test"
+    },
+    {
+      "q": "whats the waitlist polcy",
+      "want": [
+        "waiting_list"
+      ],
+      "note": "typo test"
+    },
+    {
+      "q": "What should we do if a child didn't come to school",
+      "want": [
+        "safe_arrival"
+      ],
+      "note": "user-reported paraphrase"
+    },
+    {
+      "q": "What should we do if a child didn’t come to school",
+      "want": [
+        "safe_arrival"
+      ],
+      "note": "user-reported, curly apostrophe"
+    },
+    {
+      "q": "a child is absent today",
+      "want": [
+        "safe_arrival"
+      ],
+      "note": "paraphrase"
+    },
+    {
+      "q": "the child hasn't arrived yet",
+      "want": [
+        "safe_arrival"
+      ],
+      "note": "paraphrase"
+    },
+    {
+      "q": "a kid never turned up today",
+      "want": [
+        "safe_arrival"
+      ],
+      "note": "paraphrase"
+    },
+    {
+      "q": "parent didn't drop off their child",
+      "want": [
+        "safe_arrival",
+        "dropoff_pickup",
+        "classroom_dropoff_pickup"
+      ],
+      "note": "paraphrase"
+    },
+    {
+      "q": "what if nobody comes to collect a child",
+      "want": [
+        "safe_arrival",
+        "dropoff_pickup",
+        "classroom_dropoff_pickup",
+        "pick_up"
+      ],
+      "note": "paraphrase"
+    },
+    {
+      "q": "a student isn't here this morning",
+      "want": [
+        "safe_arrival"
+      ],
+      "note": "paraphrase"
+    },
+    {
+      "q": "child can't breathe after eating peanuts",
+      "want": [
+        "anaphylaxis_policy"
+      ],
+      "note": "paraphrase"
+    },
+    {
+      "q": "we don't have a doctors note for the medicine",
+      "want": [
+        "medication_administration"
+      ],
+      "note": "paraphrase"
+    },
+    {
+      "q": "staff shouldn't be on their phones",
+      "want": [
+        "employee_conduct"
+      ],
+      "note": "paraphrase"
+    }
+  ]
+}
