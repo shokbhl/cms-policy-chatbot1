@@ -1007,11 +1007,38 @@ async function writeLog(env, record) {
       expirationTtl: LOG_TTL,
       metadata,
     });
+    return key;
   } catch (err) {
     // Logging must never break a user request, but a silent failure means the
     // admin dashboard just goes empty with no explanation — so surface it.
     console.error("writeLog failed:", err?.message || String(err));
+    return null;
   }
+}
+
+// Marks one logged answer as helpful or not.
+//
+// The id is a KV key supplied by the caller, so it is checked against the log
+// key shape before anything is written. Without that, a staff token could be
+// used to overwrite session tokens or the meaning-index, which live in the
+// same namespace.
+const LOG_KEY_SHAPE = /^log:\d{16}:\d{6}:[a-z0-9]{1,16}$/i;
+
+async function recordFeedback(env, answerId, verdict, note) {
+  if (!LOG_KEY_SHAPE.test(String(answerId || ""))) return { ok: false, error: "Unknown answer" };
+
+  const existing = await env.STATE.getWithMetadata(answerId);
+  if (!existing || existing.value === null) return { ok: false, error: "That answer has expired" };
+
+  const metadata = {
+    ...(existing.metadata || {}),
+    feedback: verdict,
+    feedback_note: clamp(String(note || ""), 300) || null,
+    feedback_at: Date.now(),
+  };
+
+  await env.STATE.put(answerId, existing.value, { expirationTtl: LOG_TTL, metadata });
+  return { ok: true };
 }
 
 async function readLogs(env, limit) {
@@ -1268,13 +1295,15 @@ async function handleApi(request, env, ctx) {
   ctx.waitUntil(
     env.STATE.put(cacheKey, JSON.stringify(payload), { expirationTtl: AI_CACHE_TTL }).catch(() => {})
   );
-  ctx.waitUntil(writeLog(env, {
+  // Logged before responding rather than in waitUntil, because the id has to
+  // travel back with the answer for feedback to attach to it.
+  payload.answer_id = await writeLog(env, {
     campus, user_role: auth.role, ok: Boolean(chosen), ms: Date.now() - started, query,
     source_type: chosen?.type || null,
     source_id: chosen?.id || null,
     source_title: chosen?.title || null,
     section_key: handbookSection?.section_key || null,
-  }));
+  });
 
   return json(payload, 200, request, env);
 }
@@ -1405,23 +1434,33 @@ function collectAlsoSays(top, chosen, aiOthers) {
   return out.slice(0, 3);
 }
 
-async function handleReindex(request, env) {
-  const auth = await authenticate(request, env, ["admin"]);
-  if (!auth.ok) return fail("Unauthorized (admin token required)", 401, request, env);
+// Was that answer any good? Without this the logs can only show whether a
+// document was chosen, which says nothing about whether the answer was right -
+// and a confident wrong answer is the case worth finding.
+async function handleFeedback(request, env) {
+  const auth = await authenticate(request, env, ["staff", "parent", "admin"]);
+  if (!auth.ok) return fail("Unauthorized", 401, request, env);
 
-  if (!embeddingsAvailable(env)) {
-    let hint = "Configure an embedding provider.";
-    try {
-      const { name, provider } = providerConfig(env);
-      hint = provider.secret
-        ? `Provider "${name}" needs the ${provider.secret} secret.`
-        : `Provider "${name}" needs an [ai] binding in wrangler.toml.`;
-    } catch (e) {
-      hint = e.message;
-    }
-    return fail(hint, 400, request, env);
+  const rate = await rateLimit(env, `fb:${auth.token}`, RATE_API);
+  if (!rate.ok) return tooMany(rate.retry_after, request, env);
+
+  const body = await readBody(request);
+  if (body === null) return fail("Invalid JSON", 400, request, env);
+
+  const verdict = String(body.verdict || "").toLowerCase();
+  if (verdict !== "good" && verdict !== "bad") {
+    return fail('verdict must be "good" or "bad"', 400, request, env);
   }
 
+  const result = await recordFeedback(env, body.answer_id, verdict, body.note);
+  if (!result.ok) return fail(result.error, 400, request, env);
+
+  return json({ ok: true }, 200, request, env);
+}
+
+// Rebuilds the meaning-index over everything a staff member could be shown.
+// Safe to re-run: it replaces the stored index wholesale rather than appending.
+async function rebuildSemanticIndex(env) {
   const cfg = providerConfig(env);
   const started = Date.now();
   const items = [];
@@ -1450,7 +1489,7 @@ async function handleReindex(request, env) {
     }
   }
 
-  if (!items.length) return fail("Nothing to index", 400, request, env);
+  if (!items.length) throw new Error("Nothing to index");
 
   // Campuses can share a handbook id, so collapse duplicates.
   const seen = new Set();
@@ -1463,23 +1502,15 @@ async function handleReindex(request, env) {
 
   const vectors = [];
   const BATCH = 64;
-  try {
-    for (let i = 0; i < unique.length; i += BATCH) {
-      const slice = unique.slice(i, i + BATCH);
-      const got = await embed(env, slice.map(indexText), "document");
-      if (got.length !== slice.length) {
-        return fail("Embedding provider returned the wrong number of vectors", 502, request, env);
-      }
-      vectors.push(...got);
-    }
-  } catch (e) {
-    return fail(`Embedding failed: ${e.message}`, 502, request, env);
+  for (let i = 0; i < unique.length; i += BATCH) {
+    const slice = unique.slice(i, i + BATCH);
+    const got = await embed(env, slice.map(indexText), "document");
+    if (got.length !== slice.length) throw new Error("Embedding provider returned the wrong number of vectors");
+    vectors.push(...got);
   }
 
   const { dims, b64 } = packVectors(vectors);
-  if (dims !== cfg.dims) {
-    return fail(`Provider returned ${dims}-dimension vectors, expected ${cfg.dims}`, 502, request, env);
-  }
+  if (dims !== cfg.dims) throw new Error(`Provider returned ${dims}-dimension vectors, expected ${cfg.dims}`);
 
   await env.STATE.put(SEMANTIC_INDEX_KEY, JSON.stringify({
     provider: cfg.name, model: cfg.model, dims, b64,
@@ -1489,11 +1520,35 @@ async function handleReindex(request, env) {
 
   cacheSet(SEMANTIC_INDEX_KEY, null, 0);   // drop the isolate's stale copy
 
-  return json({
-    ok: true, provider: cfg.name, model: cfg.model, dims,
+  return {
+    provider: cfg.name, model: cfg.model, dims,
     indexed: unique.length, approx_kb: Math.round(b64.length / 1024),
     ms: Date.now() - started,
-  }, 200, request, env);
+  };
+}
+
+async function handleReindex(request, env) {
+  const auth = await authenticate(request, env, ["admin"]);
+  if (!auth.ok) return fail("Unauthorized (admin token required)", 401, request, env);
+
+  if (!embeddingsAvailable(env)) {
+    let hint = "Configure an embedding provider.";
+    try {
+      const { name, provider } = providerConfig(env);
+      hint = provider.secret
+        ? `Provider "${name}" needs the ${provider.secret} secret.`
+        : `Provider "${name}" needs an [ai] binding in wrangler.toml.`;
+    } catch (e) {
+      hint = e.message;
+    }
+    return fail(hint, 400, request, env);
+  }
+
+  try {
+    return json({ ok: true, ...(await rebuildSemanticIndex(env)) }, 200, request, env);
+  } catch (e) {
+    return fail(`Reindex failed: ${e.message}`, 502, request, env);
+  }
 }
 
 async function handleAdminLogs(request, env, url) {
@@ -1628,6 +1683,11 @@ export default {
         return handleAdminLogs(request, env, url);
       }
 
+      if (path === "/feedback") {
+        if (method !== "POST") return fail("Only POST allowed", 405, request, env);
+        return handleFeedback(request, env);
+      }
+
       if (path === "/admin/diagnose") {
         if (method !== "GET") return fail("Only GET allowed", 405, request, env);
         return handleDiagnose(request, env, url);
@@ -1650,5 +1710,20 @@ export default {
       console.error(`Unhandled error on ${method} ${path}:`, err?.stack || err?.message || String(err));
       return json({ ok: false, error: "Server error" }, 500, request, env);
     }
+  },
+
+  // Nightly reindex (see [triggers] in wrangler.toml). Content is edited
+  // directly in KV by people, not through this Worker, so there is no write
+  // to hook onto - a scheduled rebuild is what keeps the meaning-index
+  // describing the documents as they are now.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      try {
+        const res = await rebuildSemanticIndex(env);
+        console.log(`scheduled reindex: ${res.indexed} sections via ${res.provider}/${res.model}`);
+      } catch (e) {
+        console.error("scheduled reindex failed:", e?.message || String(e));
+      }
+    })());
   },
 };

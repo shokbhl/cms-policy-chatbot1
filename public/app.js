@@ -18,6 +18,7 @@ const URLS = {
   handbooks: `${WORKER_BASE}/handbooks`,
   doc: `${WORKER_BASE}/doc`,
   health: `${WORKER_BASE}/health`,
+  feedback: `${WORKER_BASE}/feedback`,
 };
 
 const LS = {
@@ -739,6 +740,41 @@ chatForm?.addEventListener("submit", (e) => {
   ask(q);
 });
 
+// A thumbs up/down under each answer. The logs can only show whether a
+// document was found, which says nothing about whether the answer was right —
+// and a confident wrong answer is the one worth hearing about.
+function attachFeedback(el, answerId) {
+  if (!el || !answerId) return;
+
+  const bar = document.createElement("div");
+  bar.className = "feedback";
+  bar.innerHTML =
+    `<span class="feedback-q">Was this helpful?</span>` +
+    `<button type="button" class="feedback-btn" data-verdict="good" aria-label="Helpful">👍</button>` +
+    `<button type="button" class="feedback-btn" data-verdict="bad" aria-label="Not helpful">👎</button>`;
+
+  bar.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest(".feedback-btn");
+    if (!btn) return;
+    const verdict = btn.dataset.verdict;
+
+    // Thank them immediately; a failed send must not make it look ignored.
+    bar.innerHTML = `<span class="feedback-done">${verdict === "good" ? "Thanks." : "Thanks — we'll look at this one."}</span>`;
+
+    try {
+      await fetch(ENDPOINTS.feedback, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ answer_id: answerId, verdict }),
+      });
+    } catch {
+      /* the rating is a nicety; never interrupt someone's work over it */
+    }
+  });
+
+  el.appendChild(bar);
+}
+
 function renderAnswer(data) {
   const answer = (data.answer || "").trim() || data.note || "I couldn't find an answer for that.";
   let html = escapeHtml(answer).replace(/\n/g, "<br>");
@@ -838,7 +874,8 @@ async function ask(question, scope = null, prefillOnly = false) {
 
     const html = renderAnswer(data);
     caches.answers.set(cacheKey, html);
-    addMessage("assistant", html);
+    const el = addMessage("assistant", html);
+    attachFeedback(el, data.answer_id);
   } catch {
     hideTyping();
     addMessage("assistant", "Could not reach the server. Check your connection and try again.");

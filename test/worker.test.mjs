@@ -32,6 +32,14 @@ class MockKV {
     return this.store.get(key)?.value ?? null;
   }
 
+  // Real KV returns the value and its metadata together; feedback needs both
+  // so a rating can be attached without discarding the logged record.
+  async getWithMetadata(key) {
+    this.getKeys.push(key);
+    const hit = this.store.get(key);
+    return { value: hit?.value ?? null, metadata: hit?.metadata ?? null };
+  }
+
   async put(key, value, opts = {}) {
     this.writes.push(key);
     this.store.set(key, { value: String(value), metadata: opts.metadata ?? null });
@@ -577,6 +585,72 @@ test("an unscoped staff query shortlists policy docs instead of loading all 18",
     `must not load the whole store: read ${docReads.length} of ${POLICY_INDEX.length}`
   );
   assert.ok(docReads.length > 0, "at least one document was loaded");
+});
+
+// ------------------------------------------------------------
+// Rating an answer. The id is a KV key handed to the caller, so
+// the endpoint must refuse anything that is not a log key.
+// ------------------------------------------------------------
+
+test("an answer can be rated, and the rating lands on that log entry", async () => {
+  const token = await login("staff");
+
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "late pickup dismissal arrival", campus: "YC" },
+  });
+  await settle();
+
+  assert.ok(data.answer_id, "the answer must come back with an id to rate");
+
+  const fb = await callJson("/feedback", {
+    method: "POST", token,
+    body: { answer_id: data.answer_id, verdict: "bad", note: "missed the deadline" },
+  });
+  assert.equal(fb.data.ok, true);
+
+  const { data: logs } = await callJson("/admin/logs", { token: await login("admin") });
+  const rated = (logs.logs || []).find((l) => l.feedback);
+  assert.equal(rated?.feedback, "bad", "the rating must be visible in the logs");
+  assert.match(rated.feedback_note, /deadline/);
+});
+
+test("feedback cannot be used to overwrite anything that is not a log", async () => {
+  const token = await login("staff");
+  const before = await currentEnv.STATE.get(`staff:${token}`);
+  assert.ok(before, "the session token is stored in the same namespace");
+
+  const fb = await callJson("/feedback", {
+    method: "POST", token,
+    body: { answer_id: `staff:${token}`, verdict: "good" },
+  });
+
+  assert.equal(fb.res.status, 400, "a non-log key must be refused");
+  assert.equal(
+    await currentEnv.STATE.get(`staff:${token}`), before,
+    "and the session token must be untouched"
+  );
+});
+
+test("a rating for an unknown answer is refused", async () => {
+  const token = await login("staff");
+  const fb = await callJson("/feedback", {
+    method: "POST", token,
+    body: { answer_id: "log:0000000000000000:000000:deadbeef", verdict: "good" },
+  });
+  assert.equal(fb.res.status, 400);
+});
+
+test("only good or bad are accepted as verdicts", async () => {
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token, body: { query: "late pickup", campus: "YC" },
+  });
+  await settle();
+  const fb = await callJson("/feedback", {
+    method: "POST", token, body: { answer_id: data.answer_id, verdict: "excellent" },
+  });
+  assert.equal(fb.res.status, 400);
 });
 
 // ------------------------------------------------------------
