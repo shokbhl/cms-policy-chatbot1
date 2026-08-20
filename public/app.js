@@ -13,7 +13,6 @@ const WORKER_BASE =
 const URLS = {
   api: `${WORKER_BASE}/api`,
   staff: `${WORKER_BASE}/auth/staff`,
-  parent: `${WORKER_BASE}/auth/parent`,
   admin: `${WORKER_BASE}/auth/admin`,
   handbooks: `${WORKER_BASE}/handbooks`,
   doc: `${WORKER_BASE}/doc`,
@@ -189,7 +188,7 @@ const getToken = () => (isSignedIn() ? localStorage.getItem(LS.token) : "");
 const getRole = () => (isSignedIn() ? localStorage.getItem(LS.role) || "" : "");
 const getAdminToken = () => (isAdmin() ? localStorage.getItem(LS.adminToken) : "");
 
-// Chat needs staff/parent; browsing accepts admin too.
+// Chat needs a staff session; browsing accepts admin too.
 const getBrowseToken = () => getToken() || getAdminToken();
 
 function saveSession(role, token, expiresIn) {
@@ -248,12 +247,9 @@ function applyRoleUI() {
 
   adminLinks.classList.toggle("hidden", !admin);
 
-  // Parents see the handbook only. Policies/protocols stay hidden, and the
-  // Worker rejects them at the API too — the UI is not the security boundary.
-  menuPills.forEach((btn) => {
-    const isInternal = btn.dataset.menu === "policies" || btn.dataset.menu === "protocols";
-    btn.style.display = isInternal && role === "parent" ? "none" : "";
-  });
+  // Staff reach everything: policies, protocols and the parent handbooks they
+  // answer families from.
+  menuPills.forEach((btn) => { btn.style.display = ""; });
 }
 
 function showLogin() {
@@ -305,24 +301,15 @@ loginForm?.addEventListener("submit", async (e) => {
   loginSubmit.textContent = "Signing in…";
 
   try {
-    // One box for both roles: try staff, fall back to parent.
-    let role = "staff";
-    let res = await fetch(URLS.staff, {
+    // Staff only. The Worker still exposes /auth/parent, but this assistant
+    // has no parent users, so the front end does not offer that route.
+    const role = "staff";
+    const res = await fetch(URLS.staff, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
     });
-    let data = await res.json().catch(() => ({}));
-
-    if (!res.ok || !data.ok) {
-      role = "parent";
-      res = await fetch(URLS.parent, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      data = await res.json().catch(() => ({}));
-    }
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok || !data.ok) {
       return setLoginError(data.error || "That code was not recognised.");
@@ -350,9 +337,7 @@ function greet(isNew) {
   const program = escapeHtml(PROGRAM_LABELS[getProgram()] || "All Programs");
   const hello = isNew ? "You're signed in" : "Welcome back";
 
-  const body = role === "parent"
-    ? `You can browse the <b>Parent Handbook</b> and ask questions about it.`
-    : `Ask about any <b>policy</b>, <b>protocol</b> or <b>parent handbook</b> section.`;
+  const body = `Ask about any <b>policy</b>, <b>protocol</b> or <b>parent handbook</b> section.`;
 
   addMessage("assistant",
     `${hello} as <b>${escapeHtml(role || "staff")}</b>.<br>
@@ -405,14 +390,14 @@ async function submitAdminPin(pin) {
     if (!chatScreen.classList.contains("hidden")) {
       addMessage("assistant",
         `Admin mode is on for 8 hours. <b>Dashboard</b> and <b>Logs</b> are now in the menu.<br>
-         <span class="small muted">Admin mode does not allow chat — sign in with a staff or parent code for that.</span>`);
+         <span class="small muted">Admin mode does not allow chat — sign in with a staff code for that.</span>`);
     } else {
       setLoginError("");
       showChat();
       clearChat();
       addMessage("assistant",
         `Admin mode enabled. You can open the <b>Dashboard</b> and <b>Logs</b>, and browse documents.<br><br>
-         To ask questions, sign in with a <b>staff</b> or <b>parent</b> code.`);
+         To ask questions, sign in with your <b>staff</b> code.`);
     }
   } catch {
     setLoginError("Could not reach the server.");
@@ -505,12 +490,6 @@ document.addEventListener("keydown", (e) => {
 async function openMenu(type) {
   const role = getRole();
 
-  if (role === "parent" && type !== "handbook") {
-    closeMenu();
-    addMessage("assistant", "Parents have access to the Parent Handbook.");
-    return;
-  }
-
   menuPills.forEach((b) => b.classList.toggle("active", b.dataset.menu === type));
   menuPanelTitle.textContent =
     type === "policies" ? "Policies" : type === "protocols" ? "Protocols" : "Parent Handbook";
@@ -583,7 +562,7 @@ async function showDoc(type, id, label) {
         <div class="doc-ask">
           ${getRole()
             ? `<button class="primary-btn" id="doc-ask" type="button">Ask about this in chat</button>`
-            : `<span class="small muted">Sign in with a staff or parent code to ask questions.</span>`}
+            : `<span class="small muted">Sign in with a staff code to ask questions.</span>`}
         </div>
       </div>`;
 
@@ -708,7 +687,7 @@ async function showSection(campus, hbMeta, sectionKey) {
         <div class="doc-ask">
           ${getRole()
             ? `<button class="primary-btn" id="hb-ask" type="button">Ask about this section</button>`
-            : `<span class="small muted">Sign in with a staff or parent code to ask questions.</span>`}
+            : `<span class="small muted">Sign in with a staff code to ask questions.</span>`}
         </div>
       </div>`;
 
@@ -823,7 +802,7 @@ async function ask(question, scope = null, prefillOnly = false) {
   if (!role || !token) {
     return addMessage("assistant",
       `You're in <b>admin mode</b>, which is for the dashboard and logs.<br>
-       To ask questions, sign in with a <b>staff</b> or <b>parent</b> code.`);
+       To ask questions, sign in with your <b>staff</b> code.`);
   }
 
   // "Ask this section" seeds the box so the user can finish the sentence.
@@ -901,7 +880,7 @@ async function ask(question, scope = null, prefillOnly = false) {
     else {
       addMessage("assistant",
         `Admin mode is on. Open the <b>Dashboard</b> or <b>Logs</b> from the menu.<br><br>
-         To ask questions, sign in with a <b>staff</b> or <b>parent</b> code.`);
+         To ask questions, sign in with your <b>staff</b> code.`);
     }
     return;
   }
