@@ -588,6 +588,72 @@ test("an unscoped staff query shortlists policy docs instead of loading all 18",
 });
 
 // ------------------------------------------------------------
+// Follow-ups. Never inferred — the person asks for one explicitly,
+// so a question asked on its own must behave exactly as before.
+// ------------------------------------------------------------
+
+test("a follow-up puts the earlier question in front of the model", async () => {
+  const token = await login("staff");
+
+  await callJson("/api", {
+    method: "POST", token,
+    body: {
+      query: "until what time?",
+      campus: "YC",
+      context: { query: "what happens if a parent is late for pickup?", answer: "Staff contact the parent." },
+    },
+  });
+  await settle();
+
+  const prompt = capturedPrompts.join("\n");
+  assert.match(prompt, /Earlier question: what happens if a parent is late for pickup\?/);
+  assert.match(prompt, /Question: until what time\?/, "the new question is still the one being answered");
+});
+
+test("the reply says which question it followed on from", async () => {
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "until what time?", campus: "YC", context: { query: "late pickup dismissal" } },
+  });
+  await settle();
+  assert.equal(data.followed_up_from, "late pickup dismissal");
+});
+
+test("a question asked on its own is untouched by this", async () => {
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "late pickup dismissal arrival", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal(data.followed_up_from, null, "nothing is assumed without being asked");
+  const prompt = capturedPrompts.join("\n");
+  assert.ok(!prompt.includes("Earlier question:"), "no earlier turn is invented");
+});
+
+test("the same words after different questions are cached separately", async () => {
+  const token = await login("staff");
+  const ask = (context) => callJson("/api", {
+    method: "POST", token, body: { query: "until what time?", campus: "YC", context },
+  });
+
+  await ask({ query: "late pickup dismissal" });
+  await settle();
+  const writesAfterFirst = currentEnv.STATE.writes.filter((k) => k.startsWith("ai:")).length;
+
+  await ask({ query: "anaphylaxis epipen allergy" });
+  await settle();
+  const writesAfterSecond = currentEnv.STATE.writes.filter((k) => k.startsWith("ai:")).length;
+
+  assert.ok(
+    writesAfterSecond > writesAfterFirst,
+    "the same words in a different conversation must not reuse the first answer"
+  );
+});
+
+// ------------------------------------------------------------
 // Rating an answer. The id is a KV key handed to the caller, so
 // the endpoint must refuse anything that is not a log key.
 // ------------------------------------------------------------

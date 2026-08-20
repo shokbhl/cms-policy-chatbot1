@@ -719,6 +719,76 @@ chatForm?.addEventListener("submit", (e) => {
   ask(q);
 });
 
+// ============================================================
+// Follow-ups
+//
+// Never inferred. Someone taps "follow up on this" against a specific answer,
+// so a question typed on its own behaves exactly as it always has. Guessing
+// would risk answering a new question out of the previous one's context, and
+// a wrong answer that cites a real document is worse than no answer.
+// ============================================================
+
+let pendingFollowUp = null;   // { query, answer }
+
+function setFollowUp(ctx) {
+  pendingFollowUp = ctx;
+  renderFollowUpBanner();
+  if (ctx) userInput.focus();
+}
+
+function renderFollowUpBanner() {
+  let bar = document.getElementById("followup-bar");
+  if (!pendingFollowUp) {
+    if (bar) bar.remove();
+    return;
+  }
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "followup-bar";
+    bar.className = "followup-bar";
+    // Above the composer, not inside it — the form is a flex row.
+    const form = document.getElementById("chat-form");
+    form.parentElement.insertBefore(bar, form);
+  }
+  bar.innerHTML =
+    `<span class="followup-label">Following up on:</span> ` +
+    `<span class="followup-q">${escapeHtml(pendingFollowUp.query)}</span>` +
+    `<button type="button" class="followup-cancel" aria-label="Ask on its own instead">×</button>`;
+  bar.querySelector(".followup-cancel").onclick = () => setFollowUp(null);
+}
+
+// Offered on every answer, so continuing a thread is always a deliberate act.
+function attachFollowUpButton(el, question, answerText) {
+  if (!el || !question) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "followup-btn";
+  btn.textContent = "↳ Ask a follow-up";
+  btn.onclick = () => setFollowUp({ query: question, answer: answerText || "" });
+  el.appendChild(btn);
+}
+
+// States plainly when an answer leaned on an earlier question, and offers to
+// redo it standalone. Even a context the person chose can turn out to be the
+// wrong one, and a silent assumption is the thing to avoid.
+function attachFollowUpBadge(el, data, query, campus, program, scope) {
+  if (!el || !data.followed_up_from) return;
+
+  const bar = document.createElement("div");
+  bar.className = "followup-badge";
+  bar.innerHTML =
+    `<span>Answered as a follow-up to: <b>${escapeHtml(data.followed_up_from)}</b></span>` +
+    `<button type="button" class="followup-redo">answer on its own instead</button>`;
+
+  bar.querySelector(".followup-redo").onclick = () => {
+    setFollowUp(null);
+    ask(query, scope || null);
+  };
+
+  // Above the answer, so it is read before the answer rather than after it.
+  el.insertBefore(bar, el.firstChild);
+}
+
 // A thumbs up/down under each answer. The logs can only show whether a
 // document was found, which says nothing about whether the answer was right —
 // and a confident wrong answer is the one worth hearing about.
@@ -822,7 +892,14 @@ async function ask(question, scope = null, prefillOnly = false) {
   addMessage("user", escapeHtml(query));
 
   const program = getProgram();
-  const cacheKey = JSON.stringify({ query: query.toLowerCase(), campus, program, effectiveScope });
+  // Captured now: the banner is cleared as soon as the request goes out, so a
+  // slow answer cannot pick up a context the person has since changed.
+  const followUp = pendingFollowUp;
+  setFollowUp(null);
+  const cacheKey = JSON.stringify({
+    query: query.toLowerCase(), campus, program, effectiveScope,
+    followUp: followUp ? followUp.query.toLowerCase() : null,
+  });
   if (caches.answers.has(cacheKey)) {
     return addMessage("assistant", caches.answers.get(cacheKey));
   }
@@ -833,7 +910,10 @@ async function ask(question, scope = null, prefillOnly = false) {
     const res = await fetch(URLS.api, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ query, campus, program, scope: effectiveScope || null }),
+      body: JSON.stringify({
+        query, campus, program, scope: effectiveScope || null,
+        context: followUp ? { query: followUp.query, answer: followUp.answer } : null,
+      }),
     });
 
     hideTyping();
@@ -854,6 +934,8 @@ async function ask(question, scope = null, prefillOnly = false) {
     const html = renderAnswer(data);
     caches.answers.set(cacheKey, html);
     const el = addMessage("assistant", html);
+    attachFollowUpBadge(el, data, query, campus, program, effectiveScope);
+    attachFollowUpButton(el, query, data.answer);
     attachFeedback(el, data.answer_id);
   } catch {
     hideTyping();

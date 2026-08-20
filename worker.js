@@ -866,6 +866,13 @@ Writing the answer:
 - Be practical and concrete: plain language, actionable steps.
 - If the answer comes from a handbook section, return that exact section_key.
 
+Answering a follow-up:
+- When an earlier exchange is supplied, use it ONLY to work out what the new
+  question refers to - what "it", "that" or an unstated subject means. Answer
+  the NEW question. Do not repeat the earlier answer.
+- If the new question turns out to stand on its own, ignore the earlier
+  exchange entirely.
+
 Before saying it is not covered:
 - Check EVERY document provided, including those further down the list. The
   answer is often in a later one.
@@ -880,7 +887,7 @@ Return valid JSON only. No markdown, no backticks. Exactly:
 "others" may be an empty array. Include an entry only for a document that
 genuinely differs, and only for documents provided above.`;
 
-function buildPrompt({ query, campus, program, role, scope, docs }) {
+function buildPrompt({ query, campus, program, role, scope, docs, followUp }) {
   const blocks = docs.map((d, i) => {
     const lines = [
       `--- Document ${i + 1} ---`,
@@ -907,6 +914,13 @@ function buildPrompt({ query, campus, program, role, scope, docs }) {
     "Documents:",
     blocks.join("\n\n"),
     "",
+    ...(followUp ? [
+      "This is a follow-up. The earlier exchange, for resolving what the new",
+      "question refers to — do not answer the earlier question again:",
+      `Earlier question: ${followUp.query}`,
+      followUp.answer ? `Earlier answer: ${followUp.answer}` : "",
+      "",
+    ] : []),
     `Question: ${query}`,
   ].filter(Boolean).join("\n");
 }
@@ -1179,6 +1193,17 @@ async function handleApi(request, env, ctx) {
   const program = normProgram(body.program);
   const scope = body.scope && typeof body.scope === "object" ? body.scope : null;
 
+  // A follow-up is never guessed at. The person taps "follow up on this", so
+  // the earlier turn arrives explicitly or not at all — a question asked on its
+  // own is treated exactly as it was before this existed.
+  const ctxIn = body.context && typeof body.context === "object" ? body.context : null;
+  const followUp = ctxIn && String(ctxIn.query || "").trim()
+    ? {
+        query: clamp(String(ctxIn.query).trim(), 300),
+        answer: clamp(String(ctxIn.answer || "").trim(), 1200),
+      }
+    : null;
+
   if (!campus) return fail("Missing campus", 400, request, env);
   if (!query) return fail("Missing query", 400, request, env);
 
@@ -1187,8 +1212,10 @@ async function handleApi(request, env, ctx) {
     return fail("Parents can only access the Parent Handbook.", 403, request, env);
   }
 
+  // The earlier turn is part of the key. Without it "until what time?" asked
+  // after two different questions would collide and return the wrong answer.
   const cacheKey = `ai:${auth.role}:${campus}:${program}:${await sha256Hex(
-    query.toLowerCase() + JSON.stringify(scope || {})
+    query.toLowerCase() + JSON.stringify(scope || {}) + (followUp ? `|${followUp.query.toLowerCase()}` : "")
   )}`;
 
   const cached = safeParse(await env.STATE.get(cacheKey), null);
@@ -1205,10 +1232,14 @@ async function handleApi(request, env, ctx) {
 
   // Meaning-based matching, when an index exists. Falls back to keywords alone
   // if it is missing, stale, or the embedding call fails.
-  const semantic = await buildSemantic(env, query);
+  // Retrieval runs on both turns together: on its own, "until what time?"
+  // carries nothing to match against.
+  const retrievalQuery = followUp ? `${query} ${followUp.query}` : query;
+
+  const semantic = await buildSemantic(env, retrievalQuery);
 
   const candidates = await buildCandidates(env, {
-    role: auth.role, campus, program, scope, query, semantic,
+    role: auth.role, campus, program, scope, query: retrievalQuery, semantic,
   });
 
   if (!candidates.length) {
@@ -1225,8 +1256,10 @@ async function handleApi(request, env, ctx) {
     }, 200, request, env);
   }
 
-  const top = rank(candidates, query, MAX_DOCS_TO_AI, semantic);
-  const ai = await askOpenAI(env, buildPrompt({ query, campus, program, role: auth.role, scope, docs: top }));
+  const top = rank(candidates, retrievalQuery, MAX_DOCS_TO_AI, semantic);
+  const ai = await askOpenAI(env, buildPrompt({
+    query, campus, program, role: auth.role, scope, docs: top, followUp,
+  }));
 
   if (!ai.ok) {
     ctx.waitUntil(writeLog(env, {
@@ -1272,6 +1305,7 @@ async function handleApi(request, env, ctx) {
         }
       : null,
     handbook_section: handbookSection,
+    followed_up_from: followUp ? followUp.query : null,
     also_says: others,
     matches: top.map((c) => {
       const isChosen = chosen && c.id === chosen.id && c.section_key === chosen.section_key;
