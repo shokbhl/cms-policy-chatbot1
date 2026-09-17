@@ -11,6 +11,7 @@ const WORKER_BASE =
 const STATS_URL = `${WORKER_BASE}/admin/stats?limit=200`;
 const LOGS_URL = `${WORKER_BASE}/admin/logs?limit=240`;
 const ADMIN_AUTH_URL = `${WORKER_BASE}/auth/admin`;
+const DIAGNOSE_URL = `${WORKER_BASE}/admin/diagnose`;
 
 const LS = { adminToken: "cms2_admin_token", adminUntil: "cms2_admin_until" };
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
@@ -366,14 +367,49 @@ function renderTopics(logs) {
 
 // Unanswered questions are the actionable output: each one is a content gap.
 function renderGaps(logs) {
-  const gaps = logs.filter((l) => l.ok === false && question(l)).slice(0, 15);
+  const gaps = logs.filter((l) => l.ok === false && question(l)).slice(0, 50);
 
-  gapsBody.innerHTML = gaps.map((l) => `
+  gapsBody.innerHTML = gaps.map((l, i) => `
     <tr>
       <td class="small muted">${esc(fmtTime(l.ts))}</td>
       <td>${esc(l.campus || "—")}</td>
       <td class="q">${esc(question(l))}</td>
-    </tr>`).join("") || `<tr><td colspan="3" class="muted">Nothing unanswered — good sign.</td></tr>`;
+      <td class="small muted">${esc(l.context_query || "—")}</td>
+      <td class="small muted">${esc(l.failure_reason || "No document was selected")}</td>
+      <td><button class="btn diagnose-btn" type="button" data-gap="${i}">Recheck</button></td>
+    </tr>
+    <tr id="diagnose-${i}" class="diagnose-row" style="display:none"><td colspan="6" class="small"></td></tr>`).join("") || `<tr><td colspan="6" class="muted">Nothing unsuccessful — good sign.</td></tr>`;
+
+  gapsBody.querySelectorAll(".diagnose-btn").forEach((button) => {
+    button.addEventListener("click", () => diagnoseGap(gaps[Number(button.dataset.gap)], button));
+  });
+}
+
+async function diagnoseGap(log, button) {
+  const row = $(`diagnose-${button.dataset.gap}`);
+  const cell = row.querySelector("td");
+  row.style.display = "table-row";
+  cell.textContent = "Rechecking the current document index…";
+  button.disabled = true;
+
+  try {
+    const url = new URL(DIAGNOSE_URL);
+    url.searchParams.set("q", question(log));
+    url.searchParams.set("campus", log.campus || "MC");
+    if (log.context_query) url.searchParams.set("context", log.context_query);
+    const { res, data } = await authedGet(url);
+    if (!res.ok || !data.ok) throw new Error(data.error || "Recheck failed");
+
+    const matches = (data.results || []).slice(0, 5);
+    const summary = matches.length
+      ? matches.map((m) => `${m.position}. ${m.title}${m.section_title ? ` — ${m.section_title}` : ""} (keyword ${m.keyword_score}, meaning ${m.meaning_score ?? "off"})`).join("\n")
+      : "No current document matched this question.";
+    cell.innerHTML = `<b>${data.semantic ? "Semantic + keyword search" : "Keyword search only"}</b><br><span class="muted">${esc(summary).replaceAll("\n", "<br>")}</span>${data.semantic_off_because ? `<br><span class="state-bad">Semantic search unavailable: ${esc(data.semantic_off_because)}</span>` : ""}`;
+  } catch (e) {
+    cell.textContent = e?.message || "Recheck failed";
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function setKpis(stats) {

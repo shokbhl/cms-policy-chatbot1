@@ -942,6 +942,123 @@ test("everyday phrasing matches the document's own vocabulary", async () => {
   );
 });
 
+test("hand foot and mouth reaches a health policy whose index uses general illness terms", async () => {
+  const token = await login("staff");
+  const policies = seedPolicies();
+  const index = POLICY_INDEX.map((entry) => ({ ...entry, keywords: [...entry.keywords] }));
+  const health = index.find((entry) => entry.id === "filler_policy_15");
+  health.title = "Health Policy";
+  health.keywords = ["health", "illness", "communicable disease"];
+  policies.policies = index;
+  policies.filler_policy_15 = {
+    ...policies.filler_policy_15,
+    title: health.title,
+    keywords: health.keywords,
+    content: "Children with hand, foot and mouth disease must follow the exclusion guidance.",
+  };
+  currentEnv.POLICIES = new MockKV(policies, "POLICIES");
+  stubOpenAI({ id: "filler_policy_15" });
+
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "What is the policy for hand foot and mouth?", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal(data.source?.id, "filler_policy_15");
+  assert.match(capturedPrompts.join("\n"), /hand, foot and mouth disease/i);
+});
+
+test("a disease entry deep in a long health policy reaches the model", async () => {
+  const token = await login("staff");
+  const policies = seedPolicies();
+  const index = POLICY_INDEX.map((entry) => ({ ...entry, keywords: [...entry.keywords] }));
+  const health = index.find((entry) => entry.id === "filler_policy_15");
+  health.title = "Health & Infection Prevention";
+  health.keywords = ["health", "infection prevention", "illness", "outbreak"];
+  policies.policies = index;
+  policies.filler_policy_15 = {
+    ...policies.filler_policy_15,
+    title: health.title,
+    keywords: health.keywords,
+    content: "General health procedure. ".repeat(500) +
+      "Hand, Foot & Mouth Disease: No - If child feels well enough to participate. " +
+      "General appendix. ".repeat(200),
+  };
+  currentEnv.POLICIES = new MockKV(policies, "POLICIES");
+  stubOpenAI({ id: "filler_policy_15" });
+
+  await callJson("/api", {
+    method: "POST", token,
+    body: { query: "What is the policy for hand foot and mouth?", campus: "YC" },
+  });
+  await settle();
+
+  assert.match(capturedPrompts.join("\n"), /No - If child feels well enough to participate/);
+});
+
+for (const query of ["What is the HFMD policy?", "What about hand food mouth?", "Handfoot and mouth"]) {
+  test(`health-policy shorthand is understood: ${query}`, async () => {
+    const token = await login("staff");
+    const policies = seedPolicies();
+    const index = POLICY_INDEX.map((entry) => ({ ...entry, keywords: [...entry.keywords] }));
+    const health = index.find((entry) => entry.id === "filler_policy_15");
+    health.title = "Health & Infection Prevention";
+    health.keywords = ["health", "infection prevention", "illness", "outbreak"];
+    policies.policies = index;
+    policies.filler_policy_15 = {
+      ...policies.filler_policy_15,
+      title: health.title,
+      keywords: health.keywords,
+      content: "General health procedure. ".repeat(500) +
+        "Hand, Foot & Mouth Disease: No - If child feels well enough to participate.",
+    };
+    currentEnv.POLICIES = new MockKV(policies, "POLICIES");
+    stubOpenAI({ id: "filler_policy_15" });
+
+    const { data } = await callJson("/api", {
+      method: "POST", token, body: { query, campus: "YC" },
+    });
+    await settle();
+
+    assert.equal(data.source?.id, "filler_policy_15");
+    assert.equal(data.answer, "No - If child feels well enough to participate.");
+    assert.match(capturedPrompts.join("\n"), /Hand, Foot & Mouth Disease/i);
+    assert.match(capturedPrompts.join("\n"), /Interpret HFMD/);
+    assert.match(capturedPrompts.join("\n"), /what does the Exclude\? column require/);
+  });
+}
+
+test("a greeting is handled without pretending it is a document failure", async () => {
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token, body: { query: "Hello hello", campus: "YC" },
+  });
+
+  assert.match(data.answer, /Hello!/);
+  assert.equal(data.source, null);
+  const log = [...currentEnv.STATE.store.values()].find((entry) => entry.metadata?.query === "Hello hello");
+  assert.equal(log?.metadata?.ok, true);
+});
+
+test("an HFMD follow-up preserves the disease interpretation", async () => {
+  const token = await login("staff");
+  await callJson("/api", {
+    method: "POST", token,
+    body: {
+      query: "policies about it",
+      campus: "YC",
+      context: { query: "hand food mouth?", answer: "Please clarify." },
+    },
+  });
+  await settle();
+
+  const prompt = capturedPrompts.join("\n");
+  assert.match(prompt, /Interpret HFMD, HFM/);
+  assert.match(prompt, /Hand, Foot & Mouth Disease/);
+  assert.match(prompt, /what does the Exclude\? column require/);
+});
+
 test("index-first ranking still finds the keyword-matching policy", async () => {
   const token = await login("staff");
   await callJson("/api", { method: "POST", token, body: { query: "anaphylaxis epipen allergy", campus: "YC" } });

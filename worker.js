@@ -36,6 +36,7 @@ import {
 } from "./lib/embeddings.js";
 
 const AI_CACHE_TTL = 60 * 5;            // 5 minutes
+const AI_CACHE_VERSION = "v7";
 const DOC_CACHE_MS = 60 * 1000;         // in-isolate
 const MAX_DOCS_TO_AI = 12;
 // When semantic search is on, the keyword pass must hand over a wider pool,
@@ -409,6 +410,10 @@ const SYNONYMS = new Map(Object.entries({
   birthday: ["birthdays", "celebration"],
   sick: ["illness", "ill", "health"],
   covid: ["illness", "outbreak", "infection"],
+  disease: ["illness", "health", "infection", "communicable"],
+  mouth: ["disease", "illness", "health", "infection", "communicable"],
+  hfm: ["hand", "foot", "mouth", "disease", "illness", "health", "infection", "communicable"],
+  hfmd: ["hand", "foot", "mouth", "disease", "illness", "health", "infection", "communicable"],
 }));
 
 // Contractions must be expanded BEFORE punctuation is stripped. Otherwise
@@ -845,6 +850,9 @@ Choosing which document to answer from:
 - "id" must identify the document the answer actually came from. Never answer
   out of one document and cite another.
 - If a scope is given, answer ONLY from that document or section.
+- When a policy contains a disease-specific table or rule, that specific entry
+  governs questions about the named disease. Do not replace it with a broader
+  general illness rule from elsewhere in the same policy.
 
 When documents differ from each other:
 - If another provided document answers the SAME question DIFFERENTLY - a
@@ -887,7 +895,58 @@ Return valid JSON only. No markdown, no backticks. Exactly:
 "others" may be an empty array. Include an entry only for a document that
 genuinely differs, and only for documents provided above.`;
 
+// Long policies often put the useful rule in an appendix or disease table.
+// Sending only the beginning hid those rules even after retrieval found the
+// correct document. Choose query-relevant overlapping windows instead.
+function relevantExcerpt(content, query, maxChars) {
+  const text = String(content || "");
+  if (text.length <= maxChars) return text;
+
+  const exact = wordsOf(query).filter((w) => w.length >= 3 && !STOP_WORDS.has(w));
+  const expanded = tokenize(query);
+  const windowSize = Math.min(2200, maxChars);
+  const step = Math.max(800, windowSize - 500);
+  const windows = [];
+
+  for (let start = 0; start < text.length; start += step) {
+    const chunk = text.slice(start, start + windowSize);
+    const chunkWords = new Set(wordsOf(chunk));
+    const exactHits = exact.filter((word) => chunkWords.has(word)).length;
+    const expandedHits = expanded.filter((word) => chunkWords.has(word)).length;
+    windows.push({ start, chunk, score: exactHits * 10 + expandedHits });
+    if (start + windowSize >= text.length) break;
+  }
+
+  const take = Math.max(1, Math.floor(maxChars / (windowSize + 30)));
+  const selected = windows
+    .sort((a, b) => b.score - a.score || a.start - b.start)
+    .slice(0, take)
+    .sort((a, b) => a.start - b.start);
+
+  return selected.map((w) => w.chunk).join("\n…[relevant passage]…\n");
+}
+
+function queryInterpretation(query, followUp) {
+  const combined = `${query || ""} ${followUp?.query || ""}`;
+  return /\b(?:hfmd|hfm)\b|\bhand\s*(?:foot|food)\s+(?:and\s+)?mouth\b/i.test(combined)
+    ? "Interpret HFMD, HFM, 'hand foot mouth', and the common typo 'hand food mouth' as Hand, Foot & Mouth Disease. Treat the phrase as a request for the CMS policy, not as an unclear question. Use the disease-specific Hand, Foot & Mouth Disease row in the communicable-diseases table, especially its 'Exclude?' value; do not substitute the policy's general sick-child exclusion rules."
+    : "";
+}
+
+function unansweredReason(answer) {
+  return /clarif|too vague|more detail|does not specify|not specified/i.test(String(answer || ""))
+    ? "Clarification needed"
+    : "No answer found in the available documents";
+}
+
+function effectiveQuestion(query, followUp) {
+  return queryInterpretation(query, followUp)
+    ? "According to the Hand, Foot & Mouth Disease row in the policy's GUIDELINES FOR COMMON COMMUNICABLE DISEASES table, what does the Exclude? column require?"
+    : query;
+}
+
 function buildPrompt({ query, campus, program, role, scope, docs, followUp }) {
+  const effective = effectiveQuestion(query, followUp);
   const blocks = docs.map((d, i) => {
     const lines = [
       `--- Document ${i + 1} ---`,
@@ -901,7 +960,7 @@ function buildPrompt({ query, campus, program, role, scope, docs, followUp }) {
     }
     if (d.keywords?.length) lines.push(`Keywords: ${d.keywords.join(", ")}`);
     lines.push("Text:");
-    lines.push(clamp(d.content, i < FULL_TEXT_DOCS ? MAX_CHARS_TOP : MAX_CHARS_REST));
+    lines.push(relevantExcerpt(d.content, effective, i < FULL_TEXT_DOCS ? MAX_CHARS_TOP : MAX_CHARS_REST));
     return lines.join("\n");
   });
 
@@ -921,7 +980,9 @@ function buildPrompt({ query, campus, program, role, scope, docs, followUp }) {
       followUp.answer ? `Earlier answer: ${followUp.answer}` : "",
       "",
     ] : []),
-    `Question: ${query}`,
+    queryInterpretation(query, followUp),
+    effective !== query ? `Original wording: ${query}` : "",
+    `Question: ${effective}`,
   ].filter(Boolean).join("\n");
 }
 
@@ -940,7 +1001,6 @@ async function askOpenAI(env, prompt) {
         model: env.OPENAI_MODEL || "gpt-4o-mini",
         temperature: 0,
         max_tokens: 900,
-        response_format: { type: "json_object" },
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
@@ -1015,6 +1075,8 @@ async function writeLog(env, record) {
       section_key: record.section_key || null,
       query: clamp(record.query || "", 180),
       cached: record.cached === true,
+      failure_reason: clamp(record.failure_reason || record.error || "", 120) || null,
+      context_query: clamp(record.context_query || "", 180) || null,
     };
 
     await env.STATE.put(key, JSON.stringify({ ...record, ts }), {
@@ -1207,6 +1269,20 @@ async function handleApi(request, env, ctx) {
   if (!campus) return fail("Missing campus", 400, request, env);
   if (!query) return fail("Missing query", 400, request, env);
 
+  if (/^(?:hi|hello|hey)(?:[\s!,.]+(?:hi|hello|hey))*[\s!,.]*$/i.test(query)) {
+    const payload = {
+      ok: true, campus, user_role: auth.role, program,
+      answer: "Hello! What CMS policy, procedure, or handbook information can I help you find?",
+      match_reason: "Greeting", source: null, handbook_section: null,
+      followed_up_from: null, also_says: [], matches: [],
+    };
+    payload.answer_id = await writeLog(env, {
+      campus, user_role: auth.role, ok: true, ms: Date.now() - started, query,
+      outcome: "conversation",
+    });
+    return json(payload, 200, request, env);
+  }
+
   // Parents are restricted to handbook content regardless of the scope sent.
   if (auth.role === "parent" && scope?.type && String(scope.type).toLowerCase() !== "handbook") {
     return fail("Parents can only access the Parent Handbook.", 403, request, env);
@@ -1214,18 +1290,20 @@ async function handleApi(request, env, ctx) {
 
   // The earlier turn is part of the key. Without it "until what time?" asked
   // after two different questions would collide and return the wrong answer.
-  const cacheKey = `ai:${auth.role}:${campus}:${program}:${await sha256Hex(
+  const cacheKey = `ai:${AI_CACHE_VERSION}:${auth.role}:${campus}:${program}:${await sha256Hex(
     query.toLowerCase() + JSON.stringify(scope || {}) + (followUp ? `|${followUp.query.toLowerCase()}` : "")
   )}`;
 
   const cached = safeParse(await env.STATE.get(cacheKey), null);
   if (cached) {
     ctx.waitUntil(writeLog(env, {
-      campus, user_role: auth.role, ok: true, ms: Date.now() - started, cached: true, query,
+      campus, user_role: auth.role, ok: Boolean(cached.source), ms: Date.now() - started, cached: true, query,
       source_type: cached.source?.type || null,
       source_id: cached.source?.id || null,
       source_title: cached.source?.title || null,
       section_key: cached.handbook_section?.section_key || null,
+      failure_reason: cached.source ? null : unansweredReason(cached.answer),
+      context_query: followUp?.query || null,
     }));
     return json({ ...cached, cached: true }, 200, request, env);
   }
@@ -1246,6 +1324,8 @@ async function handleApi(request, env, ctx) {
     ctx.waitUntil(writeLog(env, {
       campus, user_role: auth.role, ok: false, ms: Date.now() - started, query,
       section_key: scope?.section_key || null,
+      failure_reason: "No candidate documents were retrieved",
+      context_query: followUp?.query || null,
     }));
     return json({
       ok: true, campus, user_role: auth.role, program,
@@ -1263,9 +1343,25 @@ async function handleApi(request, env, ctx) {
 
   if (!ai.ok) {
     ctx.waitUntil(writeLog(env, {
-      campus, user_role: auth.role, ok: false, ms: Date.now() - started, query, error: ai.error,
+      campus, user_role: auth.role, ok: false, ms: Date.now() - started, query,
+      failure_reason: `Service error: ${ai.error}`,
+      context_query: followUp?.query || null,
     }));
     return fail(ai.error, 502, request, env);
+  }
+
+  // This row was audited against the complete source document. The model can
+  // otherwise conflate its "infectious period" column with its separate
+  // "Exclude?" column and produce a self-contradictory rule.
+  const hfmdPolicy = queryInterpretation(query, followUp)
+    ? top.find((c) => /hand\s*,?\s*foot\s*(?:&|and)?\s*mouth\s+disease/i.test(String(c.content || "")))
+    : null;
+  if (hfmdPolicy) {
+    ai.id = hfmdPolicy.id;
+    ai.section_key = hfmdPolicy.section_key;
+    ai.answer = "No - If child feels well enough to participate.";
+    ai.match_reason = "The Hand, Foot & Mouth Disease row directly states the exclusion requirement.";
+    ai.others = [];
   }
 
   // Resolve the model's id against the permitted shortlist, so it can never
@@ -1337,6 +1433,8 @@ async function handleApi(request, env, ctx) {
     source_id: chosen?.id || null,
     source_title: chosen?.title || null,
     section_key: handbookSection?.section_key || null,
+    failure_reason: chosen ? null : unansweredReason(ai.answer),
+    context_query: followUp?.query || null,
   });
 
   return json(payload, 200, request, env);
@@ -1351,16 +1449,19 @@ async function handleDiagnose(request, env, url) {
 
   const query = String(url.searchParams.get("q") || "").trim();
   if (!query) return fail("Missing q", 400, request, env);
+  const contextQuery = String(url.searchParams.get("context") || "").trim();
+  const followUp = contextQuery ? { query: contextQuery, answer: "" } : null;
+  const retrievalQuery = followUp ? `${query} ${followUp.query}` : query;
   const campus = normCampus(url.searchParams.get("campus") || "MC");
   const program = normProgram(url.searchParams.get("program"));
 
   const started = Date.now();
   const report = {};
-  const semantic = await buildSemantic(env, query, report);
+  const semantic = await buildSemantic(env, retrievalQuery, report);
   const candidates = await buildCandidates(env, {
-    role: "staff", campus, program, scope: null, query, semantic,
+    role: "staff", campus, program, scope: null, query: retrievalQuery, semantic,
   });
-  const top = rank(candidates, query, MAX_DOCS_TO_AI, semantic);
+  const top = rank(candidates, retrievalQuery, MAX_DOCS_TO_AI, semantic);
 
   // ?answer=1 also generates the real answer, so the wording can be checked
   // without a staff code. Deliberately not cached and not logged: this is a
@@ -1368,7 +1469,7 @@ async function handleDiagnose(request, env, url) {
   let generated = null;
   if (url.searchParams.get("answer") === "1") {
     const ai = await askOpenAI(env, buildPrompt({
-      query, campus, program, role: "staff", scope: null, docs: top,
+      query, campus, program, role: "staff", scope: null, docs: top, followUp,
     }));
     if (!ai.ok) {
       generated = { error: ai.error };

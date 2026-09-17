@@ -262,6 +262,32 @@ header {
 .login-actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
 .error { margin-top: 10px; color: var(--danger); font-weight: 700; min-height: 20px; }
 
+/* Bare red text under the buttons was being missed entirely - on a phone with
+   the keyboard up it sits below the fold. Only boxed when it holds a message,
+   so an untouched form shows no empty red panel. */
+.error:not(:empty) {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 11px 13px;
+  border: 1px solid var(--danger);
+  background: var(--danger-bg);
+  border-radius: 12px;
+  animation: error-shake 0.28s ease;
+}
+.error:not(:empty)::before { content: "\26A0"; line-height: 1.35; }
+
+.input.invalid { border-color: var(--danger); }
+
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .error:not(:empty) { animation: none; }
+}
+
 /* ---------------- chat ---------------- */
 
 .chat-wrap { padding: 14px; }

@@ -116,6 +116,7 @@ const adminModal = $("admin-modal");
 const adminPinInput = $("admin-pin");
 const adminPinSubmit = $("admin-pin-submit");
 const adminPinCancel = $("admin-pin-cancel");
+const adminPinError = $("admin-pin-error");
 const togglePasswordBtn = $("toggle-password");
 
 let typingBubble = null;
@@ -171,7 +172,32 @@ function hideTyping() {
 }
 
 function setLoginError(text) {
-  loginError.textContent = text || "";
+  const msg = text || "";
+  loginError.textContent = msg;
+
+  // The message sits below the sign-in buttons, so on a phone with the keyboard
+  // open it can land off-screen and the form looks like it did nothing at all.
+  if (msg) {
+    accessCodeInput?.classList.add("invalid");
+    accessCodeInput?.setAttribute("aria-invalid", "true");
+    loginError.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  } else {
+    accessCodeInput?.classList.remove("invalid");
+    accessCodeInput?.removeAttribute("aria-invalid");
+  }
+}
+
+function setAdminPinError(text) {
+  if (!adminPinError) return;
+  const msg = text || "";
+  adminPinError.textContent = msg;
+  if (msg) {
+    adminPinInput?.classList.add("invalid");
+    adminPinInput?.setAttribute("aria-invalid", "true");
+  } else {
+    adminPinInput?.classList.remove("invalid");
+    adminPinInput?.removeAttribute("aria-invalid");
+  }
 }
 
 // ---- session ----
@@ -312,7 +338,13 @@ loginForm?.addEventListener("submit", async (e) => {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok || !data.ok) {
-      return setLoginError(data.error || "That code was not recognised.");
+      // 401 on this route can only mean the code did not match, so name that
+      // rather than passing through the Worker's terser "Invalid code".
+      setLoginError(res.status === 401
+        ? "That access code is not correct. Please check it and try again."
+        : data.error || `Sign-in failed (${res.status}). Please try again.`);
+      accessCodeInput.select();
+      return;
     }
 
     saveSession(data.role || role, data.token, data.expires_in);
@@ -367,7 +399,8 @@ togglePasswordBtn?.addEventListener("click", () => {
 // ============================================================
 
 async function submitAdminPin(pin) {
-  if (!pin) return;
+  if (!pin) return setAdminPinError("Please enter the admin PIN.");
+  setAdminPinError("");
   try {
     const res = await fetch(URLS.admin, {
       method: "POST",
@@ -377,11 +410,25 @@ async function submitAdminPin(pin) {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok || !data.ok) {
-      const msg = data.error || "That PIN was not recognised.";
-      if (chatScreen.classList.contains("hidden")) setLoginError(msg);
-      else addMessage("assistant", escapeHtml(msg));
+      const msg = res.status === 401
+        ? "That admin PIN is not correct. Please check it and try again."
+        : data.error || "That PIN was not recognised.";
+
+      // Keep the dialog open so the PIN can be corrected in place; it used to
+      // close and write the message to the screen behind it.
+      if (!adminModal.classList.contains("hidden")) {
+        setAdminPinError(msg);
+        adminPinInput.select();
+      } else if (chatScreen.classList.contains("hidden")) {
+        setLoginError(msg);
+      } else {
+        addMessage("assistant", escapeHtml(msg));
+      }
       return;
     }
+
+    adminModal.classList.add("hidden");
+    setAdminPinError("");
 
     localStorage.setItem(LS.adminToken, data.token);
     localStorage.setItem(LS.adminUntil, String(Date.now() + (data.expires_in || 28800) * 1000));
@@ -400,12 +447,17 @@ async function submitAdminPin(pin) {
          To ask questions, sign in with your <b>staff</b> code.`);
     }
   } catch {
-    setLoginError("Could not reach the server.");
+    if (adminModal && !adminModal.classList.contains("hidden")) {
+      setAdminPinError("Could not reach the server. Check your connection and try again.");
+    } else {
+      setLoginError("Could not reach the server.");
+    }
   }
 }
 
 function openAdminModal() {
   adminPinInput.value = "";
+  setAdminPinError("");
   adminModal.classList.remove("hidden");
   adminPinInput.focus();
 }
@@ -421,11 +473,12 @@ adminModeBtn?.addEventListener("click", () => {
 });
 
 loginAdminBtn?.addEventListener("click", openAdminModal);
-adminPinCancel?.addEventListener("click", () => adminModal.classList.add("hidden"));
-adminPinSubmit?.addEventListener("click", async () => {
-  const pin = adminPinInput.value;
+adminPinCancel?.addEventListener("click", () => {
+  setAdminPinError("");
   adminModal.classList.add("hidden");
-  await submitAdminPin(pin);
+});
+adminPinSubmit?.addEventListener("click", async () => {
+  await submitAdminPin(adminPinInput.value);
 });
 adminPinInput?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") adminPinSubmit.click();

@@ -51,6 +51,7 @@ const sourceType = (l) => (l.source_type || "").trim().toLowerCase() || "unknown
 const title = (l) => (l.handbook_title || l.source_title || l.source_id || "").trim();
 const section = (l) => (l.section_key || "").trim();
 const question = (l) => (l.query || l.question || "").trim();
+const failureReason = (l) => (l.failure_reason || "").trim();
 
 function chip(text, cls) {
   const t = String(text || "unknown").toLowerCase();
@@ -145,7 +146,7 @@ function render() {
 
   if (q) {
     rows = rows.filter((l) =>
-      [question(l), title(l), section(l), role(l), sourceType(l), String(l.campus || "")]
+      [question(l), title(l), section(l), failureReason(l), role(l), sourceType(l), String(l.campus || "")]
         .join(" ").toLowerCase().includes(q)
     );
   }
