@@ -32,12 +32,16 @@ const TOKEN_TTL = 60 * 60 * 8;          // 8 hours
 const LOG_TTL = 60 * 60 * 24 * 30;      // 30 days
 import {
   embed, embeddingsAvailable, providerConfig, normalize, cosine,
-  packVectors, unpackVectors, indexText, entryKey, PROVIDERS,
+  packVectors, unpackVectors, lazyVectors, indexText, entryKey, PROVIDERS,
 } from "./lib/embeddings.js";
 
 const AI_CACHE_TTL = 60 * 5;            // 5 minutes
 const AI_CACHE_VERSION = "v7";
-const DOC_CACHE_MS = 60 * 1000;         // in-isolate
+const DOC_CACHE_MS = 5 * 60 * 1000;     // in-isolate
+// prepare() normalises a document's text with several regex passes. Only the
+// first ~1500 words are ever kept, so running those passes over the whole of a
+// 38KB policy is pure cost - clip first, normalise second.
+const PREP_CONTENT_CHARS = 12000;
 const MAX_DOCS_TO_AI = 12;
 // When semantic search is on, the keyword pass must hand over a wider pool,
 // or it would discard the very documents meaning-matching exists to rescue.
@@ -522,7 +526,9 @@ function prepare(item) {
     sectionWords: wordsOf(item.section_title),
     // Body text only contributes a capped bonus, so indexing the whole of a
     // long policy buys nothing and costs CPU on the first query in an isolate.
-    contentWords: new Set(wordsOf(item.content).slice(0, 1500)),
+    contentWords: new Set(
+      wordsOf(String(item.content ?? "").slice(0, PREP_CONTENT_CHARS)).slice(0, 1500),
+    ),
     titleText: norm(item.title),
     sectionText: norm(item.section_title),
   };
@@ -708,7 +714,7 @@ async function loadSemanticIndex(env) {
       if (meta.provider === cfg.name && meta.model === cfg.model && meta.dims === cfg.dims) {
         index = {
           dims: meta.dims,
-          vectors: unpackVectors(meta.b64, meta.dims, meta.keys.length),
+          vectors: lazyVectors(meta.b64, meta.dims, meta.keys.length),
           pos: new Map(meta.keys.map((k, i) => [k, i])),
         };
       }
@@ -745,7 +751,8 @@ async function buildSemantic(env, query, report) {
     similarity(item) {
       const pos = index.pos.get(entryKey(item));
       if (pos === undefined) return null;
-      return cosine(queryUnit, index.vectors[pos]);
+      const stored = index.vectors.get(pos);
+      return stored ? cosine(queryUnit, stored) : null;
     },
   };
 }
