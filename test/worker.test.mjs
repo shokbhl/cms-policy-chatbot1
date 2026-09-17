@@ -519,13 +519,15 @@ test("POST /api resolves a handbook section answer", async () => {
 test("POST /api handles an OpenAI failure and non-JSON output", async () => {
   const token = await login("staff");
 
+  // The query has to be a real one: a bare fragment is answered without ever
+  // calling the model, so it would never exercise the failure path.
   stubOpenAI({ fail: true });
-  const failed = await callJson("/api", { method: "POST", token, body: { query: "a", campus: "YC" } });
+  const failed = await callJson("/api", { method: "POST", token, body: { query: "pickup", campus: "YC" } });
   await settle();
   assert.equal(failed.res.status, 502);
 
   stubOpenAI({ raw: "not json at all" });
-  const garbage = await callJson("/api", { method: "POST", token, body: { query: "b", campus: "YC" } });
+  const garbage = await callJson("/api", { method: "POST", token, body: { query: "pickup", campus: "YC" } });
   await settle();
   assert.equal(garbage.res.status, 502);
 });

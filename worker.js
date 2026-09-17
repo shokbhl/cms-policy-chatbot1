@@ -35,7 +35,14 @@ import {
   packVectors, unpackVectors, lazyVectors, indexText, entryKey, PROVIDERS,
 } from "./lib/embeddings.js";
 
-const AI_CACHE_TTL = 60 * 5;            // 5 minutes
+// Answers are cached until the corpus itself changes, not on a timer: the key
+// carries a corpus version that every reindex bumps, so editing a policy
+// invalidates every stale answer at once. A five-minute timer used to be the
+// only safeguard, which meant both poor reuse AND five minutes of wrong
+// answers after an edit.
+const AI_CACHE_TTL = 60 * 60 * 24 * 30;  // 30 days
+const CORPUS_VERSION_KEY = "corpus:version";
+const CORPUS_VERSION_CACHE_MS = 60 * 1000;
 const AI_CACHE_VERSION = "v7";
 const DOC_CACHE_MS = 5 * 60 * 1000;     // in-isolate
 // prepare() normalises a document's text with several regex passes. Only the
@@ -252,6 +259,31 @@ async function rateLimit(env, key, { limit, window }) {
 
   await env.STATE.put(bucketKey, String(count + 1), { expirationTtl: window + 5 });
   return { ok: true };
+}
+
+// The stamp that ties a cached answer to the content it was generated from.
+async function corpusVersion(env) {
+  const hit = cacheGet(CORPUS_VERSION_KEY);
+  if (hit) return hit.v;
+  let v = "0";
+  try {
+    v = (await env.STATE.get(CORPUS_VERSION_KEY)) || "0";
+  } catch {
+    v = "0";   // a version we cannot read must not take the assistant down
+  }
+  return cacheSet(CORPUS_VERSION_KEY, { v }, CORPUS_VERSION_CACHE_MS).v;
+}
+
+// Cache-key form of a question. Staff type the same question many ways -
+// "didn't"/"did not", stray punctuation, capitals - and each spelling used to
+// cost a separate answer. Only the SHAPE is normalised: negations and every
+// content word survive, so two genuinely different questions never collide.
+function cacheQuestionKey(text) {
+  let q = String(text || "").toLowerCase().replace(/\u2019/g, "'");
+  q = q.replace(/\bcan't\b/g, "can not").replace(/\bwon't\b/g, "will not");
+  q = q.replace(/n't\b/g, " not");
+  q = q.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  return q.split(" ").filter((w) => w && !["a", "an", "the"].includes(w)).join(" ");
 }
 
 function clientIp(request) {
@@ -889,10 +921,20 @@ Answering a follow-up:
   exchange entirely.
 
 When the question is too vague to search:
-- A single word, a bare fragment, or a phrase pointing at something unstated
-  ("policies about it", "in yc", "look down", "time") cannot be matched to any
-  document. Do not guess what was meant, and do not answer from a document that
-  merely shares a word with it.
+- FIRST read every document provided. If ANY of them answers the question, even
+  partially, even if it is only a handbook, ANSWER IT and do not take this
+  route. This route is only for input that no document could ever match.
+- This applies ONLY to input that names nothing searchable at all: a single
+  word, a bare fragment, or a phrase pointing at something unstated ("policies
+  about it", "in yc", "look down", "time").
+- If the question names ANY concrete subject - parents, a time or deadline,
+  sleep, fire, fees, a child, a campus, a person - it is NOT vague. Answer it
+  from the documents provided, even if it is short or awkwardly worded, and
+  even if only a handbook covers it. Use this route only as a last resort when
+  there is genuinely nothing to search for; a real question that no document
+  answers is handled by "Before saying it is not covered" below, not here.
+- Do not guess what was meant, and do not answer from a document that merely
+  shares a word with it.
 - Set "id" to null and say, in this order: (1) that the question is ambiguous;
   (2) that you search the school's POLICIES, PROCEDURES and PARENT HANDBOOKS, so
   you need a complete question rather than a single word - ask them to spell out
@@ -955,6 +997,35 @@ function queryInterpretation(query, followUp) {
   return /\b(?:hfmd|hfm)\b|\bhand\s*(?:foot|food)\s+(?:and\s+)?mouth\b/i.test(combined)
     ? "Interpret HFMD, HFM, 'hand foot mouth', and the common typo 'hand food mouth' as Hand, Foot & Mouth Disease. Treat the phrase as a request for the CMS policy, not as an unclear question. Use the disease-specific Hand, Foot & Mouth Disease row in the communicable-diseases table, especially its 'Exclude?' value; do not substitute the policy's general sick-child exclusion rules."
     : "";
+}
+
+// A short question whose words appear NOWHERE in the corpus cannot be
+// researched, and the reply to it is fixed - so it needs no model call.
+// Deliberately not a score threshold: scores scale with corpus size and IDF,
+// so a cutoff tuned on the real corpus misfires on a smaller one. Presence of
+// the words is absolute. When in doubt this falls through to the model, which
+// answers such questions correctly anyway.
+const VAGUE_MAX_WORDS = 3;
+const VAGUE_ANSWER =
+  "The question is ambiguous. I search the school's policies, procedures and " +
+  "parent handbooks, so I need a complete question rather than a single word - " +
+  "please say what you want to know. For example: \"What time must we call " +
+  "parents if a child has not arrived?\" If you meant this as a follow-up to an " +
+  "earlier answer, use the follow-up button on that answer rather than sending a " +
+  "fragment, because a new question on its own carries none of the earlier context.";
+
+function meaningfulWordCount(query) {
+  return wordsOf(query).filter((w) => w.length >= 2 && !STOP_WORDS.has(w)).length;
+}
+
+function looksVague(query, topDoc) {
+  if (meaningfulWordCount(query) > VAGUE_MAX_WORDS) return false;
+  // Zero means the scorer found nothing at all - not a weak match, none. It
+  // already accounts for typos and synonyms, so "Handfoot and mouth" scores
+  // above zero and is never mistaken for a fragment. Zero is zero whatever the
+  // corpus size, unlike a tuned cutoff.
+  const lex = topDoc?._lex ?? topDoc?._score ?? 0;
+  return lex <= 0;
 }
 
 function unansweredReason(answer) {
@@ -1314,8 +1385,8 @@ async function handleApi(request, env, ctx) {
 
   // The earlier turn is part of the key. Without it "until what time?" asked
   // after two different questions would collide and return the wrong answer.
-  const cacheKey = `ai:${AI_CACHE_VERSION}:${auth.role}:${campus}:${program}:${await sha256Hex(
-    query.toLowerCase() + JSON.stringify(scope || {}) + (followUp ? `|${followUp.query.toLowerCase()}` : "")
+  const cacheKey = `ai:${AI_CACHE_VERSION}:${await corpusVersion(env)}:${auth.role}:${campus}:${program}:${await sha256Hex(
+    cacheQuestionKey(query) + JSON.stringify(scope || {}) + (followUp ? `|${cacheQuestionKey(followUp.query)}` : "")
   )}`;
 
   const cached = safeParse(await env.STATE.get(cacheKey), null);
@@ -1361,6 +1432,22 @@ async function handleApi(request, env, ctx) {
   }
 
   const top = rank(candidates, retrievalQuery, MAX_DOCS_TO_AI, semantic);
+
+  // Nothing here to research, and the reply is fixed - skip the model call.
+  if (!followUp && !scope && looksVague(query, top[0])) {
+    const payload = {
+      ok: true, campus, user_role: auth.role, program,
+      answer: VAGUE_ANSWER, match_reason: "Clarification needed",
+      source: null, handbook_section: null, followed_up_from: null,
+      also_says: [], matches: [],
+    };
+    payload.answer_id = await writeLog(env, {
+      campus, user_role: auth.role, ok: false, ms: Date.now() - started, query,
+      failure_reason: "Clarification needed",
+    });
+    return json(payload, 200, request, env);
+  }
+
   const ai = await askOpenAI(env, buildPrompt({
     query, campus, program, role: auth.role, scope, docs: top, followUp,
   }));
@@ -1670,6 +1757,9 @@ async function rebuildSemanticIndex(env) {
 
   const { dims, b64 } = packVectors(vectors);
   if (dims !== cfg.dims) throw new Error(`Provider returned ${dims}-dimension vectors, expected ${cfg.dims}`);
+
+  // Every cached answer is keyed by this, so bumping it retires them all.
+  await env.STATE.put(CORPUS_VERSION_KEY, String(Date.now())).catch(() => {});
 
   await env.STATE.put(SEMANTIC_INDEX_KEY, JSON.stringify({
     provider: cfg.name, model: cfg.model, dims, b64,
