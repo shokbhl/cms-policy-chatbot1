@@ -501,6 +501,23 @@ test("POST /api normalizes program aliases", async () => {
   assert.equal(data.program, "ALL");
 });
 
+test("POST /api files a junior handbook under Preschool, not Sr. Casa", async () => {
+  const token = await login("staff");
+  for (const program of ["Infant, Toddler & Jr. Casa", "Toddler & Jr. Casa", "Junior Casa"]) {
+    const { data } = await callJson("/api", {
+      method: "POST", token, body: { query: "pickup", campus: "YC", program },
+    });
+    await settle();
+    assert.equal(data.program, "PRESCHOOL", `${program} must not be filed as Sr. Casa`);
+  }
+
+  const senior = await callJson("/api", {
+    method: "POST", token, body: { query: "pickup", campus: "YC", program: "Sr. Casa" },
+  });
+  await settle();
+  assert.equal(senior.data.program, "SR_CASA");
+});
+
 test("POST /api resolves a handbook section answer", async () => {
   stubOpenAI({ id: "yc_parent_handbook", sectionKey: "illness_policy" });
   const token = await login("parent");

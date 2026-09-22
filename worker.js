@@ -175,6 +175,10 @@ function normProgram(v) {
   const s = String(v || "").trim().toLowerCase();
   if (!s || s === "all" || s === "all programs" || s === "all_programs") return "ALL";
   if (s.includes("preschool")) return "PRESCHOOL";
+  // The junior handbooks are named "Infant, Toddler & Jr. Casa", which contains
+  // "casa" - so they used to fall through to SR_CASA and every junior handbook
+  // was labelled, and filtered, as senior. Check the junior words first.
+  if (/\b(infant|toddler|jr|junior)\b/.test(s)) return "PRESCHOOL";
   if (s.includes("casa") || s.startsWith("sr")) return "SR_CASA";
   if (s.includes("elementary")) return "ELEMENTARY";
   const up = s.toUpperCase();
