@@ -518,6 +518,108 @@ test("POST /api files a junior handbook under Preschool, not Sr. Casa", async ()
   assert.equal(senior.data.program, "SR_CASA");
 });
 
+test("an unknown acronym is named rather than called ambiguous", async () => {
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token, body: { query: "ISP?", campus: "YC" },
+  });
+  await settle();
+
+  assert.match(data.answer, /"ISP"/, "the term itself is quoted back");
+  assert.match(data.answer, /Ask a follow-up/, "and the person is told where to add detail");
+  assert.doesNotMatch(data.answer, /ambiguous/, "not the generic fragment reply");
+
+  const log = [...currentEnv.STATE.store.entries()].find(([k]) => k.startsWith("log:"));
+  assert.equal(log[1].metadata.failure_reason, "Unknown term: ISP");
+});
+
+test("a bare fragment with no acronym still gets the ambiguous reply", async () => {
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token, body: { query: "zzz", campus: "YC" },
+  });
+  await settle();
+
+  assert.match(data.answer, /ambiguous/);
+  const log = [...currentEnv.STATE.store.entries()].find(([k]) => k.startsWith("log:"));
+  assert.equal(log[1].metadata.failure_reason, "Clarification needed");
+});
+
+test("an unknown acronym inside a full sentence is still named", async () => {
+  stubOpenAI({ raw: JSON.stringify({ id: null, answer: "", match_reason: "" }) });
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "what is the ISP process for a child who needs extra support", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal(data.source, null);
+  assert.match(data.note, /"ISP"/, "too long for the fragment check, so the dead end must catch it");
+  assert.match(data.note, /Ask a follow-up/);
+
+  const log = [...currentEnv.STATE.store.entries()].find(([k]) => k.startsWith("log:"));
+  assert.equal(log[1].metadata.failure_reason, "Unknown term: ISP");
+});
+
+test("an answer about a term no document contains is suppressed, not served", async () => {
+  // The model happily picks a plausible document and writes a confident answer
+  // from unrelated sentences; the guard has to override it.
+  stubOpenAI({ id: "safe_arrival" });
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "who signs off the OSR transfer form each June", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal(data.answer, "", "the invented answer must not reach the user");
+  assert.equal(data.source, null, "and it must not be attributed to a document");
+  assert.deepEqual(data.matches, []);
+  assert.match(data.note, /"OSR"/);
+
+  const log = [...currentEnv.STATE.store.entries()].find(([k]) => k.startsWith("log:"));
+  assert.equal(log[1].metadata.ok, false, "logged as unanswered, so it shows up as a gap");
+  assert.equal(log[1].metadata.source_id, null);
+  assert.equal(log[1].metadata.failure_reason, "Unknown term: OSR");
+});
+
+test("a question whose terms all appear in the documents is answered normally", async () => {
+  stubOpenAI({ id: "safe_arrival" });
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token, body: { query: "what is the late pickup rule?", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal(data.answer, "Here is the answer.");
+  assert.equal(data.source.id, "safe_arrival");
+});
+
+test("a dead end with no acronym points at the follow-up button", async () => {
+  stubOpenAI({ raw: JSON.stringify({ id: null, answer: "", match_reason: "" }) });
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token, body: { query: "what is the rule about late pickup exactly", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal(data.source, null);
+  assert.match(data.note, /Ask a follow-up/);
+  assert.doesNotMatch(data.note, /Unknown term/);
+});
+
+test("a successful answer is never turned into an acronym prompt", async () => {
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token, body: { query: "what is the late pickup rule?", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal(data.answer, "Here is the answer.");
+  assert.equal(data.note, undefined);
+});
+
 test("POST /api resolves a handbook section answer", async () => {
   stubOpenAI({ id: "yc_parent_handbook", sectionKey: "illness_policy" });
   const token = await login("parent");
@@ -1210,6 +1312,34 @@ test("GET /admin/stats has no ok/ok_count collision (v1 bug)", async () => {
   assert.ok(data.byRole.parent, "parent bucket present even at zero");
   assert.equal(data.byRole.parent.total, 0);
   assert.ok(["OK", "WARN", "BAD"].includes(data.badge));
+});
+
+test("GET /admin/stats groups answered questions by the document that answered", async () => {
+  const staff = await login("staff");
+  for (const q of ["what is the late pickup rule?", "when do we call about late pickup?"]) {
+    await callJson("/api", { method: "POST", token: staff, body: { query: q, campus: "YC" } });
+    await settle();
+  }
+
+  const admin = await login("admin");
+  const { data } = await callJson("/admin/stats", { token: admin });
+
+  assert.ok(Array.isArray(data.byDocument), "byDocument is a ranked array");
+  const top = data.byDocument[0];
+  assert.equal(top.id, "safe_arrival");
+  assert.equal(top.type, "policy");
+  assert.equal(top.count, 2, "both answered questions are counted against the same policy");
+  assert.equal(top.campuses.YC, 2);
+});
+
+test("GET /admin/stats counts no document for an unanswered question", async () => {
+  const staff = await login("staff");
+  await callJson("/api", { method: "POST", token: staff, body: { query: "zzz", campus: "YC" } });
+  await settle();
+
+  const admin = await login("admin");
+  const { data } = await callJson("/admin/stats", { token: admin });
+  assert.deepEqual(data.byDocument, [], "a clarification request belongs to no document");
 });
 
 test("GET /admin/stats stays truthy when there is no traffic at all", async () => {

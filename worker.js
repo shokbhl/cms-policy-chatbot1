@@ -43,7 +43,11 @@ import {
 const AI_CACHE_TTL = 60 * 60 * 24 * 30;  // 30 days
 const CORPUS_VERSION_KEY = "corpus:version";
 const CORPUS_VERSION_CACHE_MS = 60 * 1000;
-const AI_CACHE_VERSION = "v7";
+// Bumped to v8 with the guard that suppresses answers about terms no document
+// contains. The corpus version in the key only invalidates on a reindex, so a
+// change to how answers are DECIDED has to bump this or every already-cached
+// invented answer keeps being served for the life of the cache.
+const AI_CACHE_VERSION = "v8";
 const DOC_CACHE_MS = 5 * 60 * 1000;     // in-isolate
 // prepare() normalises a document's text with several regex passes. Only the
 // first ~1500 words are ever kept, so running those passes over the whole of a
@@ -957,6 +961,13 @@ Before saying it is not covered:
 - Never state that a detail is unspecified if any provided document states it.
 - Only if none of them answer it, set "id" to null and say briefly what is missing.
 
+If the question names a specific thing - a form, a register, a system, an
+abbreviation - and that name appears in NONE of the documents provided, you must
+set "id" to null. Do not answer it from sentences that merely contain the same
+ordinary words. Naming a role from one rule, a verb from a second and a month
+from a third produces a confident answer to a question no document addresses,
+which is worse than saying it is not covered.
+
 Never give legal advice. Never reveal internal staff-only policies to a parent.
 
 Return valid JSON only. No markdown, no backticks. Exactly:
@@ -1031,6 +1042,84 @@ function looksVague(query, topDoc) {
   const lex = topDoc?._lex ?? topDoc?._score ?? 0;
   return lex <= 0;
 }
+
+// A short all-caps token that appears nowhere in the shortlisted documents is
+// almost always an abbreviation the documents never use - "ISP", "SO", "IPP".
+// Naming it beats "your question is ambiguous", which blames the phrasing
+// rather than the gap, and it tells the person exactly what a follow-up should
+// add. Acronyms the corpus DOES use ("VSC", "CMS") match the haystack and are
+// never reported, so this only fires on terms we genuinely do not hold.
+const ACRONYM_SHAPE = /^[A-Z][A-Z0-9&/.-]{1,5}$/;
+const COMMON_CAPS = new Set(["I", "A", "OK", "AM", "PM", "TV", "ID", "US", "UK", "IT", "NO", "ON"]);
+
+// An abbreviation the documents only ever write out in full is not unknown,
+// it is merely expanded: "HFMD" is "Hand, Foot & Mouth Disease" and "VSC" is
+// "Vulnerable Sector Check". Match against the initials of capitalised phrases
+// so those keep answering. Only capitalised runs are considered - taking
+// initials from ordinary prose would match almost any letter sequence by
+// chance, and a false "known" here lets an invented answer through.
+function expandsInDocs(token, rawHay) {
+  const letters = token.replace(/[^A-Za-z]/g, "").toUpperCase();
+  if (letters.length < 2) return false;
+
+  // Deliberately not crossing a newline. Run-on headings stack unrelated
+  // capitalised words ("...Statement Implementation" / "Policies & Proc..."),
+  // and reading initials across that join matched "IPP" by pure chance - a
+  // false "known" is the direction that lets an invented answer through.
+  const phrases = rawHay.match(/[A-Z][a-zA-Z]*(?:[ \t,&-]+[A-Z][a-zA-Z]*)+/g) || [];
+  for (const phrase of phrases) {
+    const initials = phrase
+      .split(/[^A-Za-z]+/)
+      .filter(Boolean)
+      .map((w) => w[0].toUpperCase())
+      .join("");
+    if (initials.includes(letters)) return true;
+  }
+  return false;
+}
+
+// Only ever called on a path that is already failing, so the scan over the
+// shortlist costs nothing on a normal answer.
+function unknownAcronyms(rawQuery, docs) {
+  const tokens = [...new Set(
+    String(rawQuery || "")
+      .split(/\s+/)
+      .map((t) => t.replace(/[^A-Za-z0-9&/.-]/g, ""))
+      .filter((t) => ACRONYM_SHAPE.test(t) && !COMMON_CAPS.has(t.toUpperCase())),
+  )];
+  if (!tokens.length) return [];
+
+  // Whole documents, not the clipped prefix prepare() uses: a definition like
+  // "Hand, Foot & Mouth Disease" often sits in a table near the end, and
+  // missing it would report a legitimate abbreviation as unknown. Original
+  // case is kept, because expandsInDocs needs capitalisation.
+  const hay = (docs || [])
+    .map((d) => `${d?.title || ""} ${(d?.keywords || []).join(" ")} ${String(d?.content || "")}`)
+    .join(" ");
+
+  // Whole-word only. A plain substring test reports "IPP" as known because
+  // "equipped" contains it, which silently turns the guidance back off.
+  return tokens.filter((t) => {
+    const bare = t.replace(/[&/.-]/g, "");
+    if (bare.length < 2) return false;
+    const re = new RegExp(`\\b${bare.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    return !re.test(hay) && !expandsInDocs(bare, hay);
+  });
+}
+
+function acronymPrompt(terms) {
+  const list = terms.map((t) => `"${t}"`).join(" and ");
+  const it = terms.length > 1 ? "they stand for" : "it stands for";
+  return `I could not find ${list} anywhere in the school's policies, procedures or parent handbooks, ` +
+    `so that may be an abbreviation the documents only ever spell out in full. Use ` +
+    `"↳ Ask a follow-up" below and tell me what ${it} - or describe the situation in your own ` +
+    `words - and I will search again with that added.`;
+}
+
+const NOT_FOUND_NOTE =
+  "I could not find that in the available documents. Use \"↳ Ask a follow-up\" below to add detail — " +
+  "what you are trying to do, or the exact wording on the form or notice — and I will search again. " +
+  "If it still is not there, check with the office.";
 
 function unansweredReason(answer) {
   return /clarif|too vague|more detail|does not specify|not specified/i.test(String(answer || ""))
@@ -1431,7 +1520,8 @@ async function handleApi(request, env, ctx) {
       answer: "", match_reason: "", source: null, handbook_section: null, matches: [],
       note: auth.role === "parent"
         ? "No parent handbook content is available for this campus yet."
-        : "No matching documents found.",
+        : "No matching documents found. Use \"↳ Ask a follow-up\" below and describe the situation in "
+          + "your own words — if you used an abbreviation, say what it stands for.",
     }, 200, request, env);
   }
 
@@ -1439,15 +1529,20 @@ async function handleApi(request, env, ctx) {
 
   // Nothing here to research, and the reply is fixed - skip the model call.
   if (!followUp && !scope && looksVague(query, top[0])) {
+    // An unrecognised abbreviation is not the same failure as a bare fragment,
+    // and saying which one it is decides whether the person rephrases or tells
+    // us what the letters mean.
+    const unknown = unknownAcronyms(query, top);
     const payload = {
       ok: true, campus, user_role: auth.role, program,
-      answer: VAGUE_ANSWER, match_reason: "Clarification needed",
+      answer: unknown.length ? acronymPrompt(unknown) : VAGUE_ANSWER,
+      match_reason: "Clarification needed",
       source: null, handbook_section: null, followed_up_from: null,
       also_says: [], matches: [],
     };
     payload.answer_id = await writeLog(env, {
       campus, user_role: auth.role, ok: false, ms: Date.now() - started, query,
-      failure_reason: "Clarification needed",
+      failure_reason: unknown.length ? `Unknown term: ${unknown.join(", ")}` : "Clarification needed",
     });
     return json(payload, 200, request, env);
   }
@@ -1533,8 +1628,33 @@ async function handleApi(request, env, ctx) {
     }),
   };
 
-  if (!chosen && !payload.answer) {
-    payload.note = "I could not find that in the available documents. Try rephrasing, or check with the office.";
+  // Computed even when the model DID pick a document, because that is the
+  // dangerous case. Asked who signs off the "OSR transfer form", the model
+  // answered from Reports & Forms by taking a role from its medication rule, a
+  // verb from its newsletter rule and a month from its inventory rule - every
+  // word present, the claim invented. The instruction not to do this is in the
+  // prompt and was ignored, so the guard has to be deterministic: if the thing
+  // being asked about appears in none of the documents searched, there is
+  // nothing here to answer from, whatever the model returned.
+  const unknownTerms = unknownAcronyms(query, top);
+
+  if (unknownTerms.length && chosen) {
+    payload.answer = "";
+    payload.match_reason = "Term not found in any document";
+    payload.source = null;
+    payload.handbook_section = null;
+    payload.also_says = [];
+    payload.matches = [];
+    chosen = null;
+  }
+
+  // The model often declines in prose ("the documents do not specify...") rather
+  // than staying silent. That is a correct refusal, but on its own it leaves the
+  // person stuck, so the route out goes alongside it either way.
+  if (!chosen && unknownTerms.length) {
+    payload.note = acronymPrompt(unknownTerms);
+  } else if (!chosen && !payload.answer) {
+    payload.note = NOT_FOUND_NOTE;
   }
 
   ctx.waitUntil(
@@ -1548,7 +1668,9 @@ async function handleApi(request, env, ctx) {
     source_id: chosen?.id || null,
     source_title: chosen?.title || null,
     section_key: handbookSection?.section_key || null,
-    failure_reason: chosen ? null : unansweredReason(ai.answer),
+    failure_reason: chosen
+      ? null
+      : (unknownTerms.length ? `Unknown term: ${unknownTerms.join(", ")}` : unansweredReason(ai.answer)),
     context_query: followUp?.query || null,
   });
 
@@ -1822,6 +1944,12 @@ async function handleAdminStats(request, env, url) {
   const byCampus = {};
   const byRole = { staff: bucket(), parent: bucket(), admin: bucket() };
   const bySourceType = {};
+  // Which individual document answered, not just which kind. "policy: 120"
+  // says nothing about whether staff are asking about Safe Arrival or
+  // Anaphylaxis; source_id has been logged all along, it was simply never
+  // aggregated. Only answered questions carry a document, so this counts
+  // successes by definition.
+  const byDocument = {};
 
   let total = 0;
   let okCount = 0;
@@ -1843,6 +1971,27 @@ async function handleAdminStats(request, env, url) {
     add(byCampus, String(l.campus || "UNKNOWN").toUpperCase());
     add(byRole, String(l.user_role || "unknown").toLowerCase());
     add(bySourceType, String(l.source_type || "unknown").toLowerCase());
+
+    if (l.source_id) {
+      // A handbook answers from one section at a time, so the section is the
+      // useful unit there; a policy is asked about as a whole.
+      const id = String(l.source_id);
+      const key = l.section_key ? `${id}#${l.section_key}` : id;
+      if (!byDocument[key]) {
+        byDocument[key] = {
+          id,
+          section_key: l.section_key || null,
+          title: String(l.source_title || id),
+          type: String(l.source_type || "unknown").toLowerCase(),
+          count: 0,
+          campuses: {},
+        };
+      }
+      const d = byDocument[key];
+      d.count++;
+      const c = String(l.campus || "UNKNOWN").toUpperCase();
+      d.campuses[c] = (d.campuses[c] || 0) + 1;
+    }
   }
 
   const bad = total - okCount;
@@ -1866,6 +2015,8 @@ async function handleAdminStats(request, env, url) {
     byCampus,
     byRole,
     bySourceType,
+    // Busiest first, so the dashboard can render it without re-sorting.
+    byDocument: Object.values(byDocument).sort((a, b) => b.count - a.count),
   }, 200, request, env);
 }
 

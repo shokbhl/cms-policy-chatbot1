@@ -38,6 +38,7 @@ const byRoleBody = $("by-role");
 const bySourceBody = $("by-source");
 const topicsBody = $("topics-body");
 const gapsBody = $("gaps-body");
+const documentsBody = $("documents-body");
 const latestBody = $("latest-body");
 
 const campusCanvas = $("campus-chart");
@@ -365,6 +366,55 @@ function renderTopics(logs) {
     </tr>`).join("") || `<tr><td colspan="3" class="muted">No data yet</td></tr>`;
 }
 
+// The mirror of the gaps table: what staff ask that the documents DO answer,
+// grouped by the document that answered rather than by keyword guesswork, so
+// "which policy do people actually need" is read off directly.
+function renderDocuments(docs, logs) {
+  const rows = Array.isArray(docs) ? docs : [];
+  const answered = rows.reduce((n, d) => n + num(d.count), 0);
+
+  documentsBody.innerHTML = rows.map((d, i) => {
+    const campuses = Object.entries(d.campuses || {})
+      .sort((a, b) => b[1] - a[1])
+      .map(([c, n]) => `${esc(c)}&nbsp;${n}`)
+      .join(" · ");
+    const name = d.section_key ? `${d.title} — ${d.section_key}` : d.title;
+    return `
+    <tr>
+      <td><b>${esc(name)}</b></td>
+      <td><span class="chip ${esc(d.type)}">${esc(d.type)}</span></td>
+      <td class="small muted">${campuses || "—"}</td>
+      <td class="right">${num(d.count)}</td>
+      <td class="right">${answered ? ((num(d.count) / answered) * 100).toFixed(1) : "0.0"}%</td>
+      <td><button class="btn doc-btn" type="button" data-doc="${i}">Show</button></td>
+    </tr>
+    <tr id="doc-${i}" class="diagnose-row" style="display:none"><td colspan="6" class="small"></td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">No answered questions yet.</td></tr>`;
+
+  documentsBody.querySelectorAll(".doc-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const d = rows[Number(button.dataset.doc)];
+      const row = $(`doc-${button.dataset.doc}`);
+      const cell = row.querySelector("td");
+      const open = row.style.display !== "none";
+      row.style.display = open ? "none" : "table-row";
+      button.textContent = open ? "Show" : "Hide";
+      if (open) return;
+
+      const asked = logs.filter((l) =>
+        l.ok === true &&
+        String(l.source_id || "") === d.id &&
+        String(l.section_key || "") === String(d.section_key || ""));
+
+      cell.innerHTML = asked.length
+        ? `<ul class="doc-questions">${asked
+            .map((l) => `<li><span class="muted">${esc(fmtTime(l.ts))} · ${esc(l.campus || "—")}</span> ${esc(question(l))}</li>`)
+            .join("")}</ul>`
+        : `<span class="muted">These are counted from the same window, but no question text was stored.</span>`;
+    });
+  });
+}
+
 // Unanswered questions are the actionable output: each one is a content gap.
 function renderGaps(logs) {
   const gaps = logs.filter((l) => l.ok === false && question(l)).slice(0, 50);
@@ -470,6 +520,7 @@ async function refresh() {
     renderLatest(desc);
     renderTopics(logs);
     renderGaps(desc);
+    renderDocuments(stats.data.byDocument, desc);
 
     const counts = {};
     for (const l of logs) counts[l.campus || "—"] = (counts[l.campus || "—"] || 0) + 1;

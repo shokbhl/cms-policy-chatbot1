@@ -646,6 +646,15 @@ tbody tr:hover { background: var(--bg); }
 .state-ok { color: var(--ok); font-weight: 800; }
 .state-bad { color: var(--danger); font-weight: 800; }
 
+/* The questions a single document answered, revealed under its row. */
+.doc-questions {
+  margin: 0;
+  padding: 4px 0 4px 20px;
+  display: grid;
+  gap: 5px;
+}
+.doc-questions li { line-height: 1.45; }
+
 .filters {
   padding: 12px 16px;
   display: flex;
