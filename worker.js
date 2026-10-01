@@ -47,13 +47,22 @@ const CORPUS_VERSION_CACHE_MS = 60 * 1000;
 // contains. The corpus version in the key only invalidates on a reindex, so a
 // change to how answers are DECIDED has to bump this or every already-cached
 // invented answer keeps being served for the life of the cache.
-const AI_CACHE_VERSION = "v8";
+// v9: a question is only reported unanswered after a second, wider search,
+// and only answered questions are cached.
+const AI_CACHE_VERSION = "v9";
 const DOC_CACHE_MS = 5 * 60 * 1000;     // in-isolate
 // prepare() normalises a document's text with several regex passes. Only the
 // first ~1500 words are ever kept, so running those passes over the whole of a
 // 38KB policy is pure cost - clip first, normalise second.
 const PREP_CONTENT_CHARS = 12000;
 const MAX_DOCS_TO_AI = 12;
+// The second attempt, run only when the first found no answer, reads more
+// documents. It costs one extra model call, and only on a question that would
+// otherwise have been reported unanswered.
+const FALLBACK_DOCS_TO_AI = 16;
+// Room for every program's version plus a policy, so "All programs" can show
+// each program's answer rather than the first three.
+const MAX_ALSO_SAYS = 6;
 // When semantic search is on, the keyword pass must hand over a wider pool,
 // or it would discard the very documents meaning-matching exists to rescue.
 const SHORTLIST_POOL = 40;
@@ -70,6 +79,7 @@ const RATE_AUTH = { limit: 10, window: 60 };
 const RATE_API = { limit: 60, window: 60 };
 
 const PROGRAMS = ["ALL", "PRESCHOOL", "SR_CASA", "ELEMENTARY"];
+const PROGRAM_LABELS = { ALL: "All programs", PRESCHOOL: "Preschool", SR_CASA: "Sr. Casa", ELEMENTARY: "Elementary" };
 
 // The UI uses WC for Willowdale; some data uses WD. Accept either.
 const CAMPUS_ALIASES = { WC: ["WC", "WD"], WD: ["WD", "WC"] };
@@ -911,6 +921,10 @@ When documents differ from each other:
   document that says the same thing with nothing added or missing.
 - Say so in the answer when the difference matters, e.g. that the handbook
   gives the summary for families while the policy sets the deadline staff work to.
+- When the Program is ALL and more than one program's handbook (Preschool,
+  Sr. Casa, Elementary) covers the subject, show EVERY program's version:
+  answer from one and list each other program's version in "others" with what
+  it says. Programs differing is never a reason to call the question ambiguous.
 
 Writing the answer:
 - Use ONLY the provided documents. Never invent policies, numbers or procedures.
@@ -932,6 +946,10 @@ When the question is too vague to search:
 - FIRST read every document provided. If ANY of them answers the question, even
   partially, even if it is only a handbook, ANSWER IT and do not take this
   route. This route is only for input that no document could ever match.
+- A single word or short phrase that names a subject the documents cover -
+  "snack", "nap", "sunscreen", "biting" - is NOT vague. Answer with what the
+  documents say about it, and list every other document that also covers it in
+  "others".
 - This applies ONLY to input that names nothing searchable at all: a single
   word, a bare fragment, or a phrase pointing at something unstated ("policies
   about it", "in yc", "look down", "time").
@@ -973,8 +991,22 @@ Never give legal advice. Never reveal internal staff-only policies to a parent.
 Return valid JSON only. No markdown, no backticks. Exactly:
 {"id":"best_doc_id_or_null","answer":"clear helpful answer","match_reason":"short reason","section_key":"best_section_key_or_null","others":[{"id":"other_doc_id","section_key":"section_or_null","says":"what THIS document says differently"}]}
 
-"others" may be an empty array. Include an entry only for a document that
-genuinely differs, and only for documents provided above.`;
+"others" may be an empty array, and holds at most 6 entries. Include an entry
+only for a document that genuinely differs, and only for documents provided above.`;
+
+// Sent only on the second attempt. The first already came up empty, so giving
+// up again is only right if nothing covers the subject at all.
+const WIDER_SEARCH_NOTE = [
+  "SECOND ATTEMPT: a first search found no answer, so this is a wider search that",
+  "includes every program's documents. Before giving up, read EVERY document below.",
+  "If any of them genuinely covers the subject of the question - even partially, even",
+  "if the question is one word or ambiguous - answer from it, and list every other",
+  "document that covers the subject in \"others\" with what it says. Prefer a document",
+  "for the Program above when one answers; otherwise answer from another program's",
+  "and say which program it is for. Only set \"id\" to null if no document covers the",
+  "subject at all. The rule against guessing still holds: a document that merely",
+  "shares a word with the question does not cover it.",
+].join("\n");
 
 // Long policies often put the useful rule in an appendix or disease table.
 // Sending only the beginning hid those rules even after retrieval found the
@@ -1133,7 +1165,7 @@ function effectiveQuestion(query, followUp) {
     : query;
 }
 
-function buildPrompt({ query, campus, program, role, scope, docs, followUp }) {
+function buildPrompt({ query, campus, program, role, scope, docs, followUp, wider }) {
   const effective = effectiveQuestion(query, followUp);
   const blocks = docs.map((d, i) => {
     const lines = [
@@ -1168,6 +1200,7 @@ function buildPrompt({ query, campus, program, role, scope, docs, followUp }) {
       followUp.answer ? `Earlier answer: ${followUp.answer}` : "",
       "",
     ] : []),
+    wider ? WIDER_SEARCH_NOTE : "",
     queryInterpretation(query, followUp),
     effective !== query ? `Original wording: ${query}` : "",
     `Question: ${effective}`,
@@ -1188,7 +1221,9 @@ async function askOpenAI(env, prompt) {
       body: JSON.stringify({
         model: env.OPENAI_MODEL || "gpt-4o-mini",
         temperature: 0,
-        max_tokens: 900,
+        // Up to six "others" of 600 characters each, on top of the answer. At
+        // 900 a full list was cut off mid-JSON and the whole reply was lost.
+        max_tokens: 1600,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
@@ -1224,7 +1259,7 @@ async function askOpenAI(env, prompt) {
     // trusted here; the caller resolves each against the shortlist it built.
     others: (Array.isArray(parsed.others) ? parsed.others : [])
       .filter((o) => o && typeof o === "object" && o.id)
-      .slice(0, 3)
+      .slice(0, MAX_ALSO_SAYS)
       .map((o) => ({
         id: clean(o.id),
         section_key: clean(o.section_key),
@@ -1254,8 +1289,13 @@ async function writeLog(env, record) {
     const metadata = {
       ts,
       campus: record.campus || "UNKNOWN",
+      // The same question can succeed under one program and fail under
+      // another, and without this the two log entries look identical.
+      program: record.program || null,
       user_role: record.user_role || "unknown",
       ok: record.ok === true,
+      // Answered (or given up on) only after the second, wider search.
+      wider: record.wider === true,
       ms: Number(record.ms || 0),
       source_type: record.source_type || null,
       source_id: record.source_id || null,
@@ -1465,7 +1505,7 @@ async function handleApi(request, env, ctx) {
       followed_up_from: null, also_says: [], matches: [],
     };
     payload.answer_id = await writeLog(env, {
-      campus, user_role: auth.role, ok: true, ms: Date.now() - started, query,
+      campus, program, user_role: auth.role, ok: true, ms: Date.now() - started, query,
       outcome: "conversation",
     });
     return json(payload, 200, request, env);
@@ -1482,15 +1522,17 @@ async function handleApi(request, env, ctx) {
     cacheQuestionKey(query) + JSON.stringify(scope || {}) + (followUp ? `|${cacheQuestionKey(followUp.query)}` : "")
   )}`;
 
+  // Only answers are cached now, but entries written before v9 can still hold
+  // a failure. A stored failure is never served: the question is searched
+  // again in full, so one bad attempt cannot repeat itself for a whole day.
   const cached = safeParse(await env.STATE.get(cacheKey), null);
-  if (cached) {
+  if (cached?.source) {
     ctx.waitUntil(writeLog(env, {
-      campus, user_role: auth.role, ok: Boolean(cached.source), ms: Date.now() - started, cached: true, query,
-      source_type: cached.source?.type || null,
-      source_id: cached.source?.id || null,
-      source_title: cached.source?.title || null,
+      campus, program, user_role: auth.role, ok: true, ms: Date.now() - started, cached: true, query,
+      source_type: cached.source.type || null,
+      source_id: cached.source.id || null,
+      source_title: cached.source.title || null,
       section_key: cached.handbook_section?.section_key || null,
-      failure_reason: cached.source ? null : unansweredReason(cached.answer),
       context_query: followUp?.query || null,
     }));
     return json({ ...cached, cached: true }, 200, request, env);
@@ -1504,15 +1546,28 @@ async function handleApi(request, env, ctx) {
 
   const semantic = await buildSemantic(env, retrievalQuery);
 
-  const candidates = await buildCandidates(env, {
-    role: auth.role, campus, program, scope, query: retrievalQuery, semantic,
-  });
+  const { result, wider, error, widerError } = await answerExhaustively(
+    { env, role: auth.role, campus, program, query, retrievalQuery, followUp, semantic },
+    scope,
+  );
 
-  if (!candidates.length) {
+  if (error) {
     ctx.waitUntil(writeLog(env, {
-      campus, user_role: auth.role, ok: false, ms: Date.now() - started, query,
+      campus, program, user_role: auth.role, ok: false, ms: Date.now() - started, query, wider: true,
+      failure_reason: `Service error: ${error}`,
+      context_query: followUp?.query || null,
+    }));
+    return fail(error, 502, request, env);
+  }
+
+  const { top, ai, chosen, unknownTerms } = result;
+  const retryNote = widerError ? ` (wider search failed: ${widerError})` : "";
+
+  if (!top.length) {
+    ctx.waitUntil(writeLog(env, {
+      campus, program, user_role: auth.role, ok: false, ms: Date.now() - started, query, wider,
       section_key: scope?.section_key || null,
-      failure_reason: "No candidate documents were retrieved",
+      failure_reason: `No candidate documents were retrieved${retryNote}`,
       context_query: followUp?.query || null,
     }));
     return json({
@@ -1525,66 +1580,28 @@ async function handleApi(request, env, ctx) {
     }, 200, request, env);
   }
 
-  const top = rank(candidates, retrievalQuery, MAX_DOCS_TO_AI, semantic);
-
-  // Nothing here to research, and the reply is fixed - skip the model call.
-  if (!followUp && !scope && looksVague(query, top[0])) {
+  // No word of the question appears anywhere, even in the wider search, and
+  // there is no meaning index to try either - nothing at all could match, so
+  // the reply is fixed and the model is never asked.
+  if (!ai) {
     // An unrecognised abbreviation is not the same failure as a bare fragment,
     // and saying which one it is decides whether the person rephrases or tells
     // us what the letters mean.
-    const unknown = unknownAcronyms(query, top);
     const payload = {
       ok: true, campus, user_role: auth.role, program,
-      answer: unknown.length ? acronymPrompt(unknown) : VAGUE_ANSWER,
+      answer: unknownTerms.length ? acronymPrompt(unknownTerms) : VAGUE_ANSWER,
       match_reason: "Clarification needed",
       source: null, handbook_section: null, followed_up_from: null,
       also_says: [], matches: [],
     };
     payload.answer_id = await writeLog(env, {
-      campus, user_role: auth.role, ok: false, ms: Date.now() - started, query,
-      failure_reason: unknown.length ? `Unknown term: ${unknown.join(", ")}` : "Clarification needed",
+      campus, program, user_role: auth.role, ok: false, ms: Date.now() - started, query, wider,
+      failure_reason: (unknownTerms.length ? `Unknown term: ${unknownTerms.join(", ")}` : "Clarification needed") + retryNote,
     });
     return json(payload, 200, request, env);
   }
 
-  const ai = await askOpenAI(env, buildPrompt({
-    query, campus, program, role: auth.role, scope, docs: top, followUp,
-  }));
-
-  if (!ai.ok) {
-    ctx.waitUntil(writeLog(env, {
-      campus, user_role: auth.role, ok: false, ms: Date.now() - started, query,
-      failure_reason: `Service error: ${ai.error}`,
-      context_query: followUp?.query || null,
-    }));
-    return fail(ai.error, 502, request, env);
-  }
-
-  // This row was audited against the complete source document. The model can
-  // otherwise conflate its "infectious period" column with its separate
-  // "Exclude?" column and produce a self-contradictory rule.
-  const hfmdPolicy = queryInterpretation(query, followUp)
-    ? top.find((c) => /hand\s*,?\s*foot\s*(?:&|and)?\s*mouth\s+disease/i.test(String(c.content || "")))
-    : null;
-  if (hfmdPolicy) {
-    ai.id = hfmdPolicy.id;
-    ai.section_key = hfmdPolicy.section_key;
-    ai.answer = "No - If child feels well enough to participate.";
-    ai.match_reason = "The Hand, Foot & Mouth Disease row directly states the exclusion requirement.";
-    ai.others = [];
-  }
-
-  // Resolve the model's id against the permitted shortlist, so it can never
-  // surface a document this caller wasn't allowed to see.
-  let chosen = null;
-  if (ai.id) {
-    chosen =
-      top.find((c) => c.id === ai.id && (!ai.section_key || c.section_key === ai.section_key)) ||
-      top.find((c) => c.id === ai.id) ||
-      null;
-  }
-
-  const others = collectAlsoSays(top, chosen, ai.others);
+  const others = result.suppressed ? [] : collectAlsoSays(top, chosen, ai.others);
 
   const handbookSection = chosen?.type === "handbook"
     ? {
@@ -1628,24 +1645,12 @@ async function handleApi(request, env, ctx) {
     }),
   };
 
-  // Computed even when the model DID pick a document, because that is the
-  // dangerous case. Asked who signs off the "OSR transfer form", the model
-  // answered from Reports & Forms by taking a role from its medication rule, a
-  // verb from its newsletter rule and a month from its inventory rule - every
-  // word present, the claim invented. The instruction not to do this is in the
-  // prompt and was ignored, so the guard has to be deterministic: if the thing
-  // being asked about appears in none of the documents searched, there is
-  // nothing here to answer from, whatever the model returned.
-  const unknownTerms = unknownAcronyms(query, top);
-
-  if (unknownTerms.length && chosen) {
+  // The model picked a document, but the thing asked about appears in none of
+  // the documents searched - see attemptAnswer. The invented answer is dropped.
+  if (result.suppressed) {
     payload.answer = "";
     payload.match_reason = "Term not found in any document";
-    payload.source = null;
-    payload.handbook_section = null;
-    payload.also_says = [];
     payload.matches = [];
-    chosen = null;
   }
 
   // The model often declines in prose ("the documents do not specify...") rather
@@ -1655,26 +1660,156 @@ async function handleApi(request, env, ctx) {
     payload.note = acronymPrompt(unknownTerms);
   } else if (!chosen && !payload.answer) {
     payload.note = NOT_FOUND_NOTE;
+  } else if (chosen) {
+    const note = answeredNote({ chosen, program, scope, query, followUp });
+    if (note) payload.note = note;
   }
 
-  ctx.waitUntil(
-    env.STATE.put(cacheKey, JSON.stringify(payload), { expirationTtl: AI_CACHE_TTL }).catch(() => {})
-  );
+  // Only answers are cached. A cached failure used to be served back for the
+  // rest of the day without anything being searched again.
+  if (chosen) {
+    ctx.waitUntil(
+      env.STATE.put(cacheKey, JSON.stringify(payload), { expirationTtl: AI_CACHE_TTL }).catch(() => {})
+    );
+  }
   // Logged before responding rather than in waitUntil, because the id has to
   // travel back with the answer for feedback to attach to it.
   payload.answer_id = await writeLog(env, {
-    campus, user_role: auth.role, ok: Boolean(chosen), ms: Date.now() - started, query,
+    campus, program, user_role: auth.role, ok: Boolean(chosen), ms: Date.now() - started, query, wider,
     source_type: chosen?.type || null,
     source_id: chosen?.id || null,
     source_title: chosen?.title || null,
     section_key: handbookSection?.section_key || null,
     failure_reason: chosen
       ? null
-      : (unknownTerms.length ? `Unknown term: ${unknownTerms.join(", ")}` : unansweredReason(ai.answer)),
+      : (unknownTerms.length ? `Unknown term: ${unknownTerms.join(", ")}` : unansweredReason(ai.answer)) + retryNote,
     context_query: followUp?.query || null,
   });
 
   return json(payload, 200, request, env);
+}
+
+// A question is only reported unanswered once every route has been tried.
+// The first attempt searches exactly what was asked for. If it finds no
+// answer - or the model call itself failed - a second searches every program,
+// outside any selected section, with more documents, and tells the model the
+// first came up empty. Asked "Snack" under All programs, the model was shown
+// three programs' nutrition sections and called the question ambiguous: the
+// answer existed, and the person was told there was none.
+//
+// Shared by the chat route and the admin answer preview, so an admin checking
+// an answer sees exactly what staff get. `error` is set only when both
+// attempts failed to reach the model.
+async function answerExhaustively(base, scope) {
+  const first = await attemptAnswer({ ...base, searchProgram: base.program, scope, wider: false });
+  if (first.chosen) return { result: first, wider: false };
+
+  const second = await attemptAnswer({ ...base, searchProgram: "ALL", scope: null, wider: true });
+
+  // The person sees the outcome of the most thorough attempt that ran. One
+  // that errored leaves the other's outcome standing.
+  if (!second.error && (second.ai || !first.ai)) return { result: second, wider: true };
+  if (first.error) return { result: first, wider: true, error: first.error };
+  return { result: first, wider: false, widerError: second.error || null };
+}
+
+// One search-and-answer pass. `program` is what the person selected and is
+// what the model is told; `searchProgram` is what is actually searched, which
+// the wider attempt opens up to every program.
+async function attemptAnswer({
+  env, role, campus, program, searchProgram, scope, query, retrievalQuery, followUp, semantic, wider,
+}) {
+  const candidates = await buildCandidates(env, {
+    role, campus, program: searchProgram, scope, query: retrievalQuery, semantic,
+  });
+  if (!candidates.length) return { top: [], ai: null, chosen: null, unknownTerms: [] };
+
+  const top = rank(candidates, retrievalQuery, wider ? FALLBACK_DOCS_TO_AI : MAX_DOCS_TO_AI, semantic);
+
+  // No word of the question appears in anything searched. The first attempt
+  // passes that straight on to the wider one rather than spending a model call
+  // on the narrower set. The wider one still asks the model when a meaning
+  // index exists, since "Tylenol" can match a medication policy that never
+  // uses the word; without an index there is nothing left that could match.
+  if (!followUp && !scope && looksVague(query, top[0]) && (!wider || !semantic)) {
+    return { top, ai: null, chosen: null, unknownTerms: unknownAcronyms(query, top) };
+  }
+
+  const ai = await askOpenAI(env, buildPrompt({
+    query, campus, program, role, scope, docs: top, followUp, wider,
+  }));
+  if (!ai.ok) return { top, ai: null, chosen: null, unknownTerms: [], error: ai.error };
+
+  // This row was audited against the complete source document. The model can
+  // otherwise conflate its "infectious period" column with its separate
+  // "Exclude?" column and produce a self-contradictory rule.
+  const hfmdPolicy = queryInterpretation(query, followUp)
+    ? top.find((c) => /hand\s*,?\s*foot\s*(?:&|and)?\s*mouth\s+disease/i.test(String(c.content || "")))
+    : null;
+  if (hfmdPolicy) {
+    ai.id = hfmdPolicy.id;
+    ai.section_key = hfmdPolicy.section_key;
+    ai.answer = "No - If child feels well enough to participate.";
+    ai.match_reason = "The Hand, Foot & Mouth Disease row directly states the exclusion requirement.";
+    ai.others = [];
+  }
+
+  // Resolve the model's id against the permitted shortlist, so it can never
+  // surface a document this caller wasn't allowed to see.
+  let chosen = null;
+  if (ai.id) {
+    chosen =
+      top.find((c) => c.id === ai.id && (!ai.section_key || c.section_key === ai.section_key)) ||
+      top.find((c) => c.id === ai.id) ||
+      null;
+  }
+
+  // Checked even when the model DID pick a document, because that is the
+  // dangerous case. Asked who signs off the "OSR transfer form", the model
+  // answered from Reports & Forms by taking a role from its medication rule, a
+  // verb from its newsletter rule and a month from its inventory rule - every
+  // word present, the claim invented. The instruction not to do this is in the
+  // prompt and was ignored, so the guard has to be deterministic: if the thing
+  // being asked about appears in none of the documents searched, there is
+  // nothing here to answer from, whatever the model returned. Searching wider
+  // never relaxes this - it is checked again against the wider set.
+  const unknownTerms = unknownAcronyms(query, top);
+  const suppressed = Boolean(unknownTerms.length && chosen);
+  if (suppressed) chosen = null;
+
+  return { top, ai, chosen, unknownTerms, suppressed };
+}
+
+// Said alongside an answer whenever it was not a plain answer to exactly what
+// was asked, so the person knows what they are reading.
+function answeredNote({ chosen, program, scope, query, followUp }) {
+  const notes = [];
+
+  const from = normProgram(chosen.program);
+  if (program !== "ALL" && from !== "ALL" && from !== program) {
+    // The handbook's own title, not the program label: at most campuses the
+    // "Preschool" program's handbook is called "Infant, Toddler & Jr. Casa".
+    const source = chosen.type === "handbook" ? chosen.title : `${PROGRAM_LABELS[from]} documents`;
+    notes.push(
+      `Nothing in the ${PROGRAM_LABELS[program]} documents answered this, so this answer comes from ` +
+      `${source} - check that it applies to your program.`
+    );
+  }
+
+  if (scope?.id && (chosen.id !== scope.id || (scope.section_key && chosen.section_key !== scope.section_key))) {
+    notes.push("The part you selected does not cover this, so this answer comes from another document.");
+  }
+
+  // A one-word question is still ambiguous even when it can be answered: say
+  // so, and say how to narrow it, instead of refusing to answer.
+  if (!followUp && !scope && meaningfulWordCount(query) <= 1) {
+    notes.push(
+      "You asked about a single word, so this shows what the documents say about it. For something more " +
+      "specific, ask a complete question or use \"↳ Ask a follow-up\"."
+    );
+  }
+
+  return notes.join(" ");
 }
 
 // Shows what retrieval would send to the model for a question, and why —
@@ -1701,29 +1836,33 @@ async function handleDiagnose(request, env, url) {
   const top = rank(candidates, retrievalQuery, MAX_DOCS_TO_AI, semantic);
 
   // ?answer=1 also generates the real answer, so the wording can be checked
-  // without a staff code. Deliberately not cached and not logged: this is a
-  // diagnostic, and it must not pollute the analytics or the answer cache.
+  // without a staff code. It goes through the same attempts and guards as the
+  // chat route, so it shows what staff would actually get. Deliberately not
+  // cached and not logged: this is a diagnostic, and it must not pollute the
+  // analytics or the answer cache.
   let generated = null;
   if (url.searchParams.get("answer") === "1") {
-    const ai = await askOpenAI(env, buildPrompt({
-      query, campus, program, role: "staff", scope: null, docs: top, followUp,
-    }));
-    if (!ai.ok) {
-      generated = { error: ai.error };
+    const { result, wider, error } = await answerExhaustively(
+      { env, role: "staff", campus, program, query, retrievalQuery, followUp, semantic },
+      null,
+    );
+    if (error) {
+      generated = { error };
     } else {
-      const pick = (id, sk) =>
-        top.find((c) => c.id === id && (!sk || c.section_key === sk)) ||
-        top.find((c) => c.id === id) || null;
-      const chosen = ai.id ? pick(ai.id, ai.section_key) : null;
+      const { ai, chosen, unknownTerms } = result;
       generated = {
-        answer: ai.answer,
-        match_reason: ai.match_reason,
+        answer: result.suppressed
+          ? ""
+          : ai ? ai.answer : (unknownTerms.length ? acronymPrompt(unknownTerms) : VAGUE_ANSWER),
+        match_reason: ai?.match_reason || "",
         source: chosen ? {
           id: chosen.id, type: chosen.type, title: chosen.title,
           section_title: chosen.section_title || null,
           chars: String(chosen.content || "").length,
         } : null,
-        also_says: collectAlsoSays(top, chosen, ai.others),
+        also_says: ai && !result.suppressed ? collectAlsoSays(result.top, chosen, ai.others) : [],
+        note: chosen ? answeredNote({ chosen, program, scope: null, query, followUp }) || null : null,
+        wider,
       };
     }
   }
@@ -1781,7 +1920,7 @@ function collectAlsoSays(top, chosen, aiOthers) {
 
   // Ids from the model are untrusted: resolve each against the shortlist so it
   // can never surface something this caller was not allowed to see.
-  for (const o of Array.isArray(aiOthers) ? aiOthers.slice(0, 3) : []) {
+  for (const o of Array.isArray(aiOthers) ? aiOthers.slice(0, MAX_ALSO_SAYS) : []) {
     if (!o || !o.id) continue;
     const match =
       top.find((c) => c.id === o.id && (!o.section_key || c.section_key === o.section_key)) ||
@@ -1798,12 +1937,32 @@ function collectAlsoSays(top, chosen, aiOthers) {
         if (norm(c.section_title || c.title) !== topic) continue;
         if (c.id === chosen.id && (c.section_key || "") === (chosen.section_key || "")) continue;
         push(c, String(c.content || "").trim().slice(0, 400));
-        if (out.length >= 3) break;
+        if (out.length >= MAX_ALSO_SAYS) break;
       }
     }
   }
 
-  return out.slice(0, 3);
+  // Every other program's version of the same handbook section, so "All
+  // programs" shows each program's answer whatever the model listed. Headings
+  // drift between handbooks ("Nutrition" in one, "Nutrition and Snacks" in
+  // another), which the exact-heading match above would miss: a heading whose
+  // words all appear in the other's is treated as the same section.
+  if (chosen?.type === "handbook") {
+    const headingWords = (c) =>
+      new Set(wordsOf(c.section_title || "").filter((w) => !STOP_WORDS.has(w)));
+    const mine = headingWords(chosen);
+    for (const c of top) {
+      if (out.length >= MAX_ALSO_SAYS) break;
+      if (c.type !== "handbook" || c.id === chosen.id) continue;
+      if (normProgram(c.program) === normProgram(chosen.program)) continue;
+      const theirs = headingWords(c);
+      if (!mine.size || !theirs.size) continue;
+      const [fewer, more] = mine.size <= theirs.size ? [mine, theirs] : [theirs, mine];
+      if ([...fewer].every((w) => more.has(w))) push(c, String(c.content || "").trim().slice(0, 400));
+    }
+  }
+
+  return out.slice(0, MAX_ALSO_SAYS);
 }
 
 // Was that answer any good? Without this the logs can only show whether a

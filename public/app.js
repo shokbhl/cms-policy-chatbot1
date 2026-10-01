@@ -892,6 +892,12 @@ function renderAnswer(data) {
     html += `<span class="source-tag">${bits.join(" · ")}</span>`;
   }
 
+  // A note can come with an answer too: it was found under another program, or
+  // the question was a single word. Without an answer the note IS the reply.
+  if ((data.answer || "").trim() && data.note) {
+    html += `<div class="answer-note">${escapeHtml(data.note)}</div>`;
+  }
+
   // Where another document answers the same question differently, show it too
   // rather than leaving the reader with only one version. The handbook tends to
   // summarise for families while the policy carries the deadline staff work to,
@@ -906,7 +912,10 @@ function renderAnswer(data) {
       const says = o.says ? `<span class="also-says">${escapeHtml(o.says)}</span>` : "";
       return `<li><span class="also-source">${label.join(" · ")}${link}</span>${says}</li>`;
     }).join("");
-    html += `<div class="also-block"><div class="also-head">Another document says something different</div><ul>${items}</ul></div>`;
+    const head = data.also_says.length > 1
+      ? "Other documents say something different"
+      : "Another document says something different";
+    html += `<div class="also-block"><div class="also-head">${head}</div><ul>${items}</ul></div>`;
   }
 
   return html;
@@ -985,7 +994,9 @@ async function ask(question, scope = null, prefillOnly = false) {
     }
 
     const html = renderAnswer(data);
-    caches.answers.set(cacheKey, html);
+    // Only answers are kept. A failure kept here would be shown again without
+    // the server ever being asked, so it could never come back answered.
+    if (data.source) caches.answers.set(cacheKey, html);
     const el = addMessage("assistant", html);
     attachFollowUpBadge(el, data, query, campus, program, effectiveScope);
     attachFollowUpButton(el, query, data.answer);

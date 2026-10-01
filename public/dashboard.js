@@ -97,6 +97,17 @@ const title = (l) => (l.handbook_title || l.source_title || l.source_id || "").t
 const section = (l) => (l.section_key || "").trim();
 const question = (l) => (l.query || l.question || "").trim();
 
+// The same question can succeed under one program and fail under another, so
+// the campus cell carries the program the person had selected. Older entries
+// were logged without one.
+const PROGRAM_LABELS = { ALL: "All programs", PRESCHOOL: "Preschool", SR_CASA: "Sr. Casa", ELEMENTARY: "Elementary" };
+const campusCell = (l) =>
+  esc(l.campus || "—") +
+  (l.program ? `<div class="small muted">${esc(PROGRAM_LABELS[l.program] || l.program)}</div>` : "");
+const statusCell = (l) =>
+  (l.ok === true ? '<span class="state-ok">OK</span>' : '<span class="state-bad">BAD</span>') +
+  (l.wider ? '<div class="small muted">wider search</div>' : "");
+
 // v2 returns ok:true plus ok_count. v1 collided the two, so fall back
 // only when `ok` is genuinely numeric.
 function okCountOf(stats) {
@@ -339,9 +350,9 @@ function renderLatest(logs) {
   latestBody.innerHTML = logs.slice(0, 30).map((l) => `
     <tr>
       <td class="small muted">${esc(fmtTime(l.ts))}</td>
-      <td>${esc(l.campus || "—")}</td>
+      <td>${campusCell(l)}</td>
       <td>${chip(role(l))}</td>
-      <td>${l.ok === true ? '<span class="state-ok">OK</span>' : '<span class="state-bad">BAD</span>'}</td>
+      <td>${statusCell(l)}</td>
       <td class="right">${num(l.ms)}</td>
       <td>${chip(sourceType(l))}</td>
       <td class="small muted">${esc(title(l))}</td>
@@ -422,7 +433,7 @@ function renderGaps(logs) {
   gapsBody.innerHTML = gaps.map((l, i) => `
     <tr>
       <td class="small muted">${esc(fmtTime(l.ts))}</td>
-      <td>${esc(l.campus || "—")}</td>
+      <td>${campusCell(l)}</td>
       <td class="q">${esc(question(l))}</td>
       <td class="small muted">${esc(l.context_query || "—")}</td>
       <td class="small muted">${esc(l.failure_reason || "No document was selected")}</td>
@@ -446,6 +457,8 @@ async function diagnoseGap(log, button) {
     const url = new URL(DIAGNOSE_URL);
     url.searchParams.set("q", question(log));
     url.searchParams.set("campus", log.campus || "MC");
+    // Recheck under the program it was asked in, or it searches different documents.
+    if (log.program) url.searchParams.set("program", log.program);
     if (log.context_query) url.searchParams.set("context", log.context_query);
     const { res, data } = await authedGet(url);
     if (!res.ok || !data.ok) throw new Error(data.error || "Recheck failed");

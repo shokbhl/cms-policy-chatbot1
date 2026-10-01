@@ -764,6 +764,8 @@ test("the same words after different questions are cached separately", async () 
   await settle();
   const writesAfterFirst = currentEnv.STATE.writes.filter((k) => k.startsWith("ai:")).length;
 
+  // Only answers are cached, so the second has to be answerable too.
+  stubOpenAI({ id: "anaphylaxis_policy" });
   await ask({ query: "anaphylaxis epipen allergy" });
   await settle();
   const writesAfterSecond = currentEnv.STATE.writes.filter((k) => k.startsWith("ai:")).length;
@@ -1149,6 +1151,186 @@ for (const query of ["What is the HFMD policy?", "What about hand food mouth?", 
     assert.match(capturedPrompts.join("\n"), /what does the Exclude\? column require/);
   });
 }
+
+// ------------------------------------------------------------
+// Every route is tried before a question is reported unanswered.
+// Maplehurst keeps one handbook per program. Here the Preschool
+// heading differs from the other two, as headings can drift.
+// ------------------------------------------------------------
+
+const HANDBOOK_MC = [
+  {
+    id: "mc_handbook_preschool", campus: "MC", program: "Preschool", title: "MC Parent Handbook (Preschool)",
+    sections: [
+      { key: "nutrition_and_snacks", title: "Nutrition and Snacks", content: "The school provides a mid-morning snack between 8:30 and 10:00 a.m." },
+      { key: "rest_time", title: "Rest Time", content: "Preschool children rest after lunch." },
+    ],
+  },
+  {
+    id: "mc_handbook_srcasa", campus: "MC", program: "Sr. Casa", title: "MC Parent Handbook (Sr. Casa)",
+    sections: [
+      { key: "nutrition", title: "Nutrition", content: "Sr. Casa children bring a nut-free snack from home." },
+      { key: "field_trips", title: "Field Trips", content: "Sr. Casa field trips need a signed permission form." },
+    ],
+  },
+  {
+    id: "mc_handbook_elementary", campus: "MC", program: "Elementary", title: "MC Elementary Parent Handbook",
+    sections: [
+      { key: "nutrition", title: "Nutrition", content: "Elementary students eat their snack at recess." },
+    ],
+  },
+];
+
+function useMaplehurst() {
+  currentEnv = makeEnv({ HANDBOOKS: new MockKV({ handbook_MC: HANDBOOK_MC }, "HANDBOOKS") });
+}
+
+// Replies in order, one per model call; the last repeats. "FAIL" is a 500.
+function stubOpenAISequence(replies) {
+  let i = 0;
+  globalThis.fetch = async (url, init) => {
+    if (!String(url).includes("api.openai.com")) return realFetch(url, init);
+    capturedPrompts.push(JSON.parse(init.body).messages.map((m) => m.content).join("\n"));
+    const reply = replies[Math.min(i++, replies.length - 1)];
+    if (reply === "FAIL") return new Response("boom", { status: 500 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    });
+  };
+}
+
+const NO_ANSWER = { id: null, answer: "The question is ambiguous.", match_reason: "" };
+
+function logFor(query) {
+  return [...currentEnv.STATE.store.entries()]
+    .filter(([k]) => k.startsWith("log:"))
+    .map(([, v]) => v.metadata)
+    .find((m) => m.query === query);
+}
+
+test("a one-word question the model calls ambiguous is searched again and answered", async () => {
+  useMaplehurst();
+  stubOpenAISequence([
+    NO_ANSWER,
+    { id: "mc_handbook_preschool", section_key: "nutrition_and_snacks", answer: "A mid-morning snack is provided.", match_reason: "covers snacks" },
+  ]);
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token, body: { query: "Snack", campus: "MC", program: "ALL" },
+  });
+  await settle();
+
+  assert.equal(capturedPrompts.length, 2, "a second, wider attempt ran before giving up");
+  assert.match(capturedPrompts[1], /SECOND ATTEMPT/);
+  assert.equal(data.source.id, "mc_handbook_preschool");
+  assert.match(data.note, /single word/, "the question is still called out as short");
+
+  const log = logFor("Snack");
+  assert.equal(log.ok, true);
+  assert.equal(log.wider, true);
+  assert.equal(log.program, "ALL");
+});
+
+test("under All programs, every program's version of the section is shown", async () => {
+  useMaplehurst();
+  // The model answers from one program and names none of the others.
+  stubOpenAISequence([
+    { id: "mc_handbook_preschool", section_key: "nutrition_and_snacks", answer: "A mid-morning snack is provided.", match_reason: "covers snacks" },
+  ]);
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token, body: { query: "what are the snack rules", campus: "MC", program: "ALL" },
+  });
+  await settle();
+
+  assert.equal(capturedPrompts.length, 1, "an answered question makes one model call");
+  const shown = data.also_says.map((o) => `${o.id}:${o.section_key}`).sort();
+  assert.deepEqual(shown, ["mc_handbook_elementary:nutrition", "mc_handbook_srcasa:nutrition"]);
+  assert.match(data.also_says.find((o) => o.id === "mc_handbook_srcasa").says, /nut-free snack/);
+});
+
+test("a question the selected program cannot answer is answered from another program, and says so", async () => {
+  useMaplehurst();
+  stubOpenAISequence([
+    NO_ANSWER,
+    { id: "mc_handbook_srcasa", section_key: "field_trips", answer: "A signed permission form is needed.", match_reason: "field trips" },
+  ]);
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token, body: { query: "field trip permission form", campus: "MC", program: "Preschool" },
+  });
+  await settle();
+
+  assert.doesNotMatch(capturedPrompts[0], /signed permission form/, "the first attempt keeps to the selected program");
+  assert.match(capturedPrompts[1], /signed permission form/, "the wider one searches every program");
+  assert.equal(data.source.id, "mc_handbook_srcasa");
+  assert.match(data.note, /Nothing in the Preschool documents/);
+  assert.match(data.note, /MC Parent Handbook \(Sr\. Casa\)/, "named by the handbook's own title");
+});
+
+test("a question nothing answers fails only after both attempts, and is never cached", async () => {
+  stubOpenAISequence([NO_ANSWER]);
+  const token = await login("staff");
+  const body = { query: "what is the rule about late pickup exactly", campus: "YC" };
+
+  await callJson("/api", { method: "POST", token, body });
+  await settle();
+  assert.equal(capturedPrompts.length, 2);
+  const log = logFor(body.query);
+  assert.equal(log.ok, false);
+  assert.equal(log.wider, true);
+  assert.equal(currentEnv.STATE.writes.filter((k) => k.startsWith("ai:")).length, 0, "a failure is not cached");
+
+  const again = await callJson("/api", { method: "POST", token, body });
+  await settle();
+  assert.notEqual(again.data.cached, true);
+  assert.equal(capturedPrompts.length, 4, "asked again, it is searched again");
+});
+
+test("a model error on the first attempt is not the end: the wider attempt still runs", async () => {
+  stubOpenAISequence(["FAIL", { id: "safe_arrival", answer: "Here is the answer.", match_reason: "pickup" }]);
+  const token = await login("staff");
+  const { res, data } = await callJson("/api", {
+    method: "POST", token, body: { query: "what is the late pickup rule?", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal(res.status, 200);
+  assert.equal(data.source.id, "safe_arrival");
+  assert.equal(logFor("what is the late pickup rule?").wider, true);
+});
+
+test("the admin answer preview goes through the same attempts as the chat", async () => {
+  useMaplehurst();
+  stubOpenAISequence([
+    NO_ANSWER,
+    { id: "mc_handbook_preschool", section_key: "nutrition_and_snacks", answer: "A mid-morning snack is provided.", match_reason: "covers snacks" },
+  ]);
+  const admin = await login("admin");
+  const { data } = await callJson("/admin/diagnose?q=Snack&campus=MC&program=ALL&answer=1", { token: admin });
+
+  assert.equal(capturedPrompts.length, 2);
+  assert.equal(data.generated.source.id, "mc_handbook_preschool");
+  assert.equal(data.generated.wider, true);
+  assert.match(data.generated.note, /single word/);
+  const shown = data.generated.also_says.map((o) => o.id).sort();
+  assert.deepEqual(shown, ["mc_handbook_elementary", "mc_handbook_srcasa"]);
+});
+
+test("searching wider never lets an answer about an unknown term through", async () => {
+  stubOpenAI({ id: "safe_arrival" });
+  const token = await login("staff");
+  const { data } = await callJson("/api", {
+    method: "POST", token,
+    body: { query: "who signs off the OSR transfer form each June", campus: "YC" },
+  });
+  await settle();
+
+  assert.equal(capturedPrompts.length, 2);
+  assert.equal(data.source, null);
+  assert.equal(data.answer, "");
+  assert.match(data.note, /"OSR"/);
+});
 
 test("a greeting is handled without pretending it is a document failure", async () => {
   const token = await login("staff");

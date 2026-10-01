@@ -53,6 +53,12 @@ const section = (l) => (l.section_key || "").trim();
 const question = (l) => (l.query || l.question || "").trim();
 const failureReason = (l) => (l.failure_reason || "").trim();
 
+// The same question can succeed under one program and fail under another, so
+// the campus cell carries the program the person had selected. Older entries
+// were logged without one.
+const PROGRAM_LABELS = { ALL: "All programs", PRESCHOOL: "Preschool", SR_CASA: "Sr. Casa", ELEMENTARY: "Elementary" };
+const programLabel = (l) => (l.program ? PROGRAM_LABELS[l.program] || l.program : "");
+
 function chip(text, cls) {
   const t = String(text || "unknown").toLowerCase();
   return `<span class="chip ${cls || t}">${esc(t)}</span>`;
@@ -146,7 +152,7 @@ function render() {
 
   if (q) {
     rows = rows.filter((l) =>
-      [question(l), title(l), section(l), failureReason(l), role(l), sourceType(l), String(l.campus || "")]
+      [question(l), title(l), section(l), failureReason(l), role(l), sourceType(l), String(l.campus || ""), programLabel(l)]
         .join(" ").toLowerCase().includes(q)
     );
   }
@@ -156,9 +162,9 @@ function render() {
   tbody.innerHTML = rows.map((l) => `
     <tr>
       <td class="small muted">${esc(fmtTime(l.ts))}</td>
-      <td>${esc(l.campus || "—")}</td>
+      <td>${esc(l.campus || "—")}${programLabel(l) ? `<div class="small muted">${esc(programLabel(l))}</div>` : ""}</td>
       <td>${chip(role(l))}</td>
-      <td>${l.ok === true ? '<span class="state-ok">OK</span>' : '<span class="state-bad">BAD</span>'}</td>
+      <td>${l.ok === true ? '<span class="state-ok">OK</span>' : '<span class="state-bad">BAD</span>'}${l.wider ? '<div class="small muted">wider search</div>' : ""}</td>
       <td class="right">${Number(l.ms || 0)}</td>
       <td>${chip(sourceType(l))}</td>
       <td class="small">${esc(title(l))}</td>
