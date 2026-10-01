@@ -12,6 +12,11 @@ name = "cms-assistant-v2"
 main = "worker.js"
 compatibility_date = "2024-11-06"
 
+# STAFF_CODE and ADMIN_PIN are plain-text variables set in the Cloudflare
+# dashboard, not in [vars] below. Without this, every `wrangler deploy`
+# deletes them and nobody can sign in (this happened on 2026-10-01).
+keep_vars = true
+
 # Workers Logs — off by default when deploying via wrangler. Without this,
 # nothing appears under the Worker's "Logs" tab in the dashboard.
 [observability]
